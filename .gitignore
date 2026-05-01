@@ -1,3 +1,5 @@
 notes.md
-*.png
 mock_data/
+__pycache__/
+.DS_Store
+*.pyc
