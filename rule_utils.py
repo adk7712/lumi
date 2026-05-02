@@ -1,6 +1,6 @@
 import pandas as pd
 
-def evaluate_rule(df, rule):
+def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
     """
     Evaluates a rule against a DataFrame and returns a boolean mask for violating rows.
 
@@ -46,9 +46,11 @@ def evaluate_rule(df, rule):
             # Informational rules don't have "violations", so we return an all-False mask.
             mask = pd.Series(False, index=df.index)
 
-    except Exception as e:
+    except (KeyError, TypeError, ValueError) as e:
         # Re-raise the exception to be handled by the caller,
         # which can provide more context (e.g., in UI).
-        raise ValueError(f"Error evaluating rule ({rule.get('desc', 'N/A')}): {e}") from e
+        raise ValueError(f"Error evaluating rule ({rule.get('desc', 'N/A')}): {type(e).__name__} - {e}") from e
+    except Exception as e:
+        raise ValueError(f"An unexpected error occurred evaluating rule ({rule.get('desc', 'N/A')}): {type(e).__name__} - {e}") from e
 
     return mask

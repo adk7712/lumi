@@ -24,6 +24,31 @@ SCOUT_THRESHOLDS = {
 def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
     """
     Automatically detects potential data quality issues in a DataFrame and proposes cleaning rules or transformations.
+
+    This function iterates through each column of the input DataFrame, skipping columns that have
+    already been processed (`scanned_columns`). It applies various heuristics to identify issues
+    such as high null percentages, constant values, numerical outliers, high skewness, mixed
+    data types, and high cardinality. For each detected issue, it generates a proposal
+    (a dictionary) that describes the issue and suggests a corresponding cleaning action or rule.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame to analyze for data quality issues.
+        scanned_columns (set): A set of column names that have already been scanned or processed,
+                                to avoid re-generating proposals for them.
+
+    Returns:
+        list[dict]: A list of dictionaries, where each dictionary represents a detected issue
+                    and a proposed rule or action to address it. Each proposal includes:
+                    - "type" (str): The category of the detected issue (e.g., "Redundant Column", "Null Check", "Range Check").
+                    - "column" (str): The name of the column affected.
+                    - "reason" (str): A description of why the proposal was generated.
+                    - "rule_data" (dict): A dictionary containing the details of the proposed
+                                          cleaning rule or action. The structure of `rule_data` varies by "type":
+                                          - For "Redundant Column" / "Constant Value": `{"action": "drop_column", "column": "col_name"}`
+                                          - For "Null Check": `{"type": "Null Check", "col": "col_name", "desc": "..."}`
+                                          - For "Range Check": `{"type": "Range Check", "col": "col_name", "min": val_min, "max": val_max, "desc": "..."}`
+                                          - For "Type Cast": `{"action": "cast_type", "column": "col_name", "dtype": "target_dtype"}`
+                                          - For "Distribution Warning" / "High Cardinality": `{"type": "Informational", "desc": "..."}`
     """
     proposals = []
     

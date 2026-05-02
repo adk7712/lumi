@@ -164,9 +164,9 @@ def generate_pipeline_code(recipe: list) -> str:
                     code.append(f"    df['{col}'] = pd.to_numeric(df['{col}'], errors='coerce').astype('{target_dtype}')")
             elif action == "drop_violated":
                 r = step['rule']
-                code.append(f"    # Drop rows violating rule: {r.get('desc', 'N/A')}")
                 if r.get('type') == "Informational":
                     continue
+                code.append(f"    # Drop rows violating rule: {r.get('desc', 'N/A')}")
                 if r['type'] == "Null Check":
                     code.append(f"    df = df.dropna(subset=['{r['col']}'])")
                 elif r['type'] == "Range Check":
