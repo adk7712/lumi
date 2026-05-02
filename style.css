@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
 /* --- Hidden Streamlit Elements --- */
 header,
@@ -22,6 +23,25 @@ header,
 
 svg, svg * {
     font-family: inherit !important;
+}
+
+/* Material Icons MUST use their own font — exempt from JetBrains override */
+.material-icons,
+[data-testid="stIconMaterial"] {
+    font-family: 'Material Icons' !important;
+    font-size: 1.5rem !important;
+    font-style: normal !important;
+    font-weight: normal !important;
+    line-height: 1 !important;
+    letter-spacing: normal !important;
+    text-transform: none !important;
+    display: inline-block !important;
+    white-space: nowrap !important;
+    word-wrap: normal !important;
+    direction: ltr !important;
+    -webkit-font-feature-settings: 'liga' !important;
+    font-feature-settings: 'liga' !important;
+    -webkit-font-smoothing: antialiased !important;
 }
 
 /* Clean Metric Styling (No Box) */
@@ -139,38 +159,23 @@ svg, svg * {
     list-style: none !important;
     display: flex !important;
     align-items: center !important;
-    gap: 0.5rem !important;
+    gap: 0.4rem !important;
 }
 
 [data-testid="stExpander"] summary::-webkit-details-marker {
     display: none !important;
 }
 
-/* Hide the broken Material Icons span entirely */
+/* Arrow icon — rotates via Streamlit's own React transition, we just size it */
 [data-testid="stExpander"] summary [data-testid="stIconMaterial"] {
-    display: none !important;
-}
-
-/* Replace it with a clean CSS triangle arrow via ::before on the summary */
-[data-testid="stExpander"] summary::before {
-    content: '' !important;
-    display: inline-block !important;
-    width: 0 !important;
-    height: 0 !important;
-    border-top: 0.35rem solid transparent !important;
-    border-bottom: 0.35rem solid transparent !important;
-    border-left: 0.55rem solid currentColor !important;
+    font-size: 1.5rem !important;
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
     flex-shrink: 0 !important;
-    transition: transform 0.15s ease !important;
-    margin-top: 0.1rem !important;
 }
 
-/* Rotate arrow when expander is open */
-[data-testid="stExpander"] details[open] summary::before {
-    transform: rotate(90deg) !important;
-}
-
-/* Label — match st.subheader exactly (h3 = 1.25rem, 600) */
+/* Label — match st.subheader (h3 = 1.25rem, 600) */
 [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p {
     font-size: 1.25rem !important;
     font-weight: 600 !important;
