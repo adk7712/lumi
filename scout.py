@@ -19,9 +19,12 @@ SCOUT_THRESHOLDS = {
     # Percentage of unique values above which cardinality is considered "high",
     # suggesting it might be an ID or name column.
     "HIGH_CARDINALITY_PCT": 80.0,
-    }
-def generate_proposals(df, scanned_columns):
-    """Automatically detects issues in the dataframe and proposes rules/transforms."""
+}
+
+def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
+    """
+    Automatically detects potential data quality issues in a DataFrame and proposes cleaning rules or transformations.
+    """
     proposals = []
     
     if df.empty:
@@ -32,12 +35,10 @@ def generate_proposals(df, scanned_columns):
         if col in scanned_columns: 
             continue
         
-        # Use backticks for safe column name handling in pandas queries (e.g., for columns with spaces or special characters).
-        safe_col = f"`{col}`"
-            
         # 1. NULL DETECTION: Identify and flag columns with a significant percentage of null values.
-            null_count = df[col].isnull().sum()
-            if null_count > 0:            null_pct = (null_count / len(df)) * 100
+        null_count = df[col].isnull().sum()
+        if null_count > 0:
+            null_pct = (null_count / len(df)) * 100
             if null_pct > SCOUT_THRESHOLDS["NULL_DROP_PCT"]:
                 proposals.append({
                     "type": "Redundant Column", "column": col, "reason": f"{null_pct:.1f}% empty (Near-complete nullity)",
@@ -50,8 +51,9 @@ def generate_proposals(df, scanned_columns):
                 })
             
         # 2. CONSTANT COLUMN DETECTION: Identify columns with no variance (all values are the same).
-            if df[col].nunique() <= SCOUT_THRESHOLDS["CONSTANT_UNIQUE_MAX"]:
-                proposals.append({                "type": "Constant Value", "column": col, "reason": "Zero variance (all values are identical)",
+        if df[col].nunique() <= SCOUT_THRESHOLDS["CONSTANT_UNIQUE_MAX"]:
+            proposals.append({
+                "type": "Constant Value", "column": col, "reason": "Zero variance (all values are identical)",
                 "rule_data": {"action": "drop_column", "column": col}
             })
 
@@ -61,7 +63,11 @@ def generate_proposals(df, scanned_columns):
             Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
             IQR = Q3 - Q1
             l, u = Q1 - SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR, Q3 + SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR
-            outliers = len(df[(df[col] < l) | (df[col] > u)])
+            
+            # Use a mask for efficiency and clarity
+            outlier_mask = (df[col] < l) | (df[col] > u)
+            outliers = outlier_mask.sum()
+            
             if outliers > 0:
                 proposals.append({
                     "type": "Range Check", "column": col, "reason": f"{outliers} statistical outliers detected",
