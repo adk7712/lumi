@@ -15,7 +15,7 @@ from rule_utils import evaluate_rule
 MAX_SAMPLE_ROWS = 10000
 
 # Set page config
-st.set_page_config(page_title="Lumi Workspace", layout="wide")
+st.set_page_config(page_title="Lumi", layout="wide")
 
 # Inject Custom CSS
 inject_custom_css(st)
