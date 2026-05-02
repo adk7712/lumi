@@ -11,11 +11,14 @@ from scout import generate_proposals
 from ui_utils import inject_custom_css, get_safe_hue, get_heatmap_styles
 from rule_utils import evaluate_rule
 
+# Define constants
+MAX_SAMPLE_ROWS = 10000
+
 # Set page config
 st.set_page_config(page_title="Lumi Workspace", layout="wide")
 
 # Inject Custom CSS
-inject_custom_css()
+inject_custom_css(st)
 
 # --- DATA LOADING ---
 @st.cache_data
@@ -36,20 +39,21 @@ def load_data(file_path_or_buffer):
                 return pd.read_csv(file_path_or_buffer)
             elif suffix == '.xlsx':
                 return pd.read_excel(file_path_or_buffer)
-        
+
         # Fallback for buffers without a clear type
         st.warning("Could not determine file type, attempting to read as CSV. May fail for other formats.")
         return pd.read_csv(file_path_or_buffer)
 
+    except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+        st.error(f"Error loading data: {type(e).__name__} - {e}. Please check the file format and content.")
+        return pd.DataFrame()
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"An unexpected error occurred: {type(e).__name__} - {e}")
         return pd.DataFrame()
 # --- STATE INITIALIZATION ---
 def initialize_state(from_reset=False):
     """Initializes all required session state variables."""
     # Streamlit's session state is crucial for maintaining application state across user interactions.
-    # Define default values for the session state
-    defaults = {
     # Define default values for the session state
     defaults = {
         'active_features': [],
@@ -61,7 +65,7 @@ def initialize_state(from_reset=False):
         'raw_data': None,
         'original_full_data': None,
     }
-    
+
     # Force reset or initialize for the first time
     # Persist state across reruns, or reset if 'from_reset' is True or key is new.
     for key, value in defaults.items():
@@ -74,11 +78,11 @@ def initialize_state(from_reset=False):
         st.session_state.original_full_data = raw_df
         # Sample large datasets for interactive use to improve performance.
         # A fixed random_state ensures reproducibility of the sample.
-        if len(raw_df) > 10000:
-            st.session_state.raw_data = raw_df.sample(10000, random_state=42).reset_index(drop=True)
+        if len(raw_df) > MAX_SAMPLE_ROWS:
+            st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
         else:
             st.session_state.raw_data = raw_df
-        
+
         st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
 
 initialize_state()
@@ -94,17 +98,17 @@ h_col1, h_col2, h_col3 = st.columns([8, 1.5, 1], vertical_alignment="bottom")
 with h_col1: # Main column for title
     st.subheader("LUMI")
 with h_col2: # Column for file uploader
-    uploaded_file = st.file_uploader("Upload Dataset", type=["csv", "xlsx"], label_visibility="collapsed")
+    uploaded_file = st.file_uploader("Upload Dataset", type=["csv", "xlsx"], label_visibility="collapsed", key="global_uploader")
     if uploaded_file:
         file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
         if st.session_state.last_file_hash != file_hash:
             raw_df = load_data(uploaded_file)
             st.session_state.original_full_data = raw_df
-            if len(raw_df) > 10000:
-                st.session_state.raw_data = raw_df.sample(10000, random_state=42).reset_index(drop=True)
+            if len(raw_df) > MAX_SAMPLE_ROWS:
+                st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
             else:
                 st.session_state.raw_data = raw_df
-            
+
             st.session_state.last_file_hash = file_hash
             # Reset dependent state
             st.session_state.scanned_columns, st.session_state.cleaning_recipe, st.session_state.rules = set(), [], []
@@ -121,7 +125,9 @@ st.divider()
 
 # --- DATA PROCESSING ---
 df_raw = st.session_state.raw_data
-df = apply_recipe(df_raw, st.session_state.cleaning_recipe)
+df, apply_messages = apply_recipe(df_raw, st.session_state.cleaning_recipe)
+for msg in apply_messages:
+    st.toast(msg)
 all_cols = df.columns.tolist()
 
 # --- TABS ---
@@ -134,15 +140,15 @@ with tab1:
     # Calculate overall data health percentage: (1 - proportion of null cells) * 100
     health = int((1 - (null_cells / total_cells)) * 100) if total_cells > 0 else 0
     active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
-    
+
     total_violations = 0
     for rule in active_rules_list:
         if rule.get('type') == "Informational":
             continue
         try:
             total_violations += evaluate_rule(df, rule).sum()
-        except Exception as e:
-            st.toast(f"Overview Rule Error ({rule.get('desc', 'N/A')}): {str(e)}", icon="🚨")
+        except (ValueError, KeyError, TypeError) as e:
+            st.toast(f"Overview Rule Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}", icon="🚨")
 
     m_col1.metric("Health", f"{health}%")
     m_col2.metric("Rows", f"{len(df):,}")
@@ -222,42 +228,42 @@ with tab3:
     r1, r2 = st.columns([1, 1])
     with r1:
         st.subheader("New Rule")
-        rtype = st.selectbox("Type", ["Null Check", "Range Check", "Relational Check", "Custom Expression", "Informational"])
+        rtype = st.selectbox("Type", ["Null Check", "Range Check", "Relational Check", "Custom Expression", "Informational"], key="rule_type_select")
         if rtype == "Informational":
-            note = st.text_area("Note/Warning", placeholder="e.g., This column contains high cardinality data.")
-            if st.button("Add Rule"):
+            note = st.text_area("Note/Warning", placeholder="e.g., This column contains high cardinality data.", key="info_note_input")
+            if st.button("Add Rule", key="btn_add_info"):
                 st.session_state.rules.append({"type": "Informational", "desc": note, "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
         elif rtype == "Custom Expression":
-            q_str = st.text_input("Pandas Query String", placeholder="Age > 30 & Sex == 'male'")
-            if st.button("Add Rule"):
+            q_str = st.text_input("Pandas Query String", placeholder="Age > 30 & Sex == 'male'", key="custom_query_input")
+            if st.button("Add Rule", key="btn_add_custom"):
                 st.session_state.rules.append({"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
         elif rtype == "Relational Check":
-            tcol, op = st.selectbox("Feature A", all_cols), st.selectbox("Operator", [">", "<", "==", "!=", ">=", "<="])
-            target_type = st.radio("Compare with", ["Another Feature", "Constant Value"], horizontal=True)
+            tcol, op = st.selectbox("Feature A", all_cols, key="rel_feature_a"), st.selectbox("Operator", [">", "<", "==", "!=", ">=", "<="], key="rel_op")
+            target_type = st.radio("Compare with", ["Another Feature", "Constant Value"], horizontal=True, key="rel_target_type_radio")
             if target_type == "Another Feature":
-                col_b = st.selectbox("Feature B", all_cols)
-                if st.button("Add Rule"):
+                col_b = st.selectbox("Feature B", all_cols, key="rel_feature_b")
+                if st.button("Add Rule", key="btn_add_rel_feat"):
                     st.session_state.rules.append({"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
             else:
-                val = st.text_input("Constant Value")
-                if st.button("Add Rule"):
+                val = st.text_input("Constant Value", key="rel_val_input")
+                if st.button("Add Rule", key="btn_add_rel_val"):
                     try: final_val = float(val)
                     except: final_val = val
                     st.session_state.rules.append({"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
         else:
-            tcol = st.selectbox("Target Column", all_cols)
+            tcol = st.selectbox("Target Column", all_cols, key="rule_target_col")
             if rtype == "Range Check" and pd.api.types.is_numeric_dtype(df[tcol]):
                 num_col1, num_col2 = st.columns(2)
-                v_min, v_max = num_col1.number_input("Min", value=float(df[tcol].min())), num_col2.number_input("Max", value=float(df[tcol].max()))
-                if st.button("Add Rule"):
+                v_min, v_max = num_col1.number_input("Min", value=float(df[tcol].min()), key="range_min_input"), num_col2.number_input("Max", value=float(df[tcol].max()), key="range_max_input")
+                if st.button("Add Rule", key="btn_add_range"):
                     st.session_state.rules.append({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
             elif rtype == "Null Check":
-                if st.button("Add Rule"):
+                if st.button("Add Rule", key="btn_add_null"):
                     st.session_state.rules.append({"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
     with r2:
         rh1, rh2 = st.columns([2, 1], vertical_alignment="bottom")
         rh1.subheader("Active Rules")
-        if st.session_state.rules and rh2.button("Clear All", use_container_width=True):
+        if st.session_state.rules and rh2.button("Clear All", use_container_width=True, key="clear_all_rules_btn"):
             st.session_state.rules, st.session_state.cleaning_recipe = [], []
             st.rerun()
 
@@ -272,14 +278,14 @@ with tab3:
                             mask = evaluate_rule(df, rule)
                             v_count = mask.sum()
                             rule.pop('error', None)
-                        except Exception as e:
+                        except (ValueError, KeyError, TypeError) as e:
                             rule['error'] = str(e)
-                            st.toast(f"Rulebook Error ({rule.get('desc', 'N/A')}): {str(e)}", icon="🚨")
+                            st.toast(f"Rulebook Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}", icon="🚨")
 
                     status_color, resolved = (rule['color'] if rule['enabled'] else "rgba(100,100,100,0.2)"), rule.get('resolved', False)
                     desc_style = "text-decoration: line-through; opacity: 0.5;" if not rule['enabled'] else ""
                     error_html = f"<br/><span style='color: #e74c3c; font-size: 0.85em; font-weight: bold;'>⚠️ Error: {rule.get('error')}</span>" if 'error' in rule else ""
-                    
+
                     # For Informational rules, don't show violation count
                     v_text = f"Violations: {v_count}" if rule['type'] != "Informational" else "Type: Info"
                     st.markdown(f'<div class="violation-card"><div style="border-left: 8px solid {status_color}; padding-left: 15px;"><strong style="{desc_style}">{rule["type"]}</strong><br/><code style="color: #4F8BF9; {desc_style}">{rule["desc"]}</code><br/><span style="font-size: 0.85em; opacity: 0.7;">{v_text}</span>{f"<br/><span style=\"color: #2ecc71; font-size: 0.85em; font-weight: bold;\">Status: Resolved</span>" if resolved else ""}{error_html}</div></div>', unsafe_allow_html=True)
@@ -288,21 +294,21 @@ with tab3:
                         if rule['type'] == "Null Check":
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Resolution", ["None", "Drop Rows", "Fill with Mean", "Fill with Median"], key=f"res_{idx}", label_visibility="collapsed")
-                            if res != "None" and res_cols[1].button("Apply", key=f"btn_{idx}", use_container_width=True):
+                            if res != "None" and res_cols[1].button("Apply", key=f"btn_res_{idx}", use_container_width=True):
                                 if res == "Drop Rows": add_step({"action": "drop_nulls", "column": rule['col']})
                                 else: add_step({"action": "fill_null", "column": rule['col'], "value": res.split()[-1].lower()})
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
                         elif rule['type'] == "Range Check":
                             res_cols = st.columns([3, 1])
-                            res = res_cols[0].selectbox("Res", ["None", "Drop Rows", "Cap at Bounds"], key=f"res_{idx}", label_visibility="collapsed")
-                            if res != "None" and res_cols[1].button("Apply", key=f"btn_{idx}", use_container_width=True):
+                            res = res_cols[0].selectbox("Res", ["None", "Drop Rows", "Cap at Bounds"], key=f"range_res_{idx}", label_visibility="collapsed")
+                            if res != "None" and res_cols[1].button("Apply", key=f"btn_range_res_{idx}", use_container_width=True):
                                 if res == "Drop Rows": add_step({"action": "drop_violated", "rule": rule})
                                 else: add_step({"action": "cap_range", "column": rule['col'], "min": rule['min'], "max": rule['max']})
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
                         else:
-                            if st.button("Drop Violated Rows", key=f"res_{idx}", use_container_width=True):
+                            if st.button("Drop Violated Rows", key=f"gen_res_{idx}", use_container_width=True):
                                 add_step({"action": "drop_violated", "rule": rule})
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
@@ -317,21 +323,21 @@ with tab3:
 
 with tab4:
     st.subheader("Manual Transformations")
-    t_type = st.selectbox("Type", ["Find and Replace", "Cast Data Type", "Drop Column"])
+    t_type = st.selectbox("Type", ["Find and Replace", "Cast Data Type", "Drop Column"], key="trans_type_select")
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
-        sf, sr, target = c1.text_input("Find"), c2.text_input("Replace"), c3.selectbox("Columns", ["All"] + all_cols)
+        sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
         if st.button("Add Step", key="btn_fr"):
             add_step({"action": "replace", "column": target, "find": sf, "replace": sr})
             st.rerun()
     elif t_type == "Cast Data Type":
         c1, c2 = st.columns(2)
-        target, dtype_t = c1.selectbox("Column", all_cols), c2.selectbox("Cast To", ["string", "float64", "int64", "datetime64[ns]"])
+        target, dtype_t = c1.selectbox("Column", all_cols, key="cast_target_col"), c2.selectbox("Cast To", ["string", "float64", "int64", "datetime64[ns]"], key="cast_dtype_select")
         if st.button("Add Step", key="btn_cast"):
             add_step({"action": "cast_type", "column": target, "dtype": dtype_t})
             st.rerun()
     elif t_type == "Drop Column":
-        target = st.selectbox("Target Column", all_cols)
+        target = st.selectbox("Target Column", all_cols, key="drop_target_col")
         if st.button("Add Step", key="btn_drop"):
             add_step({"action": "drop_column", "column": target})
             st.rerun()
@@ -343,10 +349,11 @@ with tab5:
     else:
         bh = int((1 - (df_raw.isnull().sum().sum() / df_raw.size)) * 100) if df_raw.size > 0 else 0
         st.markdown(f'<div class="recipe-step"><strong>0. Original Data</strong> | Health: {bh}% | Rows: {len(df_raw):,}</div>', unsafe_allow_html=True)
-        
+
         # Efficiently generate audit trail
         # Create a copy of the raw DataFrame to apply steps iteratively for lineage visualization.
-        temp_df = df_raw.copy()        for i, step in enumerate(st.session_state.cleaning_recipe):
+        temp_df = df_raw.copy()
+        for i, step in enumerate(st.session_state.cleaning_recipe):
             c1, c2 = st.columns([4, 1])
             # Apply only the current step to the intermediate dataframe
             # Apply each cleaning step sequentially to show intermediate states.
@@ -364,9 +371,12 @@ with tab6:
     else:
         code_output = generate_pipeline_code(st.session_state.cleaning_recipe)
         st.code(code_output, language="python")
-        st.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", use_container_width=True)
+        st.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", use_container_width=True, key="download_pipeline_btn")
 
 st.divider()
 st.subheader("Validation Heatmap")
 # Apply custom styles to highlight cells violating active rules.
-    st.dataframe(df.style.apply(lambda _: get_heatmap_styles(df, st.session_state.rules), axis=None), use_container_width=True)
+heatmap_sdf, heatmap_messages = get_heatmap_styles(df, st.session_state.rules)
+for msg in heatmap_messages:
+    st.toast(msg)
+st.dataframe(df.style.apply(lambda _: heatmap_sdf, axis=None), use_container_width=True)
