@@ -132,6 +132,14 @@ svg, svg * {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    border-radius: 6px !important;
+}
+[data-testid="stFileUploader"] button::before {
+    content: "Upload Dataset" !important;
+    visibility: visible !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     width: 100% !important;
     height: 100% !important;
     font-size: 14px !important;
@@ -202,4 +210,82 @@ svg, svg * {
     border-color: #4F8BF9;
     color: #4F8BF9;
     background-color: rgba(79, 139, 249, 0.05);
+}
+
+/* ============================================================
+   CRITICAL: DIAGNOSTICS TAB ONLY - SMALL METRIC LABELS
+   This uses CSS adjacent sibling + structural selectors to
+   target only metrics inside the Diagnostics tab content
+   ============================================================ */
+
+/* Strategy: Find the container div that holds Diagnostics metrics
+   Diagnostics metrics are in st.columns(2) inside feature cards with border=True
+   These metrics are inside a stVerticalBlockBorderWrapper for the card
+*/
+
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricLabel"] {
+    font-size: 0.55rem !important;
+    line-height: 1 !important;
+    opacity: 0.85 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricLabel"] * {
+    font-size: 0.55rem !important;
+    line-height: 1 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricLabel"] p {
+    font-size: 0.55rem !important;
+    line-height: 1 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    opacity: 0.85 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricLabel"] span {
+    font-size: 0.55rem !important;
+    line-height: 1 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricLabel"] div {
+    font-size: 0.55rem !important;
+    line-height: 1 !important;
+}
+
+/* Also shrink the values for diagnostic metrics */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricValue"] {
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricValue"] * {
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricValue"] p,
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricValue"] span,
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetricValue"] div {
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    margin: 0 !important;
+}
+
+/* Tighten spacing on diagnostics metrics */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stMetric"] {
+    padding: 2px 8px !important;
+    margin-bottom: 0px !important;
+    border-left: 2px solid rgba(28, 131, 225, 0.4) !important;
+}
+
+/* Ensure the feature cards themselves look clean */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    border: 1px solid rgba(128, 128, 128, 0.1) !important;
+    transition: all 0.3s ease !important;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(79, 139, 249, 0.4) !important;
 }

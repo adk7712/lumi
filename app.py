@@ -193,17 +193,25 @@ with tab2:
         grid_cols = st.columns(2)
         for idx, col_name in enumerate(selected_features):
             with grid_cols[idx % 2]:
-                st.subheader(col_name)
-                s1, s2, s3 = st.columns(3)
-                s1.metric("Nulls", f"{df[col_name].isnull().sum()}")
-                s2.metric("Unique", f"{df[col_name].nunique()}")
-                # Differentiate plotting and metric display based on data type for relevant insights.
-                if pd.api.types.is_numeric_dtype(df[col_name]):
-                    s3.metric("Skew", f"{df[col_name].skew():.2f}")
-                    st.plotly_chart(px.box(df, y=col_name, height=220), use_container_width=True)
-                else:
-                    s3.metric("Type", "Obj")
-                    st.plotly_chart(px.bar(x=df[col_name].value_counts().head(5).index, y=df[col_name].value_counts().head(5).values, height=220), use_container_width=True)
+                with st.container(border=True):
+                    st.subheader(col_name)
+                    s1, s2, s3, s4 = st.columns(4)
+                    from ui_utils import render_diagnostic_metric  # Add this import at top if not there
+                    render_diagnostic_metric(s1, "Type", str(df[col_name].dtype))
+                    render_diagnostic_metric(s2, "Nulls", f"{df[col_name].isnull().sum()}")
+                    render_diagnostic_metric(s3, "Unique", f"{df[col_name].nunique()}")
+                    # Differentiate plotting and metric display based on data type for relevant insights.
+                    if pd.api.types.is_numeric_dtype(df[col_name]):
+                        render_diagnostic_metric(s4, "Skew", f"{df[col_name].skew():.2f}")
+                        fig = px.box(df, y=col_name, height=220)
+                    else:
+                        top_val = df[col_name].mode()[0] if not df[col_name].mode().empty else "N/A"
+                        render_diagnostic_metric(s4, "Top", str(top_val)[:10])
+                        fig = px.bar(x=df[col_name].value_counts().head(5).index, y=df[col_name].value_counts().head(5).values, height=220)
+
+                    # Cleanup chart aesthetics by removing redundant axis labels
+                    fig.update_layout(xaxis_title=None, yaxis_title=None)
+                    st.plotly_chart(fig, use_container_width=True, theme="streamlit")
 
 with tab3:
     if st.session_state.proposals:
