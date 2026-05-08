@@ -121,7 +121,7 @@ with h_col2: # Column for file uploader
             st.rerun()
 
 with h_col3: # Column for reset button
-    if st.button("Reset", key="reset_all", use_container_width=True):
+    if st.button("Reset", key="reset_all", width="stretch"):
         initialize_state(from_reset=True)
         st.rerun()
 
@@ -169,7 +169,7 @@ with tab1:
         type_counts.columns = ['Data Type', 'Count']
         fig = px.pie(type_counts, names='Data Type', values='Count', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel) # Using a pleasant, qualitative color palette for distinct categories.
         fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False)
-        st.plotly_chart(fig, use_container_width=True, theme="streamlit")
+        st.plotly_chart(fig, width="stretch", theme="streamlit")
 
     with o_col2:
         st.subheader("Workspace Status")
@@ -179,7 +179,7 @@ with tab1:
     st.subheader("Feature Correlation")
     numeric_df = df.select_dtypes(include=[np.number])
     if len(numeric_df.columns) > 1:
-        st.plotly_chart(px.imshow(numeric_df.corr(), text_auto=".2f", aspect="auto", color_continuous_scale='RdBu_r'), use_container_width=True, theme="streamlit")
+        st.plotly_chart(px.imshow(numeric_df.corr(), text_auto=".2f", aspect="auto", color_continuous_scale='RdBu_r'), width="stretch", theme="streamlit")
     else:
         st.caption("Not enough numeric columns for correlation matrix.")
 
@@ -211,7 +211,7 @@ with tab2:
 
                     # Cleanup chart aesthetics by removing redundant axis labels
                     fig.update_layout(xaxis_title=None, yaxis_title=None)
-                    st.plotly_chart(fig, use_container_width=True, theme="streamlit")
+                    st.plotly_chart(fig, width="stretch", theme="streamlit")
 
 with tab3:
     if st.session_state.proposals:
@@ -221,7 +221,7 @@ with tab3:
                 with p_cols[p_idx % 2]:
                     st.markdown(f'<div class="proposal-box"><strong>{p["type"]} on {p["column"]}</strong><br/><small>{p["reason"]}</small></div>', unsafe_allow_html=True)
                     acc, dis = st.columns(2)
-                    if acc.button("Accept", key=f"p_acc_{p_idx}", use_container_width=True):
+                    if acc.button("Accept", key=f"p_acc_{p_idx}", width="stretch"):
                         st.session_state.scanned_columns.add(p['column'])
                         if 'action' in p['rule_data']:
                             add_step(p['rule_data'])
@@ -231,7 +231,7 @@ with tab3:
                             st.session_state.rules.append(rule)
                         st.session_state.proposals.pop(p_idx)
                         st.rerun()
-                    if dis.button("Dismiss", key=f"p_dis_{p_idx}", use_container_width=True):
+                    if dis.button("Dismiss", key=f"p_dis_{p_idx}", width="stretch"):
                         st.session_state.scanned_columns.add(p['column'])
                         st.session_state.proposals.pop(p_idx)
                         st.rerun()
@@ -278,7 +278,7 @@ with tab3:
     with r2:
         rh1, rh2 = st.columns([2, 1], vertical_alignment="bottom")
         rh1.subheader("Active Rules")
-        if st.session_state.rules and rh2.button("Clear All", use_container_width=True, key="clear_all_rules_btn"):
+        if st.session_state.rules and rh2.button("Clear All", width="stretch", key="clear_all_rules_btn"):
             st.session_state.rules, st.session_state.cleaning_recipe = [], []
             st.rerun()
 
@@ -309,7 +309,7 @@ with tab3:
                         if rule['type'] == "Null Check":
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Resolution", ["None", "Drop Rows", "Fill with Mean", "Fill with Median"], key=f"res_{idx}", label_visibility="collapsed")
-                            if res != "None" and res_cols[1].button("Apply", key=f"btn_res_{idx}", use_container_width=True):
+                            if res != "None" and res_cols[1].button("Apply", key=f"btn_res_{idx}", width="stretch"):
                                 if res == "Drop Rows": add_step({"action": "drop_nulls", "column": rule['col']})
                                 else: add_step({"action": "fill_null", "column": rule['col'], "value": res.split()[-1].lower()})
                                 st.session_state.rules[idx]['resolved'] = True
@@ -317,22 +317,22 @@ with tab3:
                         elif rule['type'] == "Range Check":
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Res", ["None", "Drop Rows", "Cap at Bounds"], key=f"range_res_{idx}", label_visibility="collapsed")
-                            if res != "None" and res_cols[1].button("Apply", key=f"btn_range_res_{idx}", use_container_width=True):
+                            if res != "None" and res_cols[1].button("Apply", key=f"btn_range_res_{idx}", width="stretch"):
                                 if res == "Drop Rows": add_step({"action": "drop_violated", "rule": rule})
                                 else: add_step({"action": "cap_range", "column": rule['col'], "min": rule['min'], "max": rule['max']})
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
                         else:
-                            if st.button("Drop Violated Rows", key=f"gen_res_{idx}", use_container_width=True):
+                            if st.button("Drop Violated Rows", key=f"gen_res_{idx}", width="stretch"):
                                 add_step({"action": "drop_violated", "rule": rule})
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
 
                     btn_c1, btn_c2 = st.columns(2)
-                    if btn_c1.button("Ignore" if rule['enabled'] else "Enable", key=f"tg_{idx}", use_container_width=True):
+                    if btn_c1.button("Ignore" if rule['enabled'] else "Enable", key=f"tg_{idx}", width="stretch"):
                         st.session_state.rules[idx]['enabled'] = not rule['enabled']
                         st.rerun()
-                    if btn_c2.button("Remove", key=f"del_{idx}", use_container_width=True):
+                    if btn_c2.button("Remove", key=f"del_{idx}", width="stretch"):
                         st.session_state.rules.pop(idx)
                         st.rerun()
 
@@ -380,18 +380,18 @@ with tab5:
             temp_df = apply_recipe(temp_df, [step])
             th = int((1 - (temp_df.isnull().sum().sum() / temp_df.size)) * 100) if temp_df.size > 0 else 0
             c1.markdown(f'<div class="recipe-step">{i+1}. {step["action"]} on {step.get("column", "dataset")} | Health: {th}% | Rows: {len(temp_df):,}</div>', unsafe_allow_html=True)
-            if c2.button("Remove", key=f"rm_step_{i}", use_container_width=True):
+            if c2.button("Remove", key=f"rm_step_{i}", width="stretch"):
                 st.session_state.cleaning_recipe.pop(i)
                 st.rerun()
 
 with tab6:
     v = st.radio("Mode", ["Raw Data (Before)", "Cleaned Data (After)", "Python Code"], horizontal=True, key="p_mode")
-    if v == "Raw Data (Before)": st.dataframe(df_raw, use_container_width=True)
-    elif v == "Cleaned Data (After)": st.dataframe(df, use_container_width=True)
+    if v == "Raw Data (Before)": st.dataframe(df_raw, width="stretch")
+    elif v == "Cleaned Data (After)": st.dataframe(df, width="stretch")
     else:
         code_output = generate_pipeline_code(st.session_state.cleaning_recipe)
         st.code(code_output, language="python")
-        st.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", use_container_width=True, key="download_pipeline_btn")
+        st.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", width="stretch", key="download_pipeline_btn")
 
 st.divider()
 st.subheader("Validation Heatmap")
@@ -399,4 +399,4 @@ st.subheader("Validation Heatmap")
 heatmap_sdf, heatmap_messages = get_heatmap_styles(df, st.session_state.rules)
 for msg in heatmap_messages:
     st.toast(msg)
-st.dataframe(df.style.apply(lambda _: heatmap_sdf, axis=None), use_container_width=True)
+st.dataframe(df.style.apply(lambda _: heatmap_sdf, axis=None), width="stretch")
