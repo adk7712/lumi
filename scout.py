@@ -132,5 +132,15 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
                             "desc": f"High Cardinality warning for '{col}': {df[col].nunique()} unique values"
                         }
                     })
+
+                # Whitespace Detection
+                # Check if any values have leading or trailing whitespace.
+                if df[col].dtype == 'object':
+                    has_whitespace = df[col].dropna().astype(str).str.contains(r"^\s+|\s+$").any()
+                    if has_whitespace:
+                        proposals.append({
+                            "type": "Formatting Issue", "column": col, "reason": "Leading or trailing whitespace detected",
+                            "rule_data": {"action": "strip_whitespace", "column": col}
+                        })
                     
     return proposals

@@ -75,6 +75,9 @@ def apply_recipe(df: pd.DataFrame, recipe: list) -> tuple[pd.DataFrame, list[str
                         
                         if step['dtype'] == "datetime64[ns]":
                             df_clean[col] = pd.to_datetime(df_clean[col], errors='coerce')
+                        elif target_dtype in ['string', 'object']:
+                            # Bypass numeric coercion for string/object casts to prevent data loss
+                            df_clean[col] = df_clean[col].astype(target_dtype)
                         else:
                             numeric_series = pd.to_numeric(df_clean[col], errors='coerce')
                             df_clean[col] = numeric_series.astype(target_dtype)
@@ -105,6 +108,19 @@ def apply_recipe(df: pd.DataFrame, recipe: list) -> tuple[pd.DataFrame, list[str
                     df_clean[col] = df_clean[col].replace(f, r_val)
                 else:
                     messages.append(f"Warning: Column '{col}' not found for replace action.")
+            elif action == "strip_whitespace":
+                # Remove leading and trailing whitespace from string columns.
+                # Use a boolean mask to only apply .astype(str).str.strip() to non-null values,
+                # preventing NaNs from being converted to the literal string "nan".
+                if col == "All":
+                    for c in df_clean.select_dtypes(include=['object']).columns:
+                        mask = df_clean[c].notnull()
+                        df_clean.loc[mask, c] = df_clean.loc[mask, c].astype(str).str.strip()
+                elif col in df_clean.columns:
+                    mask = df_clean[col].notnull()
+                    df_clean.loc[mask, col] = df_clean.loc[mask, col].astype(str).str.strip()
+                else:
+                    messages.append(f"Warning: Column '{col}' not found for strip_whitespace action.")
         except (KeyError, ValueError, TypeError) as e:
             messages.append(f"Error applying {action} on {col}: {type(e).__name__} - {str(e)}")
             continue
@@ -144,7 +160,12 @@ def generate_pipeline_code(recipe: list) -> str:
                 v = step['value']
                 if v in ["mean", "median", "mode"]:
                     code.append(f"    # Fill null values with mean, median, or mode.")
-                    code.append(f"    df['{col}'] = df['{col}'].fillna(df['{col}'].{v + ('()[0]' if v=='mode' else '()')})")
+                    if v == "mode":
+                        # Safely handle empty modes in generated code to avoid IndexError
+                        code.append(f"    mode_val = df['{col}'].mode()")
+                        code.append(f"    df['{col}'] = df['{col}'].fillna(mode_val[0] if not mode_val.empty else np.nan)")
+                    else:
+                        code.append(f"    df['{col}'] = df['{col}'].fillna(df['{col}'].{v}())")
                 else:
                     code.append(f"    # Fill null values with a custom constant.")
                     code.append(f"    df['{col}'] = df['{col}'].fillna({repr(v)})")
@@ -160,8 +181,13 @@ def generate_pipeline_code(recipe: list) -> str:
                     target_dtype = step['dtype']
                     if target_dtype in ['int64', 'int32', 'int']:
                         target_dtype = "Int64"
-                    code.append(f"    # Convert column to target numeric type, coercing errors to NaN.")
-                    code.append(f"    df['{col}'] = pd.to_numeric(df['{col}'], errors='coerce').astype('{target_dtype}')")
+                    
+                    if target_dtype in ['string', 'object']:
+                        code.append(f"    # Convert column to target string/object type.")
+                        code.append(f"    df['{col}'] = df['{col}'].astype('{target_dtype}')")
+                    else:
+                        code.append(f"    # Convert column to target numeric type, coercing errors to NaN.")
+                        code.append(f"    df['{col}'] = pd.to_numeric(df['{col}'], errors='coerce').astype('{target_dtype}')")
             elif action == "drop_violated":
                 r = step['rule']
                 if r.get('type') == "Informational":
@@ -186,5 +212,15 @@ def generate_pipeline_code(recipe: list) -> str:
                 else:
                     code.append(f"    # Replace in the specified column.")
                     code.append(f"    df['{col}'] = df['{col}'].replace({f_repr}, {r_repr})")
+            elif action == "strip_whitespace":
+                if col == "All":
+                    code.append(f"    # Strip whitespace from all object columns, preserving NaNs.")
+                    code.append(f"    for c in df.select_dtypes(include=['object']).columns:")
+                    code.append(f"        mask = df[c].notnull()")
+                    code.append(f"        df.loc[mask, c] = df.loc[mask, c].astype(str).str.strip()")
+                else:
+                    code.append(f"    # Strip whitespace from the specified column, preserving NaNs.")
+                    code.append(f"    mask = df['{col}'].notnull()")
+                    code.append(f"    df.loc[mask, '{col}'] = df.loc[mask, '{col}'].astype(str).str.strip()")
     code.append("    return df")
     return "\n".join(code)

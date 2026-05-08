@@ -100,8 +100,10 @@ with h_col1: # Main column for title
 with h_col2: # Column for file uploader
     uploaded_file = st.file_uploader("Upload Dataset", type=["csv", "xlsx"], label_visibility="collapsed", key="global_uploader")
     if uploaded_file:
-        file_hash = hashlib.md5(uploaded_file.getvalue()).hexdigest()
-        if st.session_state.last_file_hash != file_hash:
+        # Optimization: Use file attributes for a lightweight identifier instead of full-file hashing
+        # to prevent memory bottlenecks on large datasets.
+        file_id = f"{uploaded_file.file_id}_{uploaded_file.name}_{uploaded_file.size}"
+        if st.session_state.last_file_hash != file_id:
             raw_df = load_data(uploaded_file)
             st.session_state.original_full_data = raw_df
             if len(raw_df) > MAX_SAMPLE_ROWS:
@@ -109,8 +111,10 @@ with h_col2: # Column for file uploader
             else:
                 st.session_state.raw_data = raw_df
 
-            st.session_state.last_file_hash = file_hash
+            st.session_state.last_file_hash = file_id
             # Reset dependent state
+            # Fix: Explicitly clear active_features to prevent StreamlitAPIException on next rerun
+            st.session_state.active_features = []
             st.session_state.scanned_columns, st.session_state.cleaning_recipe, st.session_state.rules = set(), [], []
             st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
             st.toast("Dataset Analyzed")
@@ -252,11 +256,14 @@ with tab3:
                     st.session_state.rules.append({"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
         else:
             tcol = st.selectbox("Target Column", all_cols, key="rule_target_col")
-            if rtype == "Range Check" and pd.api.types.is_numeric_dtype(df[tcol]):
-                num_col1, num_col2 = st.columns(2)
-                v_min, v_max = num_col1.number_input("Min", value=float(df[tcol].min()), key="range_min_input"), num_col2.number_input("Max", value=float(df[tcol].max()), key="range_max_input")
-                if st.button("Add Rule", key="btn_add_range"):
-                    st.session_state.rules.append({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+            if rtype == "Range Check":
+                if pd.api.types.is_numeric_dtype(df[tcol]):
+                    num_col1, num_col2 = st.columns(2)
+                    v_min, v_max = num_col1.number_input("Min", value=float(df[tcol].min()), key="range_min_input"), num_col2.number_input("Max", value=float(df[tcol].max()), key="range_max_input")
+                    if st.button("Add Rule", key="btn_add_range"):
+                        st.session_state.rules.append({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                else:
+                    st.warning(f"Range Checks are only applicable to numeric columns. '{tcol}' is {df[tcol].dtype}.")
             elif rtype == "Null Check":
                 if st.button("Add Rule", key="btn_add_null"):
                     st.session_state.rules.append({"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
@@ -323,7 +330,7 @@ with tab3:
 
 with tab4:
     st.subheader("Manual Transformations")
-    t_type = st.selectbox("Type", ["Find and Replace", "Cast Data Type", "Drop Column"], key="trans_type_select")
+    t_type = st.selectbox("Type", ["Find and Replace", "Cast Data Type", "Drop Column", "Strip Whitespace"], key="trans_type_select")
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
         sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
@@ -340,6 +347,11 @@ with tab4:
         target = st.selectbox("Target Column", all_cols, key="drop_target_col")
         if st.button("Add Step", key="btn_drop"):
             add_step({"action": "drop_column", "column": target})
+            st.rerun()
+    elif t_type == "Strip Whitespace":
+        target = st.selectbox("Columns", ["All"] + all_cols, key="strip_target_col")
+        if st.button("Add Step", key="btn_strip"):
+            add_step({"action": "strip_whitespace", "column": target})
             st.rerun()
 
 with tab5:
