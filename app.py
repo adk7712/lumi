@@ -269,7 +269,7 @@ with tab3:
                         else:
                             rule = p['rule_data'].copy()
                             rule.update({'enabled': True, 'color': f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
-                            st.session_state.rules.append(rule)
+                            st.session_state.rules.insert(0, rule)
                         st.session_state.proposals.pop(p_idx)
                         st.rerun()
                     if dis.button("Dismiss", key=f"p_dis_{p_idx}", width="stretch"):
@@ -285,10 +285,10 @@ with tab3:
         if rtype == "Informational":
             note = st.text_area("Note/Warning", placeholder="e.g., This column contains high cardinality data.", key="info_note_input")
             if st.button("Add Rule", key="btn_add_info"):
-                st.session_state.rules.append({"type": "Informational", "desc": note, "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                st.session_state.rules.insert(0, {"type": "Informational", "desc": note, "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
                 st.rerun()
         elif rtype == "Custom Expression":
-            with st.form(key="custom_expr_form"):
+            with st.form(key="custom_expr_form", clear_on_submit=True):
                 q_str = st.text_input("Pandas Query String", placeholder="Age > 30 & Sex == 'male'", key="custom_query_input")
                 submit_btn = st.form_submit_button("Add Rule")
                 
@@ -299,8 +299,7 @@ with tab3:
                     if len(df) > 0 and len(test_result) == 0:
                         st.error("⚠️ This query returned no matches on the dataset. Please check for typos or type mismatches (e.g., comparing a number to a string). Rule not added.")
                     else:
-                        st.session_state.rules.append({"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
-                        st.session_state.custom_query_input = ""
+                        st.session_state.rules.insert(0, {"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
                         st.rerun()
                 except Exception as e:
                     err_msg = str(e)
@@ -320,14 +319,14 @@ with tab3:
             if target_type == "Another Feature":
                 col_b = st.selectbox("Feature B", all_cols, key="rel_feature_b")
                 if st.button("Add Rule", key="btn_add_rel_feat"):
-                    st.session_state.rules.append({"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    st.session_state.rules.insert(0, {"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
                     st.rerun()
             else:
                 val = st.text_input("Constant Value", key="rel_val_input")
                 if st.button("Add Rule", key="btn_add_rel_val"):
                     try: final_val = float(val)
                     except: final_val = val
-                    st.session_state.rules.append({"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    st.session_state.rules.insert(0, {"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
                     st.rerun()
         else:
             tcol = st.selectbox("Target Column", all_cols, key="rule_target_col")
@@ -336,13 +335,13 @@ with tab3:
                     num_col1, num_col2 = st.columns(2)
                     v_min, v_max = num_col1.number_input("Min", value=float(df[tcol].min()), key="range_min_input"), num_col2.number_input("Max", value=float(df[tcol].max()), key="range_max_input")
                     if st.button("Add Rule", key="btn_add_range"):
-                        st.session_state.rules.append({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                        st.session_state.rules.insert(0, {"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
                         st.rerun()
                 else:
                     st.warning(f"Range Checks are only applicable to numeric columns. '{tcol}' is {df[tcol].dtype}.")
             elif rtype == "Null Check":
                 if st.button("Add Rule", key="btn_add_null"):
-                    st.session_state.rules.append({"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    st.session_state.rules.insert(0, {"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
                     st.rerun()
     with r2:
         rh1, rh2 = st.columns([2, 1], vertical_alignment="bottom")
