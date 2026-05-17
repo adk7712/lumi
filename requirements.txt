@@ -2,3 +2,6 @@ streamlit
 pandas
 plotly
 openpyxl
+scikit-learn
+thefuzz
+python-Levenshtein
