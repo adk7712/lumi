@@ -59,6 +59,7 @@ def initialize_state(from_reset=False):
         'active_features': [],
         'rules': [],
         'cleaning_recipe': [],
+        'intermediate_states': [], # List of (step_name, health_pct, row_count, dataframe_reference)
         'proposals': [],
         'scanned_columns': set(),
         'last_file_hash': None,
@@ -83,14 +84,30 @@ def initialize_state(from_reset=False):
         else:
             st.session_state.raw_data = raw_df
 
+        # Initialize intermediate states with original data
+        base_df = st.session_state.raw_data
+        bh = int((1 - (base_df.isnull().sum().sum() / base_df.size)) * 100) if base_df.size > 0 else 0
+        st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
+
         st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
 
 initialize_state()
 
 # --- CALLBACKS ---
 def add_step(step):
-    """Adds a cleaning step to the recipe and shows a toast."""
+    """Adds a cleaning step to the recipe, updates the cached state, and shows a toast."""
     st.session_state.cleaning_recipe.append(step)
+
+    # Calculate delta state and cache it
+    last_df = st.session_state.intermediate_states[-1][3]
+    new_df, messages = apply_recipe(last_df, [step])
+    for msg in messages:
+        st.toast(msg)
+
+    th = int((1 - (new_df.isnull().sum().sum() / new_df.size)) * 100) if new_df.size > 0 else 0
+    step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
+    st.session_state.intermediate_states.append((step_desc, th, len(new_df), new_df))
+
     st.toast(f"Step Added: {step['action']}")
 
 # --- HEADER ---
@@ -113,15 +130,26 @@ with h_col2: # Column for file uploader
 
             st.session_state.last_file_hash = file_id
             # Reset dependent state
-            # Fix: Explicitly clear active_features to prevent StreamlitAPIException on next rerun
             st.session_state.active_features = []
             st.session_state.scanned_columns, st.session_state.cleaning_recipe, st.session_state.rules = set(), [], []
+
+            # Reset intermediate states
+            base_df = st.session_state.raw_data
+            bh = int((1 - (base_df.isnull().sum().sum() / base_df.size)) * 100) if base_df.size > 0 else 0
+            st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
+
             st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
             st.toast("Dataset Analyzed")
             st.rerun()
 
 with h_col3: # Column for reset button
-    if st.button("Reset", key="reset_all", width="stretch"):
+    u_c1, u_c2 = st.columns(2)
+    if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
+        st.session_state.cleaning_recipe.pop()
+        st.session_state.intermediate_states.pop()
+        st.toast("Last step undone")
+        st.rerun()
+    if u_c2.button("Reset", key="reset_all", width="stretch"):
         initialize_state(from_reset=True)
         st.rerun()
 
@@ -216,6 +244,19 @@ with tab2:
 with tab3:
     if st.session_state.proposals:
         with st.expander(f"Recommended Rules ({len(st.session_state.proposals)})", expanded=False):
+            if st.button("Accept All Recommendations", key="accept_all_proposals", width="stretch"):
+                for p in st.session_state.proposals:
+                    st.session_state.scanned_columns.add(p['column'])
+                    if 'action' in p['rule_data']:
+                        add_step(p['rule_data'])
+                    else:
+                        rule = p['rule_data'].copy()
+                        rule.update({'enabled': True, 'color': f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                        st.session_state.rules.append(rule)
+                st.session_state.proposals = []
+                st.toast("All recommendations accepted")
+                st.rerun()
+
             p_cols = st.columns(2)
             for p_idx, p in enumerate(st.session_state.proposals):
                 with p_cols[p_idx % 2]:
@@ -245,10 +286,34 @@ with tab3:
             note = st.text_area("Note/Warning", placeholder="e.g., This column contains high cardinality data.", key="info_note_input")
             if st.button("Add Rule", key="btn_add_info"):
                 st.session_state.rules.append({"type": "Informational", "desc": note, "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                st.rerun()
         elif rtype == "Custom Expression":
-            q_str = st.text_input("Pandas Query String", placeholder="Age > 30 & Sex == 'male'", key="custom_query_input")
-            if st.button("Add Rule", key="btn_add_custom"):
-                st.session_state.rules.append({"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+            with st.form(key="custom_expr_form"):
+                q_str = st.text_input("Pandas Query String", placeholder="Age > 30 & Sex == 'male'", key="custom_query_input")
+                submit_btn = st.form_submit_button("Add Rule")
+                
+            if submit_btn and q_str:
+                try:
+                    test_result = df.query(q_str)
+                    
+                    if len(df) > 0 and len(test_result) == 0:
+                        st.error("⚠️ This query returned no matches on the dataset. Please check for typos or type mismatches (e.g., comparing a number to a string). Rule not added.")
+                    else:
+                        st.session_state.rules.append({"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                        st.session_state.custom_query_input = ""
+                        st.rerun()
+                except Exception as e:
+                    err_msg = str(e)
+                    # Categorize common errors for user-friendliness
+                    if "invalid syntax" in err_msg.lower():
+                        friendly_err = "Syntax Error: The expression has invalid characters or structure (e.g., using '>>' instead of '>')."
+                    elif "is not defined" in err_msg.lower() or "not found" in err_msg.lower():
+                        friendly_err = "Column Error: One of the columns mentioned in your query doesn't exist in the dataset."
+                    elif "cannot compare" in err_msg.lower() or "not supported between instances" in err_msg.lower() or "typeerror" in err_msg.lower():
+                        friendly_err = "Type Error: You are trying to compare incompatible types (e.g., a number with a string)."
+                    else:
+                        friendly_err = f"Pandas Error: {err_msg}"
+                    st.error(friendly_err)
         elif rtype == "Relational Check":
             tcol, op = st.selectbox("Feature A", all_cols, key="rel_feature_a"), st.selectbox("Operator", [">", "<", "==", "!=", ">=", "<="], key="rel_op")
             target_type = st.radio("Compare with", ["Another Feature", "Constant Value"], horizontal=True, key="rel_target_type_radio")
@@ -256,12 +321,14 @@ with tab3:
                 col_b = st.selectbox("Feature B", all_cols, key="rel_feature_b")
                 if st.button("Add Rule", key="btn_add_rel_feat"):
                     st.session_state.rules.append({"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    st.rerun()
             else:
                 val = st.text_input("Constant Value", key="rel_val_input")
                 if st.button("Add Rule", key="btn_add_rel_val"):
                     try: final_val = float(val)
                     except: final_val = val
                     st.session_state.rules.append({"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    st.rerun()
         else:
             tcol = st.selectbox("Target Column", all_cols, key="rule_target_col")
             if rtype == "Range Check":
@@ -270,11 +337,13 @@ with tab3:
                     v_min, v_max = num_col1.number_input("Min", value=float(df[tcol].min()), key="range_min_input"), num_col2.number_input("Max", value=float(df[tcol].max()), key="range_max_input")
                     if st.button("Add Rule", key="btn_add_range"):
                         st.session_state.rules.append({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                        st.rerun()
                 else:
                     st.warning(f"Range Checks are only applicable to numeric columns. '{tcol}' is {df[tcol].dtype}.")
             elif rtype == "Null Check":
                 if st.button("Add Rule", key="btn_add_null"):
                     st.session_state.rules.append({"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    st.rerun()
     with r2:
         rh1, rh2 = st.columns([2, 1], vertical_alignment="bottom")
         rh1.subheader("Active Rules")
@@ -308,17 +377,19 @@ with tab3:
                     if v_count > 0 and not resolved and rule['type'] != "Informational":
                         if rule['type'] == "Null Check":
                             res_cols = st.columns([3, 1])
-                            res = res_cols[0].selectbox("Resolution", ["None", "Drop Rows", "Fill with Mean", "Fill with Median"], key=f"res_{idx}", label_visibility="collapsed")
-                            if res != "None" and res_cols[1].button("Apply", key=f"btn_res_{idx}", width="stretch"):
+                            res = res_cols[0].selectbox("Resolution", ["Select resolution method...", "Drop Rows", "Fill with Mean", "Fill with Median", "KNN Imputer", "Iterative Imputer"], key=f"res_{idx}", label_visibility="collapsed")
+                            if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_res_{idx}", width="stretch"):
                                 if res == "Drop Rows": add_step({"action": "drop_nulls", "column": rule['col']})
+                                elif "Imputer" in res: add_step({"action": "fill_null", "column": rule['col'], "value": res.split()[0].lower()})
                                 else: add_step({"action": "fill_null", "column": rule['col'], "value": res.split()[-1].lower()})
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
                         elif rule['type'] == "Range Check":
                             res_cols = st.columns([3, 1])
-                            res = res_cols[0].selectbox("Res", ["None", "Drop Rows", "Cap at Bounds"], key=f"range_res_{idx}", label_visibility="collapsed")
-                            if res != "None" and res_cols[1].button("Apply", key=f"btn_range_res_{idx}", width="stretch"):
+                            res = res_cols[0].selectbox("Res", ["Select resolution method...", "Drop Rows", "Cap at Bounds", "Log Transform"], key=f"range_res_{idx}", label_visibility="collapsed")
+                            if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_range_res_{idx}", width="stretch"):
                                 if res == "Drop Rows": add_step({"action": "drop_violated", "rule": rule})
+                                elif res == "Log Transform": add_step({"action": "log_transform", "column": rule['col']})
                                 else: add_step({"action": "cap_range", "column": rule['col'], "min": rule['min'], "max": rule['max']})
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
@@ -338,12 +409,19 @@ with tab3:
 
 with tab4:
     st.subheader("Manual Transformations")
-    t_type = st.selectbox("Type", ["Find and Replace", "Cast Data Type", "Drop Column", "Strip Whitespace"], key="trans_type_select")
+    t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace"], key="trans_type_select")
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
         sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
+        use_regex = st.toggle("Use Regular Expressions", key="replace_use_regex")
         if st.button("Add Step", key="btn_fr"):
-            add_step({"action": "replace", "column": target, "find": sf, "replace": sr})
+            add_step({"action": "replace", "column": target, "find": sf, "replace": sr, "regex": use_regex})
+            st.rerun()
+    elif t_type == "Normalize Text":
+        c1, c2 = st.columns(2)
+        target, method = c1.selectbox("Columns", ["All"] + all_cols, key="norm_target_col"), c2.selectbox("Method", ["lowercase", "uppercase", "titlecase", "remove_punctuation", "fuzzy_dedupe"], key="norm_method_select")
+        if st.button("Add Step", key="btn_norm"):
+            add_step({"action": "normalize_text", "column": target, "value": method})
             st.rerun()
     elif t_type == "Cast Data Type":
         c1, c2 = st.columns(2)
@@ -353,6 +431,18 @@ with tab4:
             st.rerun()
     elif t_type == "Drop Column":
         target = st.selectbox("Target Column", all_cols, key="drop_target_col")
+
+        # Collision Detection
+        dependent_rules = []
+        for r in st.session_state.rules:
+            if r.get('col') == target or r.get('col_a') == target or r.get('col_b') == target:
+                dependent_rules.append(r['desc'])
+            elif r.get('type') == "Custom Expression" and target in r.get('query', ''):
+                dependent_rules.append(r['desc'])
+
+        if dependent_rules:
+            st.warning(f"⚠️ Column '{target}' is used in the following rules: {', '.join(dependent_rules)}. Dropping it may break these rules.")
+
         if st.button("Add Step", key="btn_drop"):
             add_step({"action": "drop_column", "column": target})
             st.rerun()
@@ -367,22 +457,22 @@ with tab5:
     if not st.session_state.cleaning_recipe:
         st.caption("No transformations applied yet")
     else:
-        bh = int((1 - (df_raw.isnull().sum().sum() / df_raw.size)) * 100) if df_raw.size > 0 else 0
-        st.markdown(f'<div class="recipe-step"><strong>0. Original Data</strong> | Health: {bh}% | Rows: {len(df_raw):,}</div>', unsafe_allow_html=True)
-
-        # Efficiently generate audit trail
-        # Create a copy of the raw DataFrame to apply steps iteratively for lineage visualization.
-        temp_df = df_raw.copy()
-        for i, step in enumerate(st.session_state.cleaning_recipe):
+        # Use cached intermediate states for high performance
+        for i, (desc, health, rows, _) in enumerate(st.session_state.intermediate_states):
             c1, c2 = st.columns([4, 1])
-            # Apply only the current step to the intermediate dataframe
-            # Apply each cleaning step sequentially to show intermediate states.
-            temp_df = apply_recipe(temp_df, [step])
-            th = int((1 - (temp_df.isnull().sum().sum() / temp_df.size)) * 100) if temp_df.size > 0 else 0
-            c1.markdown(f'<div class="recipe-step">{i+1}. {step["action"]} on {step.get("column", "dataset")} | Health: {th}% | Rows: {len(temp_df):,}</div>', unsafe_allow_html=True)
-            if c2.button("Remove", key=f"rm_step_{i}", width="stretch"):
-                st.session_state.cleaning_recipe.pop(i)
-                st.rerun()
+            c1.markdown(f'<div class="recipe-step"><strong>{i + 1}. {desc}</strong> | Health: {health}% | Rows: {rows:,}</div>', unsafe_allow_html=True)
+
+            # Original data cannot be removed
+            if i > 0:
+                if c2.button("Remove", key=f"rm_step_{i}", width="stretch"):
+                    st.session_state.cleaning_recipe.pop(i-1)
+                    # When a step is removed, we truncate the intermediate states and rebuild the cache
+                    remaining_recipe = st.session_state.cleaning_recipe[i-1:]
+                    st.session_state.cleaning_recipe = st.session_state.cleaning_recipe[:i-1]
+                    st.session_state.intermediate_states = st.session_state.intermediate_states[:i]
+                    for r_step in remaining_recipe:
+                        add_step(r_step)
+                    st.rerun()
 
 with tab6:
     v = st.radio("Mode", ["Raw Data (Before)", "Cleaned Data (After)", "Python Code"], horizontal=True, key="p_mode")
@@ -394,9 +484,29 @@ with tab6:
         st.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", width="stretch", key="download_pipeline_btn")
 
 st.divider()
-st.subheader("Validation Heatmap")
-# Apply custom styles to highlight cells violating active rules.
-heatmap_sdf, heatmap_messages = get_heatmap_styles(df, st.session_state.rules)
-for msg in heatmap_messages:
-    st.toast(msg)
-st.dataframe(df.style.apply(lambda _: heatmap_sdf, axis=None), width="stretch")
+st.subheader("Violation Browser")
+
+# Optimization: Instead of styling the entire dataframe (which is slow),
+# filter to only the rows that violate at least one rule.
+active_rules_for_heatmap = [r for r in st.session_state.rules if r.get('enabled', True) and r.get('type') != "Informational"]
+
+if not active_rules_for_heatmap:
+    st.info("No active rules to check for violations.")
+else:
+    # Build a combined mask for all violations
+    combined_mask = pd.Series(False, index=df.index)
+    for rule in active_rules_for_heatmap:
+        try:
+            combined_mask |= evaluate_rule(df, rule)
+        except Exception:
+            continue
+
+    violation_df = df[combined_mask]
+
+    if violation_df.empty:
+        st.success("🎉 No violations found in the current dataset!")
+    else:
+        st.warning(f"Found {len(violation_df):,} rows with violations. Showing top 100.")
+        # Apply styling only to the small subset of rows for high performance
+        heatmap_sdf, _ = get_heatmap_styles(violation_df, active_rules_for_heatmap)
+        st.dataframe(violation_df.head(100).style.apply(lambda _: heatmap_sdf.head(100), axis=None), width="stretch")
