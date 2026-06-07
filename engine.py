@@ -1,116 +1,230 @@
 import pandas as pd
 import numpy as np
+from typing import TypedDict, Optional, Any, Union, List, Tuple
 from rule_utils import evaluate_rule
 
-def apply_recipe(df: pd.DataFrame, recipe: list) -> tuple[pd.DataFrame, list[str]]:
+class RuleDef(TypedDict, total=False):
+    type: str
+    desc: str
+    enabled: bool
+    color: str
+    col: str
+    min: float
+    max: float
+    col_a: str
+    op: str
+    col_b: str
+    target_type: str
+    value: Any
+    query: str
+    resolved: bool
+
+class CleaningStep(TypedDict, total=False):
+    action: str
+    column: str
+    value: Any
+    min: float
+    max: float
+    dtype: str
+    rule: RuleDef
+    find: str
+    replace: str
+    regex: bool
+
+def _handle_drop_column(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    if col in df.columns:
+        return df.drop(columns=[col]), []
+    return df, [f"Warning: Column '{col}' not found for drop_column action."]
+
+def _handle_drop_nulls(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    if col in df.columns:
+        return df.dropna(subset=[col]), []
+    return df, [f"Warning: Column '{col}' not found for drop_nulls action."]
+
+def _handle_fill_null(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    if col not in df.columns:
+        return df, [f"Warning: Column '{col}' not found for fill_null action."]
+    
+    val = step.get('value')
+    fill_value = None
+    if val == "mean":
+        fill_value = df[col].mean()
+    elif val == "median":
+        fill_value = df[col].median()
+    elif val == "mode":
+        mode_result = df[col].mode()
+        if not mode_result.empty:
+            fill_value = mode_result[0]
+    elif val in ["knn", "iterative"]:
+        try:
+            from sklearn.experimental import enable_iterative_imputer
+            from sklearn.impute import KNNImputer, IterativeImputer
+            imputer = KNNImputer(n_neighbors=5) if val == "knn" else IterativeImputer(random_state=42)
+            # Imputers typically work on multiple columns, but here we target the single column 'col' 
+            # while providing other numeric columns as context.
+            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            if col not in numeric_cols:
+                return df, [f"Error: {val.upper()} imputation requires a numeric column. '{col}' is {df[col].dtype}."]
+            
+            df_numeric = df[numeric_cols].copy()
+            df_imputed = pd.DataFrame(imputer.fit_transform(df_numeric), columns=numeric_cols, index=df.index)
+            df[col] = df_imputed[col]
+            return df, []
+        except Exception as e:
+            return df, [f"Error applying {val.upper()} imputation on {col}: {str(e)}"]
+    else:
+        fill_value = val
+    
+    if fill_value is not None:
+        df[col] = df[col].fillna(fill_value)
+        return df, []
+    return df, [f"Warning: Could not determine fill value for column '{col}' with strategy '{val}'."]
+
+def _handle_cap_range(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    if col in df.columns:
+        df.loc[df[col] < step['min'], col] = step['min']
+        df.loc[df[col] > step['max'], col] = step['max']
+        return df, []
+    return df, [f"Warning: Column '{col}' not found for cap_range action."]
+
+def _handle_cast_type(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    if col not in df.columns:
+        return df, [f"Warning: Column '{col}' not found for cast_type action."]
+    
+    try:
+        target_dtype = step['dtype']
+        if target_dtype in ['int64', 'int32', 'int']:
+            target_dtype = "Int64"
+        
+        if step['dtype'] == "datetime64[ns]":
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+        elif target_dtype in ['string', 'object']:
+            df[col] = df[col].astype(target_dtype)
+        else:
+            numeric_series = pd.to_numeric(df[col], errors='coerce')
+            df[col] = numeric_series.astype(target_dtype)
+        return df, []
+    except Exception as e:
+        return df, [f"Error: Could not cast '{col}' to {step['dtype']}: {str(e)}"]
+
+def _handle_drop_violated(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    rule = step.get('rule')
+    if not rule or rule.get('type') == "Informational":
+        return df, []
+    try:
+        violation_mask = evaluate_rule(df, rule)
+        return df[~violation_mask], []
+    except Exception as e:
+        return df, [f"Error: Could not apply drop_violated rule ({rule.get('desc', 'N/A')}): {str(e)}"]
+
+def _handle_replace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    f, r_val = step.get('find'), step.get('replace')
+    use_regex = step.get('regex', False)
+    
+    if col == "All":
+        for c in df.select_dtypes(include=['object']).columns:
+            df[c] = df[c].replace(f, r_val, regex=use_regex)
+        return df, []
+    elif col in df.columns:
+        df[col] = df[col].replace(f, r_val, regex=use_regex)
+        return df, []
+    return df, [f"Warning: Column '{col}' not found for replace action."]
+
+def _handle_strip_whitespace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    if col == "All":
+        for c in df.select_dtypes(include=['object']).columns:
+            mask = df[c].notnull()
+            df.loc[mask, c] = df.loc[mask, c].astype(str).str.strip()
+        return df, []
+    elif col in df.columns:
+        mask = df[col].notnull()
+        df.loc[mask, col] = df.loc[mask, col].astype(str).str.strip()
+        return df, []
+    return df, [f"Warning: Column '{col}' not found for strip_whitespace action."]
+
+def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    method = step.get('value', 'lowercase')
+    
+    def normalize_series(s):
+        if method == "lowercase": return s.astype(str).str.lower()
+        if method == "uppercase": return s.astype(str).str.upper()
+        if method == "titlecase": return s.astype(str).str.title()
+        if method == "remove_punctuation": 
+            import string
+            return s.astype(str).str.replace(f'[{string.punctuation}]', '', regex=True)
+        if method == "fuzzy_dedupe":
+            from thefuzz import process
+            unique_vals = s.dropna().unique()
+            mapping = {}
+            handled = set()
+            for v in unique_vals:
+                if v in handled: continue
+                # Find similar values
+                matches = process.extract(v, unique_vals, limit=10)
+                for match, score in matches:
+                    if score > 85: # Threshold for fuzzy matching
+                        mapping[match] = v
+                        handled.add(match)
+            return s.replace(mapping)
+        return s
+
+    if col == "All":
+        for c in df.select_dtypes(include=['object']).columns:
+            df[c] = normalize_series(df[c])
+        return df, []
+    elif col in df.columns:
+        df[col] = normalize_series(df[col])
+        return df, []
+    return df, [f"Warning: Column '{col}' not found for normalize_text action."]
+
+def _handle_log_transform(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    if col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            # Use log1p (log(1+x)) to handle zeros and avoid -inf
+            df[col] = np.log1p(df[col].clip(lower=0))
+            return df, []
+        return df, [f"Error: Log transformation requires a numeric column. '{col}' is {df[col].dtype}."]
+    return df, [f"Warning: Column '{col}' not found for log_transform action."]
+
+TRANSFORM_REGISTRY = {
+    "drop_column": _handle_drop_column,
+    "drop_nulls": _handle_drop_nulls,
+    "fill_null": _handle_fill_null,
+    "cap_range": _handle_cap_range,
+    "cast_type": _handle_cast_type,
+    "drop_violated": _handle_drop_violated,
+    "replace": _handle_replace,
+    "strip_whitespace": _handle_strip_whitespace,
+    "normalize_text": _handle_normalize_text,
+    "log_transform": _handle_log_transform,
+}
+
+def apply_recipe(df: pd.DataFrame, recipe: List[CleaningStep]) -> Tuple[pd.DataFrame, List[str]]:
     """
-    Applies a sequence of cleaning steps to a DataFrame.
-
-    Args:
-        df (pd.DataFrame): The input DataFrame to which cleaning steps will be applied.
-        recipe (list): A list of dictionaries, where each dictionary represents a cleaning step
-                       with 'action' and other relevant parameters (e.g., 'column', 'value').
-
-    Returns:
-        tuple[pd.DataFrame, list[str]]: A tuple containing:
-            - df_clean (pd.DataFrame): The DataFrame after applying all cleaning steps.
-            - messages (list[str]): A list of messages (warnings or errors) encountered during the application of steps.
+    Applies a sequence of cleaning steps to a DataFrame using a dispatcher pattern.
     """
     df_clean = df.copy()
     messages = []
     for step in recipe:
-        try:
-            action, col = step['action'], step.get('column')
-            if action == "drop_column":
-                # Remove the specified column from the DataFrame.
-                if col in df_clean.columns:
-                    df_clean = df_clean.drop(columns=[col])
-                else:
-                    messages.append(f"Warning: Column '{col}' not found for drop_column action.")
-            elif action == "drop_nulls":
-                # Remove rows where the specified column has null values.
-                if col in df_clean.columns:
-                    df_clean = df_clean.dropna(subset=[col])
-                else:
-                    messages.append(f"Warning: Column '{col}' not found for drop_nulls action.")
-            elif action == "fill_null":
-                # Fill null values in the specified column with a given value (mean, median, mode, or custom).
-                if col in df_clean.columns:
-                    val = step['value']
-                    fill_value = None
-                    if val == "mean":
-                        fill_value = df_clean[col].mean()
-                    elif val == "median":
-                        fill_value = df_clean[col].median()
-                    elif val == "mode":
-                        # Mode can return multiple values, take the first
-                        mode_result = df_clean[col].mode()
-                        if not mode_result.empty:
-                            fill_value = mode_result[0]
-                    else:
-                        fill_value = val
-                    
-                    if fill_value is not None:
-                        df_clean[col] = df_clean[col].fillna(fill_value)
-                    else:
-                        messages.append(f"Warning: Could not determine fill value for column '{col}' with strategy '{val}'.")
-                else:
-                    messages.append(f"Warning: Column '{col}' not found for fill_null action.")
-            elif action == "cap_range":
-                # Cap values in the specified column to be within the defined min and max bounds.
-                if col in df_clean.columns:
-                    df_clean.loc[df_clean[col] < step['min'], col] = step['min']
-                    df_clean.loc[df_clean[col] > step['max'], col] = step['max']
-                else:
-                    messages.append(f"Warning: Column '{col}' not found for cap_range action.")
-            elif action == "cast_type":
-                # Convert the specified column to a target data type, coercing errors to NaN.
-                if col in df_clean.columns:
-                    try:
-                        target_dtype = step['dtype']
-                        # Handle nullable integers (e.g., 'Int64') to preserve NaNs where appropriate,
-                        # otherwise default to standard int types.
-                        if target_dtype in ['int64', 'int32', 'int']:
-                            target_dtype = "Int64" # Use nullable integer type
-                        
-                        if step['dtype'] == "datetime64[ns]":
-                            df_clean[col] = pd.to_datetime(df_clean[col], errors='coerce')
-                        else:
-                            numeric_series = pd.to_numeric(df_clean[col], errors='coerce')
-                            df_clean[col] = numeric_series.astype(target_dtype)
-                    except Exception as e:
-                        messages.append(f"Error: Could not cast '{col}' to {step['dtype']}: {str(e)}")
-                        # Keep the coerced numeric series if an error occurs during final astype
-                        if 'numeric_series' in locals():
-                            df_clean[col] = numeric_series
-                else:
-                    messages.append(f"Warning: Column '{col}' not found for cast_type action.")
-            elif action == "drop_violated":
-                # Remove rows from the DataFrame that violate a specific rule.
-                rule = step['rule']
-                if rule.get('type') == "Informational":
-                    continue
-                try:
-                    violation_mask = evaluate_rule(df_clean, rule)
-                    df_clean = df_clean[~violation_mask]
-                except Exception as e:
-                    messages.append(f"Error: Could not apply drop_violated rule ({rule.get('desc', 'N/A')}): {str(e)}")
-            elif action == "replace":
-                # Replace occurrences of a find string with a replace string in a column, or all object columns.
-                f, r_val = step['find'], step['replace']
-                if col == "All":
-                    for c in df_clean.select_dtypes(include=['object']).columns:
-                        df_clean[c] = df_clean[c].replace(f, r_val)
-                elif col in df_clean.columns:
-                    df_clean[col] = df_clean[col].replace(f, r_val)
-                else:
-                    messages.append(f"Warning: Column '{col}' not found for replace action.")
-        except (KeyError, ValueError, TypeError) as e:
-            messages.append(f"Error applying {action} on {col}: {type(e).__name__} - {str(e)}")
-            continue
-        except Exception as e:
-            messages.append(f"An unexpected error occurred applying {action} on {col}: {type(e).__name__} - {str(e)}")
-            continue
+        action = step.get('action')
+        handler = TRANSFORM_REGISTRY.get(action)
+        if handler:
+            try:
+                df_clean, step_messages = handler(df_clean, step)
+                messages.extend(step_messages)
+            except Exception as e:
+                messages.append(f"An unexpected error occurred applying {action}: {type(e).__name__} - {str(e)}")
+        else:
+            messages.append(f"Warning: Unknown action '{action}' encountered in recipe.")
     return df_clean, messages
 
 def generate_pipeline_code(recipe: list) -> str:
@@ -144,7 +258,25 @@ def generate_pipeline_code(recipe: list) -> str:
                 v = step['value']
                 if v in ["mean", "median", "mode"]:
                     code.append(f"    # Fill null values with mean, median, or mode.")
-                    code.append(f"    df['{col}'] = df['{col}'].fillna(df['{col}'].{v + ('()[0]' if v=='mode' else '()')})")
+                    if v == "mode":
+                        # Safely handle empty modes in generated code to avoid IndexError
+                        code.append(f"    mode_val = df['{col}'].mode()")
+                        code.append(f"    df['{col}'] = df['{col}'].fillna(mode_val[0] if not mode_val.empty else np.nan)")
+                    else:
+                        code.append(f"    df['{col}'] = df['{col}'].fillna(df['{col}'].{v}())")
+                elif v in ["knn", "iterative"]:
+                    code.append(f"    # Advanced Imputation using scikit-learn.")
+                    if v == "knn":
+                        code.append(f"    from sklearn.impute import KNNImputer")
+                        code.append(f"    imputer = KNNImputer(n_neighbors=5)")
+                    else:
+                        code.append(f"    from sklearn.experimental import enable_iterative_imputer")
+                        code.append(f"    from sklearn.impute import IterativeImputer")
+                        code.append(f"    imputer = IterativeImputer(random_state=42)")
+                    
+                    code.append(f"    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()")
+                    code.append(f"    df_imputed = pd.DataFrame(imputer.fit_transform(df[numeric_cols]), columns=numeric_cols, index=df.index)")
+                    code.append(f"    df['{col}'] = df_imputed['{col}']")
                 else:
                     code.append(f"    # Fill null values with a custom constant.")
                     code.append(f"    df['{col}'] = df['{col}'].fillna({repr(v)})")
@@ -160,8 +292,13 @@ def generate_pipeline_code(recipe: list) -> str:
                     target_dtype = step['dtype']
                     if target_dtype in ['int64', 'int32', 'int']:
                         target_dtype = "Int64"
-                    code.append(f"    # Convert column to target numeric type, coercing errors to NaN.")
-                    code.append(f"    df['{col}'] = pd.to_numeric(df['{col}'], errors='coerce').astype('{target_dtype}')")
+                    
+                    if target_dtype in ['string', 'object']:
+                        code.append(f"    # Convert column to target string/object type.")
+                        code.append(f"    df['{col}'] = df['{col}'].astype('{target_dtype}')")
+                    else:
+                        code.append(f"    # Convert column to target numeric type, coercing errors to NaN.")
+                        code.append(f"    df['{col}'] = pd.to_numeric(df['{col}'], errors='coerce').astype('{target_dtype}')")
             elif action == "drop_violated":
                 r = step['rule']
                 if r.get('type') == "Informational":
@@ -179,12 +316,52 @@ def generate_pipeline_code(recipe: list) -> str:
                     code.append(f"    df = df.query({repr(r['query'])})")
             elif action == "replace":
                 f_repr, r_repr = repr(step['find']), repr(step['replace'])
+                regex_param = f", regex={step.get('regex', False)}"
                 if col == "All":
                     code.append(f"    # Replace in all object columns if 'All' is specified.")
                     code.append(f"    for c in df.select_dtypes(include=['object']).columns:")
-                    code.append(f"        df[c] = df[c].replace({f_repr}, {r_repr})")
+                    code.append(f"        df[c] = df[c].replace({f_repr}, {r_repr}{regex_param})")
                 else:
                     code.append(f"    # Replace in the specified column.")
-                    code.append(f"    df['{col}'] = df['{col}'].replace({f_repr}, {r_repr})")
+                    code.append(f"    df['{col}'] = df['{col}'].replace({f_repr}, {r_repr}{regex_param})")
+            elif action == "strip_whitespace":
+                if col == "All":
+                    code.append(f"    # Strip whitespace from all object columns, preserving NaNs.")
+                    code.append(f"    for c in df.select_dtypes(include=['object']).columns:")
+                    code.append(f"        mask = df[c].notnull()")
+                    code.append(f"        df.loc[mask, c] = df.loc[mask, c].astype(str).str.strip()")
+                else:
+                    code.append(f"    # Strip whitespace from the specified column, preserving NaNs.")
+                    code.append(f"    mask = df['{col}'].notnull()")
+                    code.append(f"    df.loc[mask, '{col}'] = df.loc[mask, '{col}'].astype(str).str.strip()")
+            elif action == "normalize_text":
+                method = step.get('value', 'lowercase')
+                code.append(f"    # Normalize text using {method} method.")
+                target = f"df['{col}']" if col != "All" else "df[c]"
+                loop_start = [f"    for c in df.select_dtypes(include=['object']).columns:"] if col == "All" else []
+                indent = "        " if col == "All" else "    "
+                
+                if method == "remove_punctuation":
+                    code.extend(loop_start)
+                    code.append(f"{indent}import string")
+                    code.append(f"{indent}{target} = {target}.astype(str).str.replace(f'[{{string.punctuation}}]', '', regex=True)")
+                elif method == "fuzzy_dedupe":
+                    code.append(f"    from thefuzz import process")
+                    code.extend(loop_start)
+                    code.append(f"{indent}unique_vals = {target}.dropna().unique()")
+                    code.append(f"{indent}mapping = {{}}")
+                    code.append(f"{indent}handled = set()")
+                    code.append(f"{indent}for v in unique_vals:")
+                    code.append(f"{indent}    if v in handled: continue")
+                    code.append(f"{indent}    matches = process.extract(v, unique_vals, limit=10)")
+                    code.append(f"{indent}    for match, score in matches:")
+                    code.append(f"{indent}        if score > 85: mapping[match] = v; handled.add(match)")
+                    code.append(f"{indent}{target} = {target}.replace(mapping)")
+                else:
+                    code.extend(loop_start)
+                    code.append(f"{indent}{target} = {target}.astype(str).str.{method}()")
+            elif action == "log_transform":
+                code.append(f"    # Apply log(1+x) transformation to handle outliers.")
+                code.append(f"    df['{col}'] = np.log1p(df['{col}'].clip(lower=0))")
     code.append("    return df")
     return "\n".join(code)

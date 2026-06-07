@@ -1,5 +1,7 @@
-notes.md
 mock_data/
 __pycache__/
 .DS_Store
 *.pyc
+*.md
+!README.md
+test*

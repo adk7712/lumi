@@ -30,13 +30,18 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
             op = rule['op']
             
             # The rule describes the valid state (e.g., "Age > 18").
-            # The mask should identify violations (e.g., "Age <= 18").
-            if op == ">": mask = (a <= b)
-            elif op == "<": mask = (a >= b)
-            elif op == "==": mask = (a != b)
-            elif op == "!=": mask = (a == b)
-            elif op == ">=": mask = (a < b)
-            elif op == "<=": mask = (a > b)
+            # To correctly handle NaNs as violations, we first evaluate the valid condition
+            # and then invert the result. Comparisons with NaN always return False.
+            # Thus, ~False will correctly flag NaNs as True (violations).
+            if op == ">": valid = (a > b)
+            elif op == "<": valid = (a < b)
+            elif op == "==": valid = (a == b)
+            elif op == "!=": valid = (a != b)
+            elif op == ">=": valid = (a >= b)
+            elif op == "<=": valid = (a <= b)
+            else: valid = pd.Series(False, index=df.index)
+            
+            mask = ~valid
         elif rule_type == "Custom Expression":
             # df.query() returns rows that satisfy the condition (non-violators).
             # We need to find the violators.
