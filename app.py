@@ -246,6 +246,40 @@ with tab2:
                     fig.update_layout(xaxis_title=None, yaxis_title=None)
                     st.plotly_chart(fig, width="stretch", theme="streamlit")
 
+                    # Detailed Collapsible Statistics (keeps heights equal between numeric/categorical)
+                    with st.expander("Detailed Statistics", expanded=False):
+                        if pd.api.types.is_numeric_dtype(df[col_name]):
+                            desc = df[col_name].describe()
+                            def fmt(val):
+                                return f"{val:.2f}" if pd.notnull(val) else "N/A"
+                            st.markdown(f"""
+                            <div style="font-size: 0.72rem; line-height: 1.4; opacity: 0.85; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                                <div><strong>Min:</strong> {fmt(desc.get('min'))}</div>
+                                <div><strong>Q1 (25%):</strong> {fmt(desc.get('25%'))}</div>
+                                <div><strong>Median (50%):</strong> {fmt(desc.get('50%'))}</div>
+                                <div><strong>Q3 (75%):</strong> {fmt(desc.get('75%'))}</div>
+                                <div><strong>Max:</strong> {fmt(desc.get('max'))}</div>
+                                <div><strong>Mean:</strong> {fmt(desc.get('mean'))}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            desc = df[col_name].describe()
+                            freq_val = desc.get('freq')
+                            freq_pct = (freq_val / len(df)) * 100 if pd.notnull(freq_val) and len(df) > 0 else 0.0
+                            null_count = df[col_name].isnull().sum()
+                            null_pct = (null_count / len(df)) * 100 if len(df) > 0 else 0.0
+                            top_val = desc.get('top', 'N/A')
+                            
+                            st.markdown(f"""
+                            <div style="font-size: 0.72rem; line-height: 1.4; opacity: 0.85; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+                                <div style="grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Most Common:</strong> {str(top_val)[:25]}</div>
+                                <div><strong>Frequency:</strong> {freq_val if pd.notnull(freq_val) else 'N/A'}</div>
+                                <div><strong>Freq %:</strong> {freq_pct:.1f}%</div>
+                                <div><strong>Null Count:</strong> {null_count}</div>
+                                <div><strong>Null %:</strong> {null_pct:.1f}%</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
 with tab3:
     if st.session_state.proposals:
         with st.expander(f"Recommended Rules ({len(st.session_state.proposals)})", expanded=False):
