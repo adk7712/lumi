@@ -156,10 +156,7 @@ with h_col3: # Column for reset button
 st.divider()
 
 # --- DATA PROCESSING ---
-df_raw = st.session_state.raw_data
-df, apply_messages = apply_recipe(df_raw, st.session_state.cleaning_recipe)
-for msg in apply_messages:
-    st.toast(msg)
+df = st.session_state.intermediate_states[-1][3]
 all_cols = df.columns.tolist()
 
 # --- TABS ---
@@ -212,8 +209,7 @@ with tab1:
         st.caption("Not enough numeric columns for correlation matrix.")
 
 with tab2:
-    st.multiselect("Analyze Columns", all_cols, key="active_features")
-    selected_features = st.session_state.active_features
+    selected_features = st.multiselect("Analyze Columns", all_cols, key="active_features")
 
     if not selected_features:
         st.info("Select one or more columns above to begin analysis")
@@ -231,11 +227,20 @@ with tab2:
                     # Differentiate plotting and metric display based on data type for relevant insights.
                     if pd.api.types.is_numeric_dtype(df[col_name]):
                         render_diagnostic_metric(s4, "Skew", f"{df[col_name].skew():.2f}")
-                        fig = px.box(df, y=col_name, height=220)
+                        fig = px.box(df, x=col_name, height=220)
+                        fig.update_traces(name=col_name)
                     else:
                         top_val = df[col_name].mode()[0] if not df[col_name].mode().empty else "N/A"
                         render_diagnostic_metric(s4, "Top", str(top_val)[:10])
-                        fig = px.bar(x=df[col_name].value_counts().head(5).index, y=df[col_name].value_counts().head(5).values, height=220)
+                        counts = df[col_name].value_counts()
+                        num_uniques = len(counts)
+                        if num_uniques <= 10:
+                            chart_data = counts
+                        else:
+                            top_n = counts.head(9)
+                            other_sum = counts.iloc[9:].sum()
+                            chart_data = pd.concat([top_n, pd.Series({"Other": other_sum})])
+                        fig = px.bar(x=chart_data.index, y=chart_data.values, height=220)
 
                     # Cleanup chart aesthetics by removing redundant axis labels
                     fig.update_layout(xaxis_title=None, yaxis_title=None)
@@ -363,7 +368,6 @@ with tab3:
                             rule.pop('error', None)
                         except (ValueError, KeyError, TypeError) as e:
                             rule['error'] = str(e)
-                            st.toast(f"Rulebook Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}", icon="🚨")
 
                     status_color, resolved = (rule['color'] if rule['enabled'] else "rgba(100,100,100,0.2)"), rule.get('resolved', False)
                     desc_style = "text-decoration: line-through; opacity: 0.5;" if not rule['enabled'] else ""
@@ -475,7 +479,7 @@ with tab5:
 
 with tab6:
     v = st.radio("Mode", ["Raw Data (Before)", "Cleaned Data (After)", "Python Code"], horizontal=True, key="p_mode")
-    if v == "Raw Data (Before)": st.dataframe(df_raw, width="stretch")
+    if v == "Raw Data (Before)": st.dataframe(st.session_state.raw_data, width="stretch")
     elif v == "Cleaned Data (After)": st.dataframe(df, width="stretch")
     else:
         code_output = generate_pipeline_code(st.session_state.cleaning_recipe)
