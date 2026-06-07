@@ -228,7 +228,6 @@ with tab2:
                     if pd.api.types.is_numeric_dtype(df[col_name]):
                         render_diagnostic_metric(s4, "Skew", f"{df[col_name].skew():.2f}")
                         fig = px.box(df, x=col_name, height=220)
-                        fig.update_traces(name=col_name)
                     else:
                         top_val = df[col_name].mode()[0] if not df[col_name].mode().empty else "N/A"
                         render_diagnostic_metric(s4, "Top", str(top_val)[:10])
@@ -241,9 +240,9 @@ with tab2:
                             other_sum = counts.iloc[9:].sum()
                             chart_data = pd.concat([top_n, pd.Series({"Other": other_sum})])
                         fig = px.bar(x=chart_data.index, y=chart_data.values, height=220)
-
-                    # Cleanup chart aesthetics by removing redundant axis labels
-                    fig.update_layout(xaxis_title=None, yaxis_title=None)
+ 
+                    # Cleanup chart aesthetics by removing redundant axis labels and disabling hover
+                    fig.update_layout(xaxis_title=None, yaxis_title=None, hovermode=False)
                     st.plotly_chart(fig, width="stretch", theme="streamlit")
 
                     # Detailed Collapsible Statistics (keeps heights equal between numeric/categorical)
@@ -269,7 +268,7 @@ with tab2:
                             null_count = df[col_name].isnull().sum()
                             null_pct = (null_count / len(df)) * 100 if len(df) > 0 else 0.0
                             top_val = desc.get('top', 'N/A')
-                            
+
                             st.markdown(f"""
                             <div style="font-size: 0.72rem; line-height: 1.4; opacity: 0.85; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
                                 <div style="grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Most Common:</strong> {str(top_val)[:25]}</div>
@@ -330,11 +329,11 @@ with tab3:
             with st.form(key="custom_expr_form", clear_on_submit=True):
                 q_str = st.text_input("Pandas Query String", placeholder="Age > 30 & Sex == 'male'", key="custom_query_input")
                 submit_btn = st.form_submit_button("Add Rule")
-                
+
             if submit_btn and q_str:
                 try:
                     test_result = df.query(q_str)
-                    
+
                     if len(df) > 0 and len(test_result) == 0:
                         st.error("⚠️ This query returned no matches on the dataset. Please check for typos or type mismatches (e.g., comparing a number to a string). Rule not added.")
                     else:
