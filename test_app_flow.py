@@ -151,36 +151,9 @@ def test_rename_and_reorder_ui():
     first_col = at.session_state.temp_col_order[0]
     second_col = at.session_state.temp_col_order[1]
     
-    # Click right arrow on the first column to swap first two columns
-    right_btn = at.button(key=f"right_{first_col}_0")
-    assert right_btn is not None
-    right_btn.click().run()
-    
-    # Verify swapped in temp state
-    assert at.session_state.temp_col_order[0] == second_col
-    assert at.session_state.temp_col_order[1] == first_col
-    
-    # Swap back using left arrow on second column (which is now at index 1)
-    left_btn = at.button(key=f"left_{first_col}_1")
-    assert left_btn is not None
-    left_btn.click().run()
-    assert at.session_state.temp_col_order[0] == first_col
-    assert at.session_state.temp_col_order[1] == second_col
-    
-    # Test click-to-swap mechanism
-    # Click first column to select
-    btn_sel = at.button(key=f"col_card_{first_col}_0")
-    assert btn_sel is not None
-    btn_sel.click().run()
-    assert at.session_state.reorder_selected_col == first_col
-    
-    # Click second column to swap
-    btn_swap = at.button(key=f"col_card_{second_col}_1")
-    assert btn_swap is not None
-    btn_swap.click().run()
-    
-    # Verify selection reset and items swapped
-    assert at.session_state.reorder_selected_col is None
+    # Simulate drag-and-drop order swap in session state
+    at.session_state.temp_col_order[0], at.session_state.temp_col_order[1] = second_col, first_col
+    at.run()
     
     # Verify swapped in temp state
     assert at.session_state.temp_col_order[0] == second_col

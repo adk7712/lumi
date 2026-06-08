@@ -5,3 +5,4 @@ openpyxl
 scikit-learn
 thefuzz
 python-Levenshtein
+streamlit-sortables
