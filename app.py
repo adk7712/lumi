@@ -106,6 +106,7 @@ def initialize_state(from_reset=False):
         'rel_target_type_radio': "Another Feature",
         'rel_val_input': "",
         'info_note_input': "",
+        'reorder_viewport_start': 1,
     }
 
     # Force reset or initialize for the first time
@@ -634,21 +635,89 @@ with tab4:
     elif t_type == "Reorder Columns":
         if 'temp_col_order' not in st.session_state or set(st.session_state.temp_col_order) != set(all_cols):
             st.session_state.temp_col_order = list(all_cols)
-        st.markdown("Arrange columns using the arrows:")
+        if 'reorder_selected_col' not in st.session_state:
+            st.session_state.reorder_selected_col = None
+            
         temp_cols = st.session_state.temp_col_order
         n_cols = len(temp_cols)
-        with st.container(height=350, border=True):
-            for i, col_name in enumerate(temp_cols):
-                c1, c2, c3 = st.columns([8, 1, 1])
-                c1.markdown(f"**{i+1}.** `{col_name}`")
-                if c2.button("▲", key=f"up_{col_name}_{i}", disabled=(i == 0)):
-                    temp_cols[i], temp_cols[i-1] = temp_cols[i-1], temp_cols[i]
-                    st.session_state.temp_col_order = temp_cols
-                    st.rerun()
-                if c3.button("▼", key=f"down_{col_name}_{i}", disabled=(i == n_cols - 1)):
-                    temp_cols[i], temp_cols[i+1] = temp_cols[i+1], temp_cols[i]
-                    st.session_state.temp_col_order = temp_cols
-                    st.rerun()
+        selected_col = st.session_state.reorder_selected_col
+        
+        st.markdown("### Reorder Columns")
+        
+        # Click-to-swap guide message
+        if selected_col:
+            st.info(f"👉 **Selected `{selected_col}`**. Slide the viewport or click another column name below to swap their positions, or click `{selected_col}` again to deselect.")
+        else:
+            st.info("💡 **Click-to-Swap:** Click any column name below to select it, then navigate and click another column to instantly swap them. Or use the `◀` and `▶` buttons to shift by 1.")
+            
+        # 1. Viewport Slider Configuration
+        viewport_size = 5
+        max_start = max(1, n_cols - viewport_size + 1)
+        
+        # Guard key in session state
+        if 'reorder_viewport_start' not in st.session_state:
+            st.session_state.reorder_viewport_start = 1
+        st.session_state.reorder_viewport_start = min(st.session_state.reorder_viewport_start, max_start)
+        
+        start_idx = st.slider(
+            f"Columns Viewport (Showing {viewport_size} of {n_cols} columns)",
+            1, max_start,
+            key="reorder_viewport_start"
+        ) - 1
+        
+        end_idx = min(start_idx + viewport_size, n_cols)
+        visible_cols = temp_cols[start_idx:end_idx]
+        
+        # 2. Render horizontal viewport cards inside the targeted container wrapper
+        with st.container(key="reorder_container"):
+            cols_ui = st.columns(len(visible_cols))
+            for v_i, col_name in enumerate(visible_cols):
+                i = start_idx + v_i
+                
+                with cols_ui[v_i]:
+                    is_sel = (col_name == selected_col)
+                    if is_sel:
+                        st.markdown("<div style='text-align: center; font-size: 0.8rem; font-weight: bold; color: #4f8bf9;'>Selected</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<div style='text-align: center; font-size: 0.8rem; opacity: 0.7;'>Column {i+1}</div>", unsafe_allow_html=True)
+                        
+                    # Main card button: Select or Swap
+                    btn_type = "primary" if is_sel else "secondary"
+                    if st.button(col_name, key=f"col_card_{col_name}_{i}", type=btn_type, use_container_width=True):
+                        if selected_col is None:
+                            st.session_state.reorder_selected_col = col_name
+                            st.rerun()
+                        elif selected_col == col_name:
+                            st.session_state.reorder_selected_col = None
+                            st.rerun()
+                        else:
+                            # Swap
+                            idx_a = temp_cols.index(selected_col)
+                            idx_b = temp_cols.index(col_name)
+                            temp_cols[idx_a], temp_cols[idx_b] = temp_cols[idx_b], temp_cols[idx_a]
+                            st.session_state.temp_col_order = temp_cols
+                            st.session_state.reorder_selected_col = None
+                            st.rerun()
+                            
+                    # Fine-adjustment neighbor shifts
+                    sub_c1, sub_c2 = st.columns(2)
+                    with sub_c1:
+                        if st.button("◀", key=f"left_{col_name}_{i}", disabled=(i == 0), use_container_width=True):
+                            temp_cols[i], temp_cols[i-1] = temp_cols[i-1], temp_cols[i]
+                            st.session_state.temp_col_order = temp_cols
+                            # Auto-adjust viewport if shifting left past visible boundary
+                            if i == start_idx and start_idx > 0:
+                                st.session_state.reorder_viewport_start = max(1, st.session_state.reorder_viewport_start - 1)
+                            st.rerun()
+                    with sub_c2:
+                        if st.button("▶", key=f"right_{col_name}_{i}", disabled=(i == n_cols - 1), use_container_width=True):
+                            temp_cols[i], temp_cols[i+1] = temp_cols[i+1], temp_cols[i]
+                            st.session_state.temp_col_order = temp_cols
+                            # Auto-adjust viewport if shifting right past visible boundary
+                            if i == end_idx - 1 and end_idx < n_cols:
+                                st.session_state.reorder_viewport_start = min(max_start, st.session_state.reorder_viewport_start + 1)
+                            st.rerun()
+                            
         st.divider()
         if st.button("Apply Column Order", key="btn_apply_reorder", type="primary"):
             add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
