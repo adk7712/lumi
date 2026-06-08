@@ -358,8 +358,12 @@ def generate_pipeline_code(recipe: list) -> str:
                     code.append(f"{indent}        if score > 85: mapping[match] = v; handled.add(match)")
                     code.append(f"{indent}{target} = {target}.replace(mapping)")
                 else:
+                    pandas_method = method
+                    if method == "lowercase": pandas_method = "lower"
+                    elif method == "uppercase": pandas_method = "upper"
+                    elif method == "titlecase": pandas_method = "title"
                     code.extend(loop_start)
-                    code.append(f"{indent}{target} = {target}.astype(str).str.{method}()")
+                    code.append(f"{indent}{target} = {target}.astype(str).str.{pandas_method}()")
             elif action == "log_transform":
                 code.append(f"    # Apply log(1+x) transformation to handle outliers.")
                 code.append(f"    df['{col}'] = np.log1p(df['{col}'].clip(lower=0))")
