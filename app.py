@@ -111,7 +111,7 @@ def add_step(step):
     st.toast(f"Step Added: {step['action']}")
 
 # --- HEADER ---
-h_col1, h_col2, h_col3 = st.columns([8, 1.5, 1], vertical_alignment="bottom")
+h_col1, h_col2, h_col3 = st.columns([6, 2, 2], vertical_alignment="bottom")
 with h_col1: # Main column for title
     st.subheader("LUMI")
 with h_col2: # Column for file uploader
