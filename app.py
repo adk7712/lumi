@@ -53,43 +53,65 @@ def load_data(file_path_or_buffer):
 # --- STATE INITIALIZATION ---
 def initialize_state(from_reset=False):
     """Initializes all required session state variables."""
-    # Streamlit's session state is crucial for maintaining application state across user interactions.
-    # Define default values for the session state
-    defaults = {
-        'active_features': [],
-        'rules': [],
-        'cleaning_recipe': [],
-        'intermediate_states': [], # List of (step_name, health_pct, row_count, dataframe_reference)
-        'proposals': [],
-        'scanned_columns': set(),
-        'last_file_hash': None,
-        'raw_data': None,
-        'original_full_data': None,
-    }
-
-    # Force reset or initialize for the first time
-    # Persist state across reruns, or reset if 'from_reset' is True or key is new.
-    for key, value in defaults.items():
-        if from_reset or key not in st.session_state:
-            st.session_state[key] = value
-
-    # Load initial data if it's not already loaded
-    if st.session_state.raw_data is None or from_reset:
+    # 1. Load initial data first to get the columns list for default dropdown selections
+    if 'raw_data' not in st.session_state or from_reset:
         raw_df = load_data("mock_data/train.csv")
         st.session_state.original_full_data = raw_df
-        # Sample large datasets for interactive use to improve performance.
-        # A fixed random_state ensures reproducibility of the sample.
         if len(raw_df) > MAX_SAMPLE_ROWS:
             st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
         else:
             st.session_state.raw_data = raw_df
-
-        # Initialize intermediate states with original data
+            
         base_df = st.session_state.raw_data
         bh = int((1 - (base_df.isnull().sum().sum() / base_df.size)) * 100) if base_df.size > 0 else 0
         st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
+        st.session_state.proposals = generate_proposals(st.session_state.raw_data, set())
+        st.session_state.scanned_columns = set()
+        
+    df = st.session_state.raw_data
+    all_cols = df.columns.tolist()
+    first_col = all_cols[0] if all_cols else ""
 
-        st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+    # 2. Define default values for the session state
+    defaults = {
+        'active_features': [],
+        'rules': [],
+        'cleaning_recipe': [],
+        'intermediate_states': st.session_state.intermediate_states,
+        'proposals': st.session_state.proposals,
+        'scanned_columns': st.session_state.scanned_columns,
+        'last_file_hash': None,
+        'raw_data': st.session_state.raw_data,
+        'original_full_data': st.session_state.original_full_data,
+        
+        # Transient UI Widget state initializers (prevents AppTest KeyErrors)
+        'find_input': "",
+        'replace_input': "",
+        'replace_target_col': "All",
+        'replace_use_regex': False,
+        'rename_new_name_input': "",
+        'rename_target_col': first_col,
+        'norm_target_col': "All",
+        'norm_method_select': "lowercase",
+        'cast_target_col': first_col,
+        'cast_dtype_select': "string",
+        'drop_target_col': first_col,
+        'strip_target_col': "All",
+        'rule_target_col': first_col,
+        'rule_type_select': "Null Check",
+        'trans_type_select': "Find and Replace",
+        'rel_feature_a': first_col,
+        'rel_feature_b': first_col,
+        'rel_op': ">",
+        'rel_target_type_radio': "Another Feature",
+        'rel_val_input': "",
+        'info_note_input': "",
+    }
+
+    # Force reset or initialize for the first time
+    for key, value in defaults.items():
+        if from_reset or key not in st.session_state:
+            st.session_state[key] = value
 
 initialize_state()
 
@@ -199,7 +221,6 @@ with tab1:
     with o_col2:
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
-    st.divider()
 
 with tab2:
     selected_features = st.multiselect("Analyze Columns", all_cols, key="active_features")
