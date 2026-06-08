@@ -212,6 +212,19 @@ svg, svg * {
     background-color: rgba(79, 139, 249, 0.05);
 }
 
+/* Custom Primary Button (Brand Blue instead of Red) */
+.stButton > button[data-testid="stBaseButton-primary"] {
+    background-color: #4F8BF9 !important;
+    color: white !important;
+    border-color: #4F8BF9 !important;
+}
+
+.stButton > button[data-testid="stBaseButton-primary"]:hover {
+    background-color: #357ae8 !important;
+    color: white !important;
+    border-color: #357ae8 !important;
+}
+
 /* ============================================================
    CRITICAL: DIAGNOSTICS TAB ONLY - SMALL METRIC LABELS
    This uses CSS adjacent sibling + structural selectors to
@@ -288,26 +301,4 @@ svg, svg * {
 [data-testid="stVerticalBlockBorderWrapper"]:hover {
     background-color: rgba(255, 255, 255, 0.05) !important;
     border-color: rgba(79, 139, 249, 0.4) !important;
-}
-
-/* --- Paginated Column Reordering UI --- */
-.st-key-reorder_container div[data-testid="column"] {
-    background-color: rgba(128, 128, 128, 0.05) !important;
-    border: 1px solid rgba(128, 128, 128, 0.1) !important;
-    border-radius: 8px !important;
-    padding: 12px !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
-    transition: all 0.2s ease !important;
-}
-
-.st-key-reorder_container div[data-testid="column"]:hover {
-    background-color: rgba(128, 128, 128, 0.08) !important;
-    border-color: rgba(128, 128, 128, 0.2) !important;
-}
-
-/* Glowing blue border highlight for the selected card inside the reorder container */
-.st-key-reorder_container div[data-testid="column"]:has(button[data-testid="stBaseButton-primary"]) {
-    border-color: rgba(79, 139, 249, 0.6) !important;
-    box-shadow: 0 0 10px rgba(79, 139, 249, 0.2) !important;
-    background-color: rgba(79, 139, 249, 0.04) !important;
 }
