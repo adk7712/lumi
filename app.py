@@ -160,7 +160,7 @@ df = st.session_state.intermediate_states[-1][3]
 all_cols = df.columns.tolist()
 
 # --- TABS ---
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Overview", "Diagnostics", "Rulebook", "Find and Replace", "Audit Log", "Pipeline Preview"])
+tab1, tab2, tab_insights, tab3, tab4, tab5, tab6 = st.tabs(["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Find and Replace", "Audit Log", "Pipeline Preview"])
 
 with tab1:
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
@@ -200,13 +200,6 @@ with tab1:
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
     st.divider()
-
-    st.subheader("Feature Correlation")
-    numeric_df = df.select_dtypes(include=[np.number])
-    if len(numeric_df.columns) > 1:
-        st.plotly_chart(px.imshow(numeric_df.corr(), text_auto=".2f", aspect="auto", color_continuous_scale='RdBu_r'), width="stretch", theme="streamlit")
-    else:
-        st.caption("Not enough numeric columns for correlation matrix.")
 
 with tab2:
     selected_features = st.multiselect("Analyze Columns", all_cols, key="active_features")
@@ -278,6 +271,110 @@ with tab2:
                                 <div><strong>Null %:</strong> {null_pct:.1f}%</div>
                             </div>
                             """, unsafe_allow_html=True)
+
+with tab_insights:
+    st.subheader("Visual Insights")
+    
+    # 1. Filtered Correlation Heatmap
+    st.markdown("### Feature Correlation")
+    st.markdown("Shows relationships between numeric columns. Features without any correlation within the selected range are filtered out.")
+    corr_range = st.slider("Correlation Range", -1.0, 1.0, (-1.0, 1.0), 0.05, key="corr_range_val")
+    
+    numeric_df = df.select_dtypes(include=[np.number])
+    if len(numeric_df.columns) > 1:
+        corr_matrix = numeric_df.corr()
+        corr_matrix_no_diag = corr_matrix.copy()
+        np.fill_diagonal(corr_matrix_no_diag.values, np.nan)
+        in_range_mask = (corr_matrix_no_diag >= corr_range[0]) & (corr_matrix_no_diag <= corr_range[1])
+        correlated_cols = corr_matrix_no_diag.columns[in_range_mask.any()].tolist()
+        
+        if len(correlated_cols) > 1:
+            filtered_corr = corr_matrix.loc[correlated_cols, correlated_cols]
+            fig_corr = px.imshow(
+                filtered_corr,
+                text_auto=".2f",
+                aspect="auto",
+                color_continuous_scale='RdBu_r',
+                range_color=[-1, 1]
+            )
+            fig_corr.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+            st.plotly_chart(fig_corr, width="stretch", theme="streamlit")
+        else:
+            st.info("No numeric columns have correlation within the selected range.")
+    else:
+        st.caption("Not enough numeric columns for correlation matrix.")
+
+    st.divider()
+
+    # 2. Missingness Map
+    st.markdown("### Missingness Pattern Map")
+    st.markdown("Visualizes where missing values occur across the rows of the dataset.")
+    
+    if df.size > 0:
+        null_mask = df.isnull().astype(int)
+        
+        if null_mask.sum().sum() > 0:
+            vis_df = null_mask
+            if len(vis_df) > 1000:
+                st.caption("Showing a representative sample of 1,000 rows for rendering performance.")
+                vis_df = vis_df.sample(1000, random_state=42).sort_index()
+            
+            fig_null = px.imshow(
+                vis_df,
+                aspect="auto",
+                color_continuous_scale=[[0, "#2c3e50"], [0.5, "#2c3e50"], [0.5, "#e74c3c"], [1, "#e74c3c"]],
+                labels=dict(x="Columns", y="Row Index", color="Status")
+            )
+            fig_null.update_layout(
+                coloraxis_colorbar=dict(
+                    title="Status",
+                    tickvals=[0.25, 0.75],
+                    ticktext=["Present", "Missing"]
+                ),
+                margin=dict(t=10, b=10, l=10, r=10),
+                yaxis_title="Row Index"
+            )
+            st.plotly_chart(fig_null, width="stretch", theme="streamlit")
+        else:
+            st.success("🎉 No missing values found in the dataset!")
+    else:
+        st.caption("Dataset is empty.")
+
+    st.divider()
+
+    # 3. Outliers Grid
+    st.markdown("### Global Outlier Distribution")
+    st.markdown("Compares distributions of all numeric features on a single box plot visualization to highlight outliers.")
+    
+    if len(numeric_df.columns) > 0:
+        st.markdown("*Note: Features are standardized to Z-scores (mean=0, std=1) to allow direct visual comparison across different scales.*")
+        z_scored_df = pd.DataFrame()
+        for col in numeric_df.columns:
+            col_std = numeric_df[col].std()
+            if col_std > 0:
+                z_scored_df[col] = (numeric_df[col] - numeric_df[col].mean()) / col_std
+            else:
+                z_scored_df[col] = 0.0
+                
+        melted_z = z_scored_df.melt(var_name="Feature", value_name="Standardized Value")
+        
+        fig_outliers = px.box(
+            melted_z,
+            x="Standardized Value",
+            y="Feature",
+            color="Feature",
+            height=max(200, 50 * len(numeric_df.columns)),
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig_outliers.update_layout(
+            hovermode="closest",
+            showlegend=False,
+            margin=dict(t=10, b=10, l=10, r=10),
+            xaxis_title="Standardized Value (Z-Score)"
+        )
+        st.plotly_chart(fig_outliers, width="stretch", theme="streamlit")
+    else:
+        st.caption("No numeric features to display outliers.")
 
 with tab3:
     if st.session_state.proposals:
@@ -445,7 +542,7 @@ with tab3:
 
 with tab4:
     st.subheader("Manual Transformations")
-    t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace"], key="trans_type_select")
+    t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace", "Rename Column", "Reorder Columns"], key="trans_type_select")
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
         sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
@@ -486,6 +583,54 @@ with tab4:
         target = st.selectbox("Columns", ["All"] + all_cols, key="strip_target_col")
         if st.button("Add Step", key="btn_strip"):
             add_step({"action": "strip_whitespace", "column": target})
+            st.rerun()
+    elif t_type == "Rename Column":
+        target = st.selectbox("Target Column", all_cols, key="rename_target_col")
+        new_name = st.text_input("New Column Name", key="rename_new_name_input")
+        if st.button("Add Step", key="btn_rename"):
+            if not new_name.strip():
+                st.error("Column name cannot be empty")
+            elif new_name in all_cols:
+                st.error(f"A column named '{new_name}' already exists.")
+            else:
+                add_step({"action": "rename_column", "column": target, "value": new_name})
+                # Sync validation rules
+                for rule in st.session_state.rules:
+                    if rule.get('col') == target:
+                        rule['col'] = new_name
+                        rule['desc'] = rule['desc'].replace(target, new_name)
+                    if rule.get('col_a') == target:
+                        rule['col_a'] = new_name
+                        rule['desc'] = rule['desc'].replace(target, new_name)
+                    if rule.get('col_b') == target:
+                        rule['col_b'] = new_name
+                        rule['desc'] = rule['desc'].replace(target, new_name)
+                # Sync active features in diagnostics tab
+                if target in st.session_state.active_features:
+                    idx = st.session_state.active_features.index(target)
+                    st.session_state.active_features[idx] = new_name
+                st.rerun()
+    elif t_type == "Reorder Columns":
+        if 'temp_col_order' not in st.session_state or set(st.session_state.temp_col_order) != set(all_cols):
+            st.session_state.temp_col_order = list(all_cols)
+        st.markdown("Arrange columns using the arrows:")
+        temp_cols = st.session_state.temp_col_order
+        n_cols = len(temp_cols)
+        with st.container(height=350, border=True):
+            for i, col_name in enumerate(temp_cols):
+                c1, c2, c3 = st.columns([8, 1, 1])
+                c1.markdown(f"**{i+1}.** `{col_name}`")
+                if c2.button("▲", key=f"up_{col_name}_{i}", disabled=(i == 0)):
+                    temp_cols[i], temp_cols[i-1] = temp_cols[i-1], temp_cols[i]
+                    st.session_state.temp_col_order = temp_cols
+                    st.rerun()
+                if c3.button("▼", key=f"down_{col_name}_{i}", disabled=(i == n_cols - 1)):
+                    temp_cols[i], temp_cols[i+1] = temp_cols[i+1], temp_cols[i]
+                    st.session_state.temp_col_order = temp_cols
+                    st.rerun()
+        st.divider()
+        if st.button("Apply Column Order", key="btn_apply_reorder", type="primary"):
+            add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
             st.rerun()
 
 with tab5:

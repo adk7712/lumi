@@ -195,6 +195,22 @@ def _handle_log_transform(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Data
         return df, [f"Error: Log transformation requires a numeric column. '{col}' is {df[col].dtype}."]
     return df, [f"Warning: Column '{col}' not found for log_transform action."]
 
+def _handle_rename_column(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    new_name = step.get('value')
+    if col in df.columns:
+        return df.rename(columns={col: new_name}), []
+    return df, [f"Warning: Column '{col}' not found for rename_column action."]
+
+def _handle_reorder_columns(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    new_order = step.get('value')
+    if not isinstance(new_order, list):
+        return df, ["Error: Reorder columns action requires a list of column names."]
+    existing_order = [c for c in new_order if c in df.columns]
+    missing_cols = [c for c in df.columns if c not in existing_order]
+    final_order = existing_order + missing_cols
+    return df[final_order], []
+
 TRANSFORM_REGISTRY = {
     "drop_column": _handle_drop_column,
     "drop_nulls": _handle_drop_nulls,
@@ -206,6 +222,8 @@ TRANSFORM_REGISTRY = {
     "strip_whitespace": _handle_strip_whitespace,
     "normalize_text": _handle_normalize_text,
     "log_transform": _handle_log_transform,
+    "rename_column": _handle_rename_column,
+    "reorder_columns": _handle_reorder_columns,
 }
 
 def apply_recipe(df: pd.DataFrame, recipe: List[CleaningStep]) -> Tuple[pd.DataFrame, List[str]]:
@@ -367,5 +385,13 @@ def generate_pipeline_code(recipe: list) -> str:
             elif action == "log_transform":
                 code.append(f"    # Apply log(1+x) transformation to handle outliers.")
                 code.append(f"    df['{col}'] = np.log1p(df['{col}'].clip(lower=0))")
+            elif action == "rename_column":
+                new_name = step['value']
+                code.append(f"    # Rename column '{col}' to '{new_name}'.")
+                code.append(f"    df = df.rename(columns={{'{col}': '{new_name}'}})")
+            elif action == "reorder_columns":
+                new_order = step['value']
+                code.append(f"    # Reorder columns to the specified layout.")
+                code.append(f"    df = df[{repr(new_order)}]")
     code.append("    return df")
     return "\n".join(code)
