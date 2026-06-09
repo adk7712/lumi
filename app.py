@@ -184,7 +184,7 @@ df = st.session_state.intermediate_states[-1][3]
 all_cols = df.columns.tolist()
 
 # --- TABS ---
-tab1, tab2, tab_insights, tab3, tab4, tab5, tab6 = st.tabs(["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Find and Replace", "Audit Log", "Pipeline Preview"])
+tab1, tab2, tab_insights, tab3, tab4, tab5, tab6 = st.tabs(["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"])
 
 with tab1:
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
@@ -564,7 +564,7 @@ with tab3:
                         st.rerun()
 
 with tab4:
-    st.subheader("Manual Transformations")
+    st.subheader("Transformations")
     t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace", "Rename Column", "Reorder Columns"], key="trans_type_select")
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
