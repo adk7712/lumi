@@ -690,15 +690,35 @@ with tab4:
             st.session_state.temp_col_order = sorted_cols
             st.rerun()
 
-        button_placeholder = st.empty()
-        if button_placeholder.button("Apply Column Order", key="btn_apply_reorder"):
-            button_placeholder.markdown("⏳ **Applying column order... Please wait.**")
-            with st.spinner("Applying new order..."):
-                import time
-                time.sleep(0.4)  # short perceived loading delay
-                add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
-                st.session_state.show_reorder_success = True
-                st.rerun()
+        btn_placeholder = st.empty()
+        if btn_placeholder.button("Apply Column Order", key="btn_apply_reorder"):
+            loading_html = """
+            <div style="display: inline-flex; align-items: center; gap: 12px; height: 38px; margin-bottom: 1rem;">
+                <button disabled style="
+                    border-radius: 6px;
+                    border: 1px solid rgba(128, 128, 128, 0.2);
+                    background-color: transparent;
+                    color: inherit;
+                    opacity: 0.4;
+                    padding: 0px 16px;
+                    font-family: 'JetBrains Mono', monospace;
+                    font-size: 14px;
+                    height: 38px;
+                    cursor: not-allowed;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-sizing: border-box;
+                ">Apply Column Order</button>
+                <div class="spinner-circle"></div>
+            </div>
+            """
+            btn_placeholder.markdown(loading_html, unsafe_allow_html=True)
+            import time
+            time.sleep(0.8)  # perceived loading delay to show spinner
+            add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
+            st.session_state.show_reorder_success = True
+            st.rerun()
 
 with tab5:
     st.subheader("Data Lineage")
