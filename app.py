@@ -10,6 +10,7 @@ from engine import apply_recipe, generate_pipeline_code
 from scout import generate_proposals
 from ui_utils import inject_custom_css, get_safe_hue, get_heatmap_styles
 from rule_utils import evaluate_rule
+from streamlit_sortables import sort_items
 
 # Define constants
 MAX_SAMPLE_ROWS = 10000
@@ -53,43 +54,66 @@ def load_data(file_path_or_buffer):
 # --- STATE INITIALIZATION ---
 def initialize_state(from_reset=False):
     """Initializes all required session state variables."""
-    # Streamlit's session state is crucial for maintaining application state across user interactions.
-    # Define default values for the session state
-    defaults = {
-        'active_features': [],
-        'rules': [],
-        'cleaning_recipe': [],
-        'intermediate_states': [], # List of (step_name, health_pct, row_count, dataframe_reference)
-        'proposals': [],
-        'scanned_columns': set(),
-        'last_file_hash': None,
-        'raw_data': None,
-        'original_full_data': None,
-    }
-
-    # Force reset or initialize for the first time
-    # Persist state across reruns, or reset if 'from_reset' is True or key is new.
-    for key, value in defaults.items():
-        if from_reset or key not in st.session_state:
-            st.session_state[key] = value
-
-    # Load initial data if it's not already loaded
-    if st.session_state.raw_data is None or from_reset:
+    # 1. Load initial data first to get the columns list for default dropdown selections
+    if 'raw_data' not in st.session_state or from_reset:
         raw_df = load_data("mock_data/train.csv")
         st.session_state.original_full_data = raw_df
-        # Sample large datasets for interactive use to improve performance.
-        # A fixed random_state ensures reproducibility of the sample.
         if len(raw_df) > MAX_SAMPLE_ROWS:
             st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
         else:
             st.session_state.raw_data = raw_df
 
-        # Initialize intermediate states with original data
         base_df = st.session_state.raw_data
         bh = int((1 - (base_df.isnull().sum().sum() / base_df.size)) * 100) if base_df.size > 0 else 0
         st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
+        st.session_state.proposals = generate_proposals(st.session_state.raw_data, set())
+        st.session_state.scanned_columns = set()
 
-        st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+    df = st.session_state.raw_data
+    all_cols = df.columns.tolist()
+    first_col = all_cols[0] if all_cols else ""
+
+    # 2. Define default values for the session state
+    defaults = {
+        'active_features': [],
+        'rules': [],
+        'cleaning_recipe': [],
+        'intermediate_states': st.session_state.intermediate_states,
+        'proposals': st.session_state.proposals,
+        'scanned_columns': st.session_state.scanned_columns,
+        'last_file_hash': None,
+        'raw_data': st.session_state.raw_data,
+        'original_full_data': st.session_state.original_full_data,
+
+        # Transient UI Widget state initializers (prevents AppTest KeyErrors)
+        'find_input': "",
+        'replace_input': "",
+        'replace_target_col': "All",
+        'replace_use_regex': False,
+        'rename_new_name_input': "",
+        'rename_target_col': first_col,
+        'norm_target_col': "All",
+        'norm_method_select': "lowercase",
+        'cast_target_col': first_col,
+        'cast_dtype_select': "string",
+        'drop_target_col': first_col,
+        'strip_target_col': "All",
+        'rule_target_col': first_col,
+        'rule_type_select': "Null Check",
+        'trans_type_select': "Find and Replace",
+        'rel_feature_a': first_col,
+        'rel_feature_b': first_col,
+        'rel_op': ">",
+        'rel_target_type_radio': "Another Feature",
+        'rel_val_input': "",
+        'info_note_input': "",
+        'show_reorder_success': False,
+    }
+
+    # Force reset or initialize for the first time
+    for key, value in defaults.items():
+        if from_reset or key not in st.session_state:
+            st.session_state[key] = value
 
 initialize_state()
 
@@ -160,7 +184,7 @@ df = st.session_state.intermediate_states[-1][3]
 all_cols = df.columns.tolist()
 
 # --- TABS ---
-tab1, tab2, tab_insights, tab3, tab4, tab5, tab6 = st.tabs(["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Find and Replace", "Audit Log", "Pipeline Preview"])
+tab1, tab2, tab_insights, tab3, tab4, tab5, tab6 = st.tabs(["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"])
 
 with tab1:
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
@@ -199,7 +223,6 @@ with tab1:
     with o_col2:
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
-    st.divider()
 
 with tab2:
     selected_features = st.multiselect("Analyze Columns", all_cols, key="active_features")
@@ -233,7 +256,7 @@ with tab2:
                             other_sum = counts.iloc[9:].sum()
                             chart_data = pd.concat([top_n, pd.Series({"Other": other_sum})])
                         fig = px.bar(x=chart_data.index, y=chart_data.values, height=220)
- 
+
                     # Cleanup chart aesthetics by removing redundant axis labels and disabling hover
                     fig.update_layout(xaxis_title=None, yaxis_title=None, hovermode=False)
                     st.plotly_chart(fig, width="stretch", theme="streamlit")
@@ -274,12 +297,12 @@ with tab2:
 
 with tab_insights:
     st.subheader("Visual Insights")
-    
+
     # 1. Filtered Correlation Heatmap
     st.markdown("### Feature Correlation")
     st.markdown("Shows relationships between numeric columns. Features without any correlation within the selected range are filtered out.")
     corr_range = st.slider("Correlation Range", -1.0, 1.0, (-1.0, 1.0), 0.05, key="corr_range_val")
-    
+
     numeric_df = df.select_dtypes(include=[np.number])
     if len(numeric_df.columns) > 1:
         corr_matrix = numeric_df.corr()
@@ -287,7 +310,7 @@ with tab_insights:
         np.fill_diagonal(corr_matrix_no_diag.values, np.nan)
         in_range_mask = (corr_matrix_no_diag >= corr_range[0]) & (corr_matrix_no_diag <= corr_range[1])
         correlated_cols = corr_matrix_no_diag.columns[in_range_mask.any()].tolist()
-        
+
         if len(correlated_cols) > 1:
             filtered_corr = corr_matrix.loc[correlated_cols, correlated_cols]
             fig_corr = px.imshow(
@@ -309,16 +332,16 @@ with tab_insights:
     # 2. Missingness Map
     st.markdown("### Missingness Pattern Map")
     st.markdown("Visualizes where missing values occur across the rows of the dataset.")
-    
+
     if df.size > 0:
         null_mask = df.isnull().astype(int)
-        
+
         if null_mask.sum().sum() > 0:
             vis_df = null_mask
             if len(vis_df) > 1000:
                 st.caption("Showing a representative sample of 1,000 rows for rendering performance.")
                 vis_df = vis_df.sample(1000, random_state=42).sort_index()
-            
+
             fig_null = px.imshow(
                 vis_df,
                 aspect="auto",
@@ -345,7 +368,7 @@ with tab_insights:
     # 3. Outliers Grid
     st.markdown("### Global Outlier Distribution")
     st.markdown("Compares distributions of all numeric features on a single box plot visualization to highlight outliers.")
-    
+
     if len(numeric_df.columns) > 0:
         st.markdown("*Note: Features are standardized to Z-scores (mean=0, std=1) to allow direct visual comparison across different scales.*")
         z_scored_df = pd.DataFrame()
@@ -355,9 +378,9 @@ with tab_insights:
                 z_scored_df[col] = (numeric_df[col] - numeric_df[col].mean()) / col_std
             else:
                 z_scored_df[col] = 0.0
-                
+
         melted_z = z_scored_df.melt(var_name="Feature", value_name="Standardized Value")
-        
+
         fig_outliers = px.box(
             melted_z,
             x="Standardized Value",
@@ -541,7 +564,7 @@ with tab3:
                         st.rerun()
 
 with tab4:
-    st.subheader("Manual Transformations")
+    st.subheader("Transformations")
     t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace", "Rename Column", "Reorder Columns"], key="trans_type_select")
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
@@ -613,24 +636,88 @@ with tab4:
     elif t_type == "Reorder Columns":
         if 'temp_col_order' not in st.session_state or set(st.session_state.temp_col_order) != set(all_cols):
             st.session_state.temp_col_order = list(all_cols)
-        st.markdown("Arrange columns using the arrows:")
+
         temp_cols = st.session_state.temp_col_order
-        n_cols = len(temp_cols)
-        with st.container(height=350, border=True):
-            for i, col_name in enumerate(temp_cols):
-                c1, c2, c3 = st.columns([8, 1, 1])
-                c1.markdown(f"**{i+1}.** `{col_name}`")
-                if c2.button("▲", key=f"up_{col_name}_{i}", disabled=(i == 0)):
-                    temp_cols[i], temp_cols[i-1] = temp_cols[i-1], temp_cols[i]
-                    st.session_state.temp_col_order = temp_cols
-                    st.rerun()
-                if c3.button("▼", key=f"down_{col_name}_{i}", disabled=(i == n_cols - 1)):
-                    temp_cols[i], temp_cols[i+1] = temp_cols[i+1], temp_cols[i]
-                    st.session_state.temp_col_order = temp_cols
-                    st.rerun()
-        st.divider()
-        if st.button("Apply Column Order", key="btn_apply_reorder", type="primary"):
+
+        st.markdown("### Drag-and-Drop to Reorder Columns")
+        st.info("Grab any column name card and drag to rearrange the column order. Click \"Apply Column Order\" once done.")
+
+        # Display mini toast notification if reorder was applied successfully
+        if st.session_state.get('show_reorder_success'):
+            st.toast("Column order applied successfully!", icon="✅")
+            st.session_state.show_reorder_success = False
+
+        # Custom styles matching Lumi's global dark/gray card color themes and typography
+        sortable_style = """
+        .sortable-component {
+            background-color: transparent !important;
+            font-family: 'JetBrains Mono', monospace !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+            padding: 10px 0 !important;
+        }
+        .sortable-item {
+            font-family: 'JetBrains Mono', monospace !important;
+            font-size: 0.85rem !important;
+            font-weight: 500 !important;
+            color: inherit !important;
+            background-color: rgba(128, 128, 128, 0.05) !important;
+            border: 1px solid rgba(128, 128, 128, 0.15) !important;
+            border-radius: 6px !important;
+            padding: 6px 12px !important;
+            margin: 4px !important;
+            cursor: grab !important;
+            transition: all 0.2s ease-in-out !important;
+            display: inline-block !important;
+            box-shadow: none !important;
+        }
+        .sortable-item:hover {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border-color: rgba(79, 139, 249, 0.4) !important;
+        }
+        .sortable-item:active {
+            cursor: grabbing !important;
+            background-color: rgba(255, 255, 255, 0.08) !important;
+            border-color: rgba(79, 139, 249, 0.6) !important;
+        }
+        """
+
+        # Render sortable items list using streamlit-sortables in horizontal mode
+        sorted_cols = sort_items(temp_cols, direction="horizontal", custom_style=sortable_style, key="col_reorder_widget")
+
+        if sorted_cols != temp_cols:
+            st.session_state.temp_col_order = sorted_cols
+            st.rerun()
+
+        btn_placeholder = st.empty()
+        if btn_placeholder.button("Apply Column Order", key="btn_apply_reorder"):
+            loading_html = """
+            <div style="display: inline-flex; align-items: center; gap: 12px; height: 38px; margin-bottom: 1rem;">
+                <button disabled style="
+                    border-radius: 6px;
+                    border: 1px solid rgba(128, 128, 128, 0.2);
+                    background-color: transparent;
+                    color: inherit;
+                    opacity: 0.4;
+                    padding: 0px 16px;
+                    font-family: 'JetBrains Mono', monospace;
+                    font-size: 14px;
+                    height: 38px;
+                    cursor: not-allowed;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-sizing: border-box;
+                ">Apply Column Order</button>
+                <div class="spinner-circle"></div>
+            </div>
+            """
+            btn_placeholder.markdown(loading_html, unsafe_allow_html=True)
+            import time
+            time.sleep(0.8)  # perceived loading delay to show spinner
             add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
+            st.session_state.show_reorder_success = True
             st.rerun()
 
 with tab5:

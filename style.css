@@ -212,6 +212,19 @@ svg, svg * {
     background-color: rgba(79, 139, 249, 0.05);
 }
 
+/* Custom Primary Button (Brand Blue instead of Red) */
+.stButton > button[data-testid="stBaseButton-primary"] {
+    background-color: #4F8BF9 !important;
+    color: white !important;
+    border-color: #4F8BF9 !important;
+}
+
+.stButton > button[data-testid="stBaseButton-primary"]:hover {
+    background-color: #357ae8 !important;
+    color: white !important;
+    border-color: #357ae8 !important;
+}
+
 /* ============================================================
    CRITICAL: DIAGNOSTICS TAB ONLY - SMALL METRIC LABELS
    This uses CSS adjacent sibling + structural selectors to
@@ -289,3 +302,27 @@ svg, svg * {
     background-color: rgba(255, 255, 255, 0.05) !important;
     border-color: rgba(79, 139, 249, 0.4) !important;
 }
+
+/* Spinner Animation & Container for Loading Button */
+.spinner-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+    min-height: 38px; /* aligns with standard streamlit button height */
+}
+
+.spinner-circle {
+    border: 3px solid rgba(128, 128, 128, 0.2);
+    border-top: 3px solid #4F8BF9;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    animation: spin-loader 0.8s linear infinite;
+}
+
+@keyframes spin-loader {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+

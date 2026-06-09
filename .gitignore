@@ -1,7 +1,22 @@
-mock_data/
+# Byte-compiled / optimized / DLL files
 __pycache__/
-.DS_Store
 *.pyc
+*.pyo
+*.pyd
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Project-specific local data
+mock_data/
+*.png
+
+# Keep git history clean of auxiliary markdown notes/docs
 *.md
 !README.md
-test*
