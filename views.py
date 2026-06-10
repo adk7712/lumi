@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from state_manager import add_step
 from rule_utils import evaluate_rule
-from ui_utils import render_diagnostic_metric, get_safe_hue, get_heatmap_styles
+from ui_utils import render_diagnostic_metric, get_safe_hue, get_heatmap_styles, load_style
 from streamlit_sortables import sort_items
 from engine import generate_pipeline_code
 
@@ -300,11 +300,22 @@ def render_rulebook_tab(df):
                             rule['error'] = str(e)
 
                     status_color, resolved = (rule['color'] if rule['enabled'] else "rgba(100,100,100,0.2)"), rule.get('resolved', False)
-                    desc_style = "text-decoration: line-through; opacity: 0.5;" if not rule['enabled'] else ""
-                    error_html = f"<br/><span style='color: #e74c3c; font-size: 0.85em; font-weight: bold;'>⚠️ Error: {rule.get('error')}</span>" if 'error' in rule else ""
+                    enabled_class = "enabled" if rule['enabled'] else "disabled"
+                    resolved_html = f'<br/><span class="rule-status-resolved">Status: Resolved</span>' if resolved else ""
+                    error_html = f'<br/><span class="rule-error-msg">⚠️ Error: {rule.get("error")}</span>' if 'error' in rule else ""
 
                     v_text = f"Violations: {v_count}" if rule['type'] != "Informational" else "Type: Info"
-                    st.markdown(f'<div class="violation-card"><div style="border-left: 8px solid {status_color}; padding-left: 15px;"><strong style="{desc_style}">{rule["type"]}</strong><br/><code style="color: #4F8BF9; {desc_style}">{rule["desc"]}</code><br/><span style="font-size: 0.85em; opacity: 0.7;">{v_text}</span>{f"<br/><span style=\"color: #2ecc71; font-size: 0.85em; font-weight: bold;\">Status: Resolved</span>" if resolved else ""}{error_html}</div></div>', unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="violation-card {enabled_class}">
+                        <div class="violation-card-border" style="border-left: 8px solid {status_color};">
+                            <strong class="rule-type">{rule["type"]}</strong><br/>
+                            <code class="rule-desc">{rule["desc"]}</code><br/>
+                            <span class="rule-violations-count">{v_text}</span>
+                            {resolved_html}
+                            {error_html}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                     if v_count > 0 and not resolved and rule['type'] != "Informational":
                         if rule['type'] == "Null Check":
@@ -422,41 +433,7 @@ def render_transformations_tab(df):
             st.toast("Column order applied successfully!", icon="✅")
             st.session_state.show_reorder_success = False
 
-        sortable_style = """
-        .sortable-component {
-            background-color: transparent !important;
-            font-family: 'JetBrains Mono', monospace !important;
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 8px !important;
-            padding: 10px 0 !important;
-        }
-        .sortable-item {
-            font-family: 'JetBrains Mono', monospace !important;
-            font-size: 0.85rem !important;
-            font-weight: 500 !important;
-            color: inherit !important;
-            background-color: rgba(128, 128, 128, 0.05) !important;
-            border: 1px solid rgba(128, 128, 128, 0.15) !important;
-            border-radius: 6px !important;
-            padding: 6px 12px !important;
-            margin: 4px !important;
-            cursor: grab !important;
-            transition: all 0.2s ease-in-out !important;
-            display: inline-block !important;
-            box-shadow: none !important;
-        }
-        .sortable-item:hover {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border-color: rgba(79, 139, 249, 0.4) !important;
-        }
-        .sortable-item:active {
-            cursor: grabbing !important;
-            background-color: rgba(255, 255, 255, 0.08) !important;
-            border-color: rgba(79, 139, 249, 0.6) !important;
-        }
-        """
-
+        sortable_style = load_style("sortables.css")
         sorted_cols = sort_items(temp_cols, direction="horizontal", custom_style=sortable_style, key="col_reorder_widget")
 
         if sorted_cols != temp_cols:

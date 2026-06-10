@@ -16,11 +16,11 @@ def render_diagnostic_metric(container, label: str, value: str):
         value: The metric value (int64, 0, 3, etc.)
     """
     container.markdown(f"""
-    <div style="border-left: 3px solid rgba(28, 131, 225, 0.5); padding: 2px 8px; margin-bottom: 10px;">
-        <div style="font-size: 1.25rem; line-height: 2; margin-bottom: 3px; font-weight: 400;">
+    <div class="diagnostic-metric">
+        <div class="diagnostic-metric-label">
             {label}
         </div>
-        <div style="font-size: 1.0rem; font-weight: 500; line-height: 1; opacity: 0.75;">
+        <div class="diagnostic-metric-value">
             {value}
         </div>
     </div>
@@ -29,18 +29,29 @@ def render_diagnostic_metric(container, label: str, value: str):
 def inject_custom_css(st_object):
     """Injects the global CSS for the Lumi workspace."""
     # Read the CSS from the external file using absolute path relative to this script
-    css_path = Path(__file__).parent / "style.css"
+    css_path = Path(__file__).parent / "styles" / "global.css"
 
     # Fallback to the current working directory if file not found
     if not css_path.exists():
-        css_path = Path("style.css")
+        css_path = Path("styles") / "global.css"
 
     try:
         with open(css_path, "r") as f:
             css_content = f.read()
         st_object.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
     except FileNotFoundError:
-        st_object.error(f"CSS file not found at {css_path}. Please ensure style.css is in the app directory.")
+        st_object.error(f"CSS file not found at {css_path}. Please ensure styles/global.css is in the app directory.")
+
+def load_style(name: str) -> str:
+    """Reads a stylesheet from the styles directory and returns it as a string."""
+    css_path = Path(__file__).parent / "styles" / name
+    if not css_path.exists():
+        css_path = Path("styles") / name
+    try:
+        with open(css_path, "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return ""
 
 def get_safe_hue(n: int) -> int:
     """Returns a high-contrast hue that avoids red and green."""
