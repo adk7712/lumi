@@ -225,6 +225,21 @@ def test_audit_log_remove_step():
     assert "Alley" not in at.session_state.intermediate_states[-1][3].columns
     print("Audit Log Remove step integration test passed.")
 
+def test_dataset_download_buttons():
+    at = AppTest.from_file(APP_PATH)
+    at.run()
+    
+    # Select Cleaned Data (After) preview tab mode
+    mode_radio = at.radio(key="p_mode")
+    assert mode_radio is not None
+    mode_radio.set_value("Cleaned Data (After)").run()
+    
+    # Verify no exceptions were raised during dataset encoding and layout rendering
+    assert not at.exception, "Should render Cleaned Data tab without exceptions"
+    # Verify that the preview dataframe is rendered
+    assert len(at.dataframe) > 0, "DataFrame preview should be visible"
+    print("Dataset download buttons rendering test passed.")
+
 if __name__ == "__main__":
     try:
         test_app_initialization()
@@ -234,6 +249,7 @@ if __name__ == "__main__":
         test_rename_and_reorder_ui()
         test_visual_insights_tab_ui()
         test_audit_log_remove_step()
+        test_dataset_download_buttons()
         print("ALL APP FLOW TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")
