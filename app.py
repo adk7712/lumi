@@ -783,7 +783,7 @@ with tab6:
         except Exception as e:
             d_col2.error(f"Error generating Excel file: {str(e)}")
     else:
-        code_output = generate_pipeline_code(st.session_state.cleaning_recipe)
+        code_output = generate_pipeline_code(st.session_state.cleaning_recipe, st.session_state.rules)
         st.code(code_output, language="python")
         st.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", width="stretch", key="download_pipeline_btn")
 
