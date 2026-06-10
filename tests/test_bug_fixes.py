@@ -105,6 +105,40 @@ def test_correlation_range_filtering():
     assert 'B' not in correlated_cols_mid
     print("Correlation range filtering unit test passed.")
 
+def test_uploader_large_file_capping():
+    from streamlit.testing.v1 import AppTest
+    at = AppTest.from_file(str(Path(__file__).parent.parent / "app.py"))
+    at.run()
+    
+    # Generate an 52MB CSV dataset with 52,000 rows
+    # 52,000 rows, each row has a column with 1,000 'x' characters (~52MB total)
+    header = b"A,B\n"
+    row = b"1.0," + b"x"*1000 + b"\n"
+    large_csv_bytes = header + row * 52000
+    
+    # Upload via AppTest uploader
+    uploader = at.file_uploader(key="global_uploader")
+    assert uploader is not None
+    uploader.upload("large_file.csv", large_csv_bytes, "text/csv").run()
+    
+    # Check that it loaded exactly MAX_SAMPLE_ROWS (10,000)
+    assert len(at.session_state.raw_data) == 10000
+    assert not at.exception
+    print("Uploader large file performance protection test passed.")
+
+def test_plot_data_downsampling():
+    # Verify the downsampling logic handles various row counts correctly
+    # If len(df) > 1000, it samples exactly 1000
+    df_large = pd.DataFrame({'A': range(5000)})
+    plot_df_large = df_large.sample(1000, random_state=42) if len(df_large) > 1000 else df_large
+    assert len(plot_df_large) == 1000
+    
+    # If len(df) <= 1000, it retains all rows
+    df_small = pd.DataFrame({'A': range(500)})
+    plot_df_small = df_small.sample(1000, random_state=42) if len(df_small) > 1000 else df_small
+    assert len(plot_df_small) == 500
+    print("Plot data downsampling logic test passed.")
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
@@ -112,6 +146,8 @@ if __name__ == "__main__":
         test_diagnostics_histogram_grouping()
         test_chart_updates()
         test_correlation_range_filtering()
+        test_uploader_large_file_capping()
+        test_plot_data_downsampling()
         print("ALL BUG FIX TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")

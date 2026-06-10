@@ -23,27 +23,27 @@ inject_custom_css(st)
 
 # --- DATA LOADING ---
 @st.cache_data
-def load_data(file_path_or_buffer):
+def load_data(file_path_or_buffer, nrows=None):
     """Loads data from a file path or buffer, supporting CSV and Excel."""
     try:
         # Streamlit's UploadedFile object has a 'type' attribute
         if hasattr(file_path_or_buffer, 'type'):
             file_type = file_path_or_buffer.type
             if file_type == "text/csv":
-                return pd.read_csv(file_path_or_buffer)
+                return pd.read_csv(file_path_or_buffer, nrows=nrows)
             elif file_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-                return pd.read_excel(file_path_or_buffer)
+                return pd.read_excel(file_path_or_buffer, nrows=nrows)
         # For local file paths
         elif isinstance(file_path_or_buffer, str):
             suffix = Path(file_path_or_buffer).suffix.lower()
             if suffix == '.csv':
-                return pd.read_csv(file_path_or_buffer)
+                return pd.read_csv(file_path_or_buffer, nrows=nrows)
             elif suffix == '.xlsx':
-                return pd.read_excel(file_path_or_buffer)
+                return pd.read_excel(file_path_or_buffer, nrows=nrows)
 
         # Fallback for buffers without a clear type
         st.warning("Could not determine file type, attempting to read as CSV. May fail for other formats.")
-        return pd.read_csv(file_path_or_buffer)
+        return pd.read_csv(file_path_or_buffer, nrows=nrows)
 
     except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         st.error(f"Error loading data: {type(e).__name__} - {e}. Please check the file format and content.")
@@ -145,9 +145,12 @@ with h_col2: # Column for file uploader
         # to prevent memory bottlenecks on large datasets.
         file_id = f"{uploaded_file.file_id}_{uploaded_file.name}_{uploaded_file.size}"
         if st.session_state.last_file_hash != file_id:
-            raw_df = load_data(uploaded_file)
+            is_large = uploaded_file.size > 50 * 1024 * 1024  # 50MB limit warning
+            if is_large:
+                st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.", icon="⚠️")
+            raw_df = load_data(uploaded_file, nrows=MAX_SAMPLE_ROWS if is_large else None)
             st.session_state.original_full_data = raw_df
-            if len(raw_df) > MAX_SAMPLE_ROWS:
+            if not is_large and len(raw_df) > MAX_SAMPLE_ROWS:
                 st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
             else:
                 st.session_state.raw_data = raw_df
@@ -243,7 +246,13 @@ with tab2:
                     # Differentiate plotting and metric display based on data type for relevant insights.
                     if pd.api.types.is_numeric_dtype(df[col_name]):
                         render_diagnostic_metric(s4, "Skew", f"{df[col_name].skew():.2f}")
-                        fig = px.box(df, x=col_name, height=220)
+                        
+                        # Downsample for Plotly rendering performance
+                        plot_df = df[[col_name]].dropna()
+                        is_sampled = len(plot_df) > 1000
+                        if is_sampled:
+                            plot_df = plot_df.sample(1000, random_state=42)
+                        fig = px.box(plot_df, x=col_name, height=220)
                     else:
                         top_val = df[col_name].mode()[0] if not df[col_name].mode().empty else "N/A"
                         render_diagnostic_metric(s4, "Top", str(top_val)[:10])
@@ -260,6 +269,8 @@ with tab2:
                     # Cleanup chart aesthetics by removing redundant axis labels and disabling hover
                     fig.update_layout(xaxis_title=None, yaxis_title=None, hovermode=False)
                     st.plotly_chart(fig, width="stretch", theme="streamlit")
+                    if pd.api.types.is_numeric_dtype(df[col_name]) and len(df) > 1000:
+                        st.caption("Showing representative sample of 1,000 rows for rendering performance.")
 
                     # Detailed Collapsible Statistics (keeps heights equal between numeric/categorical)
                     with st.expander("Detailed Statistics", expanded=False):
@@ -379,7 +390,13 @@ with tab_insights:
             else:
                 z_scored_df[col] = 0.0
 
-        melted_z = z_scored_df.melt(var_name="Feature", value_name="Standardized Value")
+        # Downsample for Plotly rendering performance
+        plot_z_df = z_scored_df
+        is_sampled = len(plot_z_df) > 1000
+        if is_sampled:
+            plot_z_df = plot_z_df.sample(1000, random_state=42)
+
+        melted_z = plot_z_df.melt(var_name="Feature", value_name="Standardized Value")
 
         fig_outliers = px.box(
             melted_z,
@@ -396,6 +413,8 @@ with tab_insights:
             xaxis_title="Standardized Value (Z-Score)"
         )
         st.plotly_chart(fig_outliers, width="stretch", theme="streamlit")
+        if is_sampled:
+            st.caption("Showing representative sample of 1,000 rows for rendering performance.")
     else:
         st.caption("No numeric features to display outliers.")
 
