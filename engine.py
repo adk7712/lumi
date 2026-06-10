@@ -245,20 +245,20 @@ def apply_recipe(df: pd.DataFrame, recipe: List[CleaningStep]) -> Tuple[pd.DataF
             messages.append(f"Warning: Unknown action '{action}' encountered in recipe.")
     return df_clean, messages
 
-def generate_pipeline_code(recipe: list) -> str:
+def generate_pipeline_code(recipe: list, rules: list = None) -> str:
     """
-    Generates standalone Python code for a given cleaning recipe.
+    Generates standalone Python code for a given cleaning recipe and optional validation rules.
 
     This function iterates through the cleaning steps defined in the recipe
-    and translates them into a executable Python code string using pandas operations.
+    and translates them into an executable Python code string using pandas operations.
+    It also generates a validation function checking active rules defined in the Rulebook.
 
     Args:
         recipe (list): A list of dictionaries, where each dictionary represents a cleaning step.
-                       Each step defines an 'action' and associated parameters (e.g., 'column', 'value', 'rule').
+        rules (list, optional): A list of rule definitions from the Rulebook.
 
     Returns:
-        str: A multi-line string containing the generated Python code, starting with
-             necessary imports and a `clean_data(df)` function definition.
+        str: A multi-line string containing the generated Python code.
     """
     code = ["import pandas as pd\nimport numpy as np\n", "def clean_data(df):"]
     if not recipe:
@@ -394,4 +394,62 @@ def generate_pipeline_code(recipe: list) -> str:
                 code.append(f"    # Reorder columns to the specified layout.")
                 code.append(f"    df = df[{repr(new_order)}]")
     code.append("    return df")
+
+    # Generate validation logic
+    code.append("\n\ndef validate_data(df):")
+    code.append("    \"\"\"")
+    code.append("    Validates the DataFrame against the rules defined in the Lumi Rulebook.")
+    code.append("    Returns a dictionary of {rule_description: violation_count_or_error}.")
+    code.append("    \"\"\"")
+    code.append("    violations = {}")
+
+    active_rules = []
+    if rules:
+        active_rules = [r for r in rules if r.get('enabled', True) and r.get('type') != 'Informational']
+
+    if not active_rules:
+        code.append("    # No active validation rules defined")
+    else:
+        for r in active_rules:
+            desc = r.get('desc', 'N/A')
+            desc_repr = repr(desc)
+            code.append(f"    # Rule: {r['type']}")
+            code.append(f"    # Description: {desc}")
+            code.append("    try:")
+            if r['type'] == "Null Check":
+                code.append(f"        mask = df['{r['col']}'].isnull()")
+            elif r['type'] == "Range Check":
+                code.append(f"        col_numeric = pd.to_numeric(df['{r['col']}'], errors='coerce')")
+                code.append(f"        mask = (col_numeric < {r['min']}) | (col_numeric > {r['max']}) | col_numeric.isnull()")
+            elif r['type'] == "Relational Check":
+                val = f"df['{r['col_b']}']" if r.get('target_type') == 'Feature' else repr(r['value'])
+                code.append(f"        valid = (df['{r['col_a']}'] {r['op']} {val})")
+                code.append(f"        mask = ~valid")
+            elif r['type'] == "Custom Expression":
+                code.append(f"        valid_indices = df.query({repr(r['query'])}).index")
+                code.append(f"        mask = ~df.index.isin(valid_indices)")
+            else:
+                code.append("        mask = pd.Series(False, index=df.index)")
+
+            code.append(f"        count = mask.sum()")
+            code.append(f"        if count > 0:")
+            code.append(f"            violations[{desc_repr}] = int(count)")
+            code.append("    except Exception as e:")
+            code.append(f"        violations[{desc_repr}] = f\"Error: {{type(e).__name__}} - {{str(e)}}\"")
+            code.append("") # Spacer between rules
+
+    code.append("    return violations")
+
+    # Add example runner block
+    code.append("\nif __name__ == \"__main__\":")
+    code.append("    # Example usage:")
+    code.append("    # df = pd.read_csv(\"your_data.csv\")")
+    code.append("    # df_cleaned = clean_data(df)")
+    code.append("    # report = validate_data(df_cleaned)")
+    code.append("    # if report:")
+    code.append("    #     print(\"Validation failed with issues:\", report)")
+    code.append("    # else:")
+    code.append("    #     print(\"Validation passed!\")")
+    code.append("    pass")
+
     return "\n".join(code)
