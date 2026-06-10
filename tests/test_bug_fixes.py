@@ -153,6 +153,68 @@ def test_plotly_layout_consolidation():
     assert fig.layout.plot_bgcolor == "rgba(0,0,0,0)"
     print("Plotly layout consolidation test passed.")
 
+def test_get_column_dependencies():
+    """get_column_dependencies should return rule descriptions that reference the target column."""
+    import streamlit as st
+    from state_manager import get_column_dependencies
+    # Patch session_state.rules
+    rules = [
+        {'col': 'age', 'desc': 'age is not null', 'type': 'Null Check'},
+        {'col_a': 'age', 'col_b': 'score', 'desc': 'age > score', 'type': 'Relational'},
+        {'col': 'name', 'desc': 'name length check', 'type': 'Null Check'},
+        {'type': 'Custom Expression', 'query': 'age > 0', 'desc': 'custom age expr'},
+    ]
+    # Directly inject via session_state dict (works outside Streamlit runtime)
+    st.session_state['rules'] = rules
+    deps = get_column_dependencies('age')
+    assert 'age is not null' in deps
+    assert 'age > score' in deps
+    assert 'custom age expr' in deps
+    assert 'name length check' not in deps
+    assert len(deps) == 3
+    print("get_column_dependencies test passed.")
+
+
+def test_sync_column_rename():
+    """sync_column_rename should update matching rules and active_features in session state."""
+    import streamlit as st
+    from state_manager import sync_column_rename
+    rules = [
+        {'col': 'old', 'desc': 'old is not null', 'type': 'Null Check'},
+        {'col_a': 'old', 'col_b': 'score', 'desc': 'old > score', 'type': 'Relational'},
+        {'col_b': 'old', 'col_a': 'x', 'desc': 'x vs old', 'type': 'Relational'},
+        {'col': 'other', 'desc': 'other rule', 'type': 'Null Check'},
+    ]
+    st.session_state['rules'] = rules
+    st.session_state['active_features'] = ['old', 'score']
+    sync_column_rename('old', 'new')
+    # Rules should be updated
+    assert st.session_state['rules'][0]['col'] == 'new'
+    assert 'new' in st.session_state['rules'][0]['desc']
+    assert st.session_state['rules'][1]['col_a'] == 'new'
+    assert st.session_state['rules'][2]['col_b'] == 'new'
+    # Untouched rule should remain
+    assert st.session_state['rules'][3]['col'] == 'other'
+    # active_features should be updated
+    assert 'new' in st.session_state['active_features']
+    assert 'old' not in st.session_state['active_features']
+    assert 'score' in st.session_state['active_features']
+    print("sync_column_rename test passed.")
+
+
+def test_render_loading_spinner():
+    """render_loading_spinner should return HTML containing the provided label and spinner div."""
+    from ui_utils import render_loading_spinner
+    html = render_loading_spinner("Apply Column Order")
+    assert 'Apply Column Order' in html
+    assert 'spinner-circle' in html
+    assert '<button disabled' in html
+    # Custom text
+    html2 = render_loading_spinner("Processing...")
+    assert 'Processing...' in html2
+    print("render_loading_spinner test passed.")
+
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
@@ -163,6 +225,9 @@ if __name__ == "__main__":
         test_uploader_large_file_capping()
         test_plot_data_downsampling()
         test_plotly_layout_consolidation()
+        test_get_column_dependencies()
+        test_sync_column_rename()
+        test_render_loading_spinner()
         print("ALL BUG FIX TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")

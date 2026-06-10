@@ -116,3 +116,34 @@ def add_step(step):
     st.session_state.intermediate_states.append((step_desc, th, len(new_df), new_df))
 
     st.toast(f"Step Added: {step['action']}")
+
+
+def get_column_dependencies(target: str) -> list[str]:
+    """Returns the descriptions of any active validation rules that depend on the specified column."""
+    dependent_rules = []
+    for r in st.session_state.rules:
+        if r.get('col') == target or r.get('col_a') == target or r.get('col_b') == target:
+            dependent_rules.append(r['desc'])
+        elif r.get('type') == "Custom Expression" and target in r.get('query', ''):
+            dependent_rules.append(r['desc'])
+    return dependent_rules
+
+
+def sync_column_rename(target: str, new_name: str):
+    """Synchronizes active rules and selected diagnostic features when a column is renamed."""
+    # Sync validation rules
+    for rule in st.session_state.rules:
+        if rule.get('col') == target:
+            rule['col'] = new_name
+            rule['desc'] = rule['desc'].replace(target, new_name)
+        if rule.get('col_a') == target:
+            rule['col_a'] = new_name
+            rule['desc'] = rule['desc'].replace(target, new_name)
+        if rule.get('col_b') == target:
+            rule['col_b'] = new_name
+            rule['desc'] = rule['desc'].replace(target, new_name)
+            
+    # Sync active features in diagnostics tab
+    if target in st.session_state.active_features:
+        idx = st.session_state.active_features.index(target)
+        st.session_state.active_features[idx] = new_name

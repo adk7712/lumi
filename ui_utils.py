@@ -150,6 +150,31 @@ def plot_missingness_map(df: pd.DataFrame) -> tuple:
             return fig, is_sampled
     return None, False
 
+
+def render_loading_spinner(text: str = "Apply Column Order") -> str:
+    """Returns HTML for a disabled button accompanied by a CSS loading spinner."""
+    return f"""
+    <div style="display: inline-flex; align-items: center; gap: 12px; height: 38px; margin-bottom: 1rem;">
+        <button disabled style="
+            border-radius: 6px;
+            border: 1px solid rgba(128, 128, 128, 0.2);
+            background-color: transparent;
+            color: inherit;
+            opacity: 0.4;
+            padding: 0px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            height: 38px;
+            cursor: not-allowed;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        ">{text}</button>
+        <div class="spinner-circle"></div>
+    </div>
+    """
+
 def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
     """Computes column Z-scores and plots comparative outlier box plots."""
     numeric_df = df.select_dtypes(include=[np.number])

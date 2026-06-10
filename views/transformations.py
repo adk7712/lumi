@@ -1,7 +1,7 @@
 import streamlit as st
-from state_manager import add_step
+from state_manager import add_step, get_column_dependencies, sync_column_rename
 from streamlit_sortables import sort_items
-from ui_utils import load_style
+from ui_utils import load_style, render_loading_spinner
 
 def render_transformations_tab(df):
     all_cols = df.columns.tolist()
@@ -29,13 +29,7 @@ def render_transformations_tab(df):
         target = st.selectbox("Target Column", all_cols, key="drop_target_col")
 
         # Collision Detection
-        dependent_rules = []
-        for r in st.session_state.rules:
-            if r.get('col') == target or r.get('col_a') == target or r.get('col_b') == target:
-                dependent_rules.append(r['desc'])
-            elif r.get('type') == "Custom Expression" and target in r.get('query', ''):
-                dependent_rules.append(r['desc'])
-
+        dependent_rules = get_column_dependencies(target)
         if dependent_rules:
             st.warning(f"⚠️ Column '{target}' is used in the following rules: {', '.join(dependent_rules)}. Dropping it may break these rules.")
 
@@ -57,21 +51,7 @@ def render_transformations_tab(df):
                 st.error(f"A column named '{new_name}' already exists.")
             else:
                 add_step({"action": "rename_column", "column": target, "value": new_name})
-                # Sync validation rules
-                for rule in st.session_state.rules:
-                    if rule.get('col') == target:
-                        rule['col'] = new_name
-                        rule['desc'] = rule['desc'].replace(target, new_name)
-                    if rule.get('col_a') == target:
-                        rule['col_a'] = new_name
-                        rule['desc'] = rule['desc'].replace(target, new_name)
-                    if rule.get('col_b') == target:
-                        rule['col_b'] = new_name
-                        rule['desc'] = rule['desc'].replace(target, new_name)
-                # Sync active features in diagnostics tab
-                if target in st.session_state.active_features:
-                    idx = st.session_state.active_features.index(target)
-                    st.session_state.active_features[idx] = new_name
+                sync_column_rename(target, new_name)
                 st.rerun()
     elif t_type == "Reorder Columns":
         if 'temp_col_order' not in st.session_state or set(st.session_state.temp_col_order) != set(all_cols):
@@ -95,28 +75,7 @@ def render_transformations_tab(df):
 
         btn_placeholder = st.empty()
         if btn_placeholder.button("Apply Column Order", key="btn_apply_reorder"):
-            loading_html = """
-            <div style="display: inline-flex; align-items: center; gap: 12px; height: 38px; margin-bottom: 1rem;">
-                <button disabled style="
-                    border-radius: 6px;
-                    border: 1px solid rgba(128, 128, 128, 0.2);
-                    background-color: transparent;
-                    color: inherit;
-                    opacity: 0.4;
-                    padding: 0px 16px;
-                    font-family: 'JetBrains Mono', monospace;
-                    font-size: 14px;
-                    height: 38px;
-                    cursor: not-allowed;
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    box-sizing: border-box;
-                ">Apply Column Order</button>
-                <div class="spinner-circle"></div>
-            </div>
-            """
-            btn_placeholder.markdown(loading_html, unsafe_allow_html=True)
+            btn_placeholder.markdown(render_loading_spinner("Apply Column Order"), unsafe_allow_html=True)
             import time
             time.sleep(0.8)
             add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
