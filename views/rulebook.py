@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from state_manager import add_step
-from rule_utils import evaluate_rule
+from rule_utils import evaluate_rule, create_resolution_step
 from ui_utils import get_safe_hue
 
 def render_rulebook_tab(df):
@@ -150,23 +150,19 @@ def render_rulebook_tab(df):
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Resolution", ["Select resolution method...", "Drop Rows", "Fill with Mean", "Fill with Median", "KNN Imputer", "Iterative Imputer"], key=f"res_{idx}", label_visibility="collapsed")
                             if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_res_{idx}", width="stretch"):
-                                if res == "Drop Rows": add_step({"action": "drop_nulls", "column": rule['col']})
-                                elif "Imputer" in res: add_step({"action": "fill_null", "column": rule['col'], "value": res.split()[0].lower()})
-                                else: add_step({"action": "fill_null", "column": rule['col'], "value": res.split()[-1].lower()})
+                                add_step(create_resolution_step(rule, res))
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
                         elif rule['type'] == "Range Check":
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Res", ["Select resolution method...", "Drop Rows", "Cap at Bounds", "Log Transform"], key=f"range_res_{idx}", label_visibility="collapsed")
                             if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_range_res_{idx}", width="stretch"):
-                                if res == "Drop Rows": add_step({"action": "drop_violated", "rule": rule})
-                                elif res == "Log Transform": add_step({"action": "log_transform", "column": rule['col']})
-                                else: add_step({"action": "cap_range", "column": rule['col'], "min": rule['min'], "max": rule['max']})
+                                add_step(create_resolution_step(rule, res))
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
                         else:
                             if st.button("Drop Violated Rows", key=f"gen_res_{idx}", width="stretch"):
-                                add_step({"action": "drop_violated", "rule": rule})
+                                add_step(create_resolution_step(rule, "Drop Violated Rows"))
                                 st.session_state.rules[idx]['resolved'] = True
                                 st.rerun()
 

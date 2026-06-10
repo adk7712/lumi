@@ -59,3 +59,34 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
         raise ValueError(f"An unexpected error occurred evaluating rule ({rule.get('desc', 'N/A')}): {type(e).__name__} - {e}") from e
 
     return mask
+
+
+def create_resolution_step(rule: dict, method: str) -> dict:
+    """
+    Maps a selected resolution method and rule definition to a concrete cleaning step.
+    """
+    rule_type = rule.get('type')
+    
+    if rule_type == "Null Check":
+        if method == "Drop Rows":
+            return {"action": "drop_nulls", "column": rule['col']}
+        elif "Imputer" in method:
+            # e.g., "KNN Imputer" -> "knn", "Iterative Imputer" -> "iterative"
+            return {"action": "fill_null", "column": rule['col'], "value": method.split()[0].lower()}
+        else:
+            # e.g., "Fill with Mean" -> "mean", "Fill with Median" -> "median"
+            return {"action": "fill_null", "column": rule['col'], "value": method.split()[-1].lower()}
+            
+    elif rule_type == "Range Check":
+        if method == "Drop Rows":
+            return {"action": "drop_violated", "rule": rule}
+        elif method == "Log Transform":
+            return {"action": "log_transform", "column": rule['col']}
+        else:
+            # "Cap at Bounds"
+            return {"action": "cap_range", "column": rule['col'], "min": rule['min'], "max": rule['max']}
+            
+    else:
+        # Default fallback for other rule types (e.g. Relational Check, Custom Expression)
+        # where the only method is "Drop Violated Rows"
+        return {"action": "drop_violated", "rule": rule}
