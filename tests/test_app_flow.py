@@ -1,9 +1,16 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+
 import pandas as pd
 from streamlit.testing.v1 import AppTest
 
+APP_PATH = str(Path(__file__).parent.parent / "app.py")
+
+
 def test_app_initialization():
     # Load app in memory
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(APP_PATH)
     at.run()
     
     # Assert no exceptions occurred during execution
@@ -17,7 +24,7 @@ def test_app_initialization():
     print("Test App Initialization passed.")
 
 def test_multiselect_diagnostics():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(APP_PATH)
     at.run()
     
     # Retrieve the multiselect widget by its key
@@ -37,7 +44,7 @@ def test_multiselect_diagnostics():
     print("Test Multiselect Diagnostics passed.")
 
 def test_rule_addition_and_clear():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(APP_PATH)
     at.run()
     
     # Initial rules list should be empty
@@ -69,7 +76,7 @@ def test_rule_addition_and_clear():
     print("Test Rule Addition and Clear passed.")
 
 def test_undo_and_reset():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(APP_PATH)
     at.run()
     
     # Change manual transformation type to Strip Whitespace
@@ -100,7 +107,7 @@ def test_undo_and_reset():
     print("Test Undo and Reset passed.")
 
 def test_rename_and_reorder_ui():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(APP_PATH)
     at.run()
     
     # 1. Add a dummy rule first to test renaming synchronization
@@ -172,7 +179,7 @@ def test_rename_and_reorder_ui():
     print("Rename and Reorder UI integration tests passed.")
 
 def test_visual_insights_tab_ui():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(APP_PATH)
     at.run()
     
     slider = at.slider(key="corr_range_val")
@@ -184,7 +191,7 @@ def test_visual_insights_tab_ui():
     print("Visual Insights UI integration test passed.")
 
 def test_audit_log_remove_step():
-    at = AppTest.from_file("app.py")
+    at = AppTest.from_file(APP_PATH)
     at.run()
     
     # 1. Add three distinct transformations to the recipe
