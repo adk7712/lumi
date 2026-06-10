@@ -90,6 +90,16 @@ def get_heatmap_styles(df_d: pd.DataFrame, rules: list) -> tuple[pd.DataFrame, l
             continue
     return sdf, messages
 
+def apply_lumi_layout(fig: go.Figure) -> go.Figure:
+    """Applies a consistent theme and layout configuration to a Plotly figure."""
+    fig.update_layout(
+        margin=dict(t=10, b=10, l=10, r=10),
+        font_family="JetBrains Mono, Courier New, monospace",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)"
+    )
+    return fig
+
 def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
     """Computes features' correlation matrix and plots a filtered heatmap."""
     numeric_df = df.select_dtypes(include=[np.number])
@@ -109,8 +119,7 @@ def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
                 color_continuous_scale='RdBu_r',
                 range_color=[-1, 1]
             )
-            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
-            return fig
+            return apply_lumi_layout(fig)
     return None
 
 def plot_missingness_map(df: pd.DataFrame) -> tuple:
@@ -129,13 +138,13 @@ def plot_missingness_map(df: pd.DataFrame) -> tuple:
                 color_continuous_scale=[[0, "#2c3e50"], [0.5, "#2c3e50"], [0.5, "#e74c3c"], [1, "#e74c3c"]],
                 labels=dict(x="Columns", y="Row Index", color="Status")
             )
+            apply_lumi_layout(fig)
             fig.update_layout(
                 coloraxis_colorbar=dict(
                     title="Status",
                     tickvals=[0.25, 0.75],
                     ticktext=["Present", "Missing"]
                 ),
-                margin=dict(t=10, b=10, l=10, r=10),
                 yaxis_title="Row Index"
             )
             return fig, is_sampled
@@ -168,10 +177,10 @@ def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
             height=max(200, 50 * len(numeric_df.columns)),
             color_discrete_sequence=px.colors.qualitative.Pastel
         )
+        apply_lumi_layout(fig)
         fig.update_layout(
             hovermode="closest",
             showlegend=False,
-            margin=dict(t=10, b=10, l=10, r=10),
             xaxis_title="Standardized Value (Z-Score)"
         )
         return fig, is_sampled

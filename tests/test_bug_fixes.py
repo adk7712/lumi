@@ -139,6 +139,20 @@ def test_plot_data_downsampling():
     assert len(plot_df_small) == 500
     print("Plot data downsampling logic test passed.")
 
+def test_plotly_layout_consolidation():
+    from ui_utils import plot_correlation_matrix
+    df = pd.DataFrame({'A': [1, 2, 3], 'B': [2, 4, 6]})
+    fig = plot_correlation_matrix(df, (-1.0, 1.0))
+    assert fig is not None
+    assert fig.layout.margin.t == 10
+    assert fig.layout.margin.b == 10
+    assert fig.layout.margin.l == 10
+    assert fig.layout.margin.r == 10
+    assert fig.layout.font.family == "JetBrains Mono, Courier New, monospace"
+    assert fig.layout.paper_bgcolor == "rgba(0,0,0,0)"
+    assert fig.layout.plot_bgcolor == "rgba(0,0,0,0)"
+    print("Plotly layout consolidation test passed.")
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
@@ -148,6 +162,7 @@ if __name__ == "__main__":
         test_correlation_range_filtering()
         test_uploader_large_file_capping()
         test_plot_data_downsampling()
+        test_plotly_layout_consolidation()
         print("ALL BUG FIX TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")
