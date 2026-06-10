@@ -21,6 +21,100 @@ SCOUT_THRESHOLDS = {
     "HIGH_CARDINALITY_PCT": 80.0,
 }
 
+def _check_null_values(df: pd.DataFrame, col: str) -> list[dict]:
+    """Identify and flag columns with a significant percentage of null values."""
+    proposals = []
+    null_count = df[col].isnull().sum()
+    if null_count > 0:
+        null_pct = (null_count / len(df)) * 100
+        if null_pct > SCOUT_THRESHOLDS["NULL_DROP_PCT"]:
+            proposals.append({
+                "type": "Redundant Column", "column": col, "reason": f"{null_pct:.1f}% empty (Near-complete nullity)",
+                "rule_data": {"action": "drop_column", "column": col}
+            })
+        else:
+            proposals.append({
+                "type": "Null Check", "column": col, "reason": f"{null_pct:.1f}% missing values",
+                "rule_data": {"type": "Null Check", "col": col, "desc": f"{col} is NOT NULL"}
+            })
+    return proposals
+
+def _check_constant_column(df: pd.DataFrame, col: str) -> list[dict]:
+    """Identify columns with no variance (all values are the same)."""
+    proposals = []
+    if df[col].nunique() <= SCOUT_THRESHOLDS["CONSTANT_UNIQUE_MAX"]:
+        proposals.append({
+            "type": "Constant Value", "column": col, "reason": "Zero variance (all values are identical)",
+            "rule_data": {"action": "drop_column", "column": col}
+        })
+    return proposals
+
+def _check_numeric_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
+    """Analyze numeric columns for statistical properties like outliers and skewness."""
+    proposals = []
+    if pd.api.types.is_numeric_dtype(df[col]):
+        # Outlier Detection (IQR)
+        Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
+        IQR = Q3 - Q1
+        l, u = Q1 - SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR, Q3 + SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR
+        
+        # Use a mask for efficiency and clarity
+        outlier_mask = (df[col] < l) | (df[col] > u)
+        outliers = outlier_mask.sum()
+        
+        if outliers > 0:
+            proposals.append({
+                "type": "Range Check", "column": col, "reason": f"{outliers} statistical outliers detected",
+                "rule_data": {"type": "Range Check", "col": col, "min": float(l), "max": float(u), "desc": f"{col} within statistical bounds"}
+            })
+        
+        # Skewness Warning
+        skew = df[col].skew()
+        if abs(skew) > SCOUT_THRESHOLDS["HIGH_SKEWNESS_ABS"]:
+            proposals.append({
+                "type": "Distribution Warning", "column": col, "reason": f"High skewness ({skew:.2f}) detected",
+                "rule_data": {
+                    "type": "Informational",
+                    "desc": f"Distribution Warning for '{col}': skewness is {skew:.2f}"
+                }
+            })
+    return proposals
+
+def _check_string_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
+    """Analyze text-based columns for mixed types, high cardinality, and whitespace."""
+    proposals = []
+    if df[col].dtype == 'object' or pd.api.types.is_string_dtype(df[col]):
+        non_nulls = df[col].dropna()
+        if len(non_nulls) > 0:
+            # Mixed Type Detection
+            num_pct = pd.to_numeric(non_nulls, errors='coerce').notnull().mean()
+            if SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MIN"] <= num_pct < SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MAX"]:
+                proposals.append({
+                    "type": "Type Cast", "column": col, "reason": f"Mixed types ({num_pct:.1%} numeric values hidden in text)",
+                    "rule_data": {"action": "cast_type", "column": col, "dtype": "float64"}
+                })
+            
+            # High Cardinality Detection
+            unique_pct = (df[col].nunique() / len(df)) * 100
+            if unique_pct > SCOUT_THRESHOLDS["HIGH_CARDINALITY_PCT"]:
+                proposals.append({
+                    "type": "High Cardinality", "column": col, "reason": f"{df[col].nunique()} unique values ({unique_pct:.1f}% unique). Likely an ID or Name.",
+                    "rule_data": {
+                        "type": "Informational",
+                        "desc": f"High Cardinality warning for '{col}': {df[col].nunique()} unique values"
+                    }
+                })
+
+            # Whitespace Detection
+            if df[col].dtype == 'object':
+                has_whitespace = df[col].dropna().astype(str).str.contains(r"^\s+|\s+$").any()
+                if has_whitespace:
+                    proposals.append({
+                        "type": "Formatting Issue", "column": col, "reason": "Leading or trailing whitespace detected",
+                        "rule_data": {"action": "strip_whitespace", "column": col}
+                    })
+    return proposals
+
 def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
     """
     Automatically detects potential data quality issues in a DataFrame and proposes cleaning rules or transformations.
@@ -43,12 +137,7 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
                     - "column" (str): The name of the column affected.
                     - "reason" (str): A description of why the proposal was generated.
                     - "rule_data" (dict): A dictionary containing the details of the proposed
-                                          cleaning rule or action. The structure of `rule_data` varies by "type":
-                                          - For "Redundant Column" / "Constant Value": `{"action": "drop_column", "column": "col_name"}`
-                                          - For "Null Check": `{"type": "Null Check", "col": "col_name", "desc": "..."}`
-                                          - For "Range Check": `{"type": "Range Check", "col": "col_name", "min": val_min, "max": val_max, "desc": "..."}`
-                                          - For "Type Cast": `{"action": "cast_type", "column": "col_name", "dtype": "target_dtype"}`
-                                          - For "Distribution Warning" / "High Cardinality": `{"type": "Informational", "desc": "..."}`
+                                          cleaning rule or action.
     """
     proposals = []
     
@@ -60,87 +149,9 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
         if col in scanned_columns: 
             continue
         
-        # 1. NULL DETECTION: Identify and flag columns with a significant percentage of null values.
-        null_count = df[col].isnull().sum()
-        if null_count > 0:
-            null_pct = (null_count / len(df)) * 100
-            if null_pct > SCOUT_THRESHOLDS["NULL_DROP_PCT"]:
-                proposals.append({
-                    "type": "Redundant Column", "column": col, "reason": f"{null_pct:.1f}% empty (Near-complete nullity)",
-                    "rule_data": {"action": "drop_column", "column": col}
-                })
-            else:
-                proposals.append({
-                    "type": "Null Check", "column": col, "reason": f"{null_pct:.1f}% missing values",
-                    "rule_data": {"type": "Null Check", "col": col, "desc": f"{col} is NOT NULL"}
-                })
-            
-        # 2. CONSTANT COLUMN DETECTION: Identify columns with no variance (all values are the same).
-        if df[col].nunique() <= SCOUT_THRESHOLDS["CONSTANT_UNIQUE_MAX"]:
-            proposals.append({
-                "type": "Constant Value", "column": col, "reason": "Zero variance (all values are identical)",
-                "rule_data": {"action": "drop_column", "column": col}
-            })
-
-        # 3. NUMERIC DIAGNOSTICS: Analyze numeric columns for statistical properties like outliers and skewness.
-        if pd.api.types.is_numeric_dtype(df[col]):
-            # Outlier Detection (IQR)
-            Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
-            IQR = Q3 - Q1
-            l, u = Q1 - SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR, Q3 + SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR
-            
-            # Use a mask for efficiency and clarity
-            outlier_mask = (df[col] < l) | (df[col] > u)
-            outliers = outlier_mask.sum()
-            
-            if outliers > 0:
-                proposals.append({
-                    "type": "Range Check", "column": col, "reason": f"{outliers} statistical outliers detected",
-                    "rule_data": {"type": "Range Check", "col": col, "min": float(l), "max": float(u), "desc": f"{col} within statistical bounds"}
-                })
-            
-            # Skewness Warning
-            skew = df[col].skew()
-            if abs(skew) > SCOUT_THRESHOLDS["HIGH_SKEWNESS_ABS"]:
-                proposals.append({
-                    "type": "Distribution Warning", "column": col, "reason": f"High skewness ({skew:.2f}) detected",
-                    "rule_data": {
-                        "type": "Informational",
-                        "desc": f"Distribution Warning for '{col}': skewness is {skew:.2f}"
-                    }
-                })
-
-        # 4. OBJECT/TEXT DIAGNOSTICS: Analyze text-based columns for mixed types and high cardinality.
-        elif df[col].dtype == 'object' or pd.api.types.is_string_dtype(df[col]):
-            non_nulls = df[col].dropna()
-            if len(non_nulls) > 0:
-                # Mixed Type Detection
-                num_pct = pd.to_numeric(non_nulls, errors='coerce').notnull().mean()
-                if SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MIN"] <= num_pct < SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MAX"]:
-                    proposals.append({
-                        "type": "Type Cast", "column": col, "reason": f"Mixed types ({num_pct:.1%} numeric values hidden in text)",
-                        "rule_data": {"action": "cast_type", "column": col, "dtype": "float64"}
-                    })
-                
-                # High Cardinality Detection
-                unique_pct = (df[col].nunique() / len(df)) * 100
-                if unique_pct > SCOUT_THRESHOLDS["HIGH_CARDINALITY_PCT"]:
-                    proposals.append({
-                        "type": "High Cardinality", "column": col, "reason": f"{df[col].nunique()} unique values ({unique_pct:.1f}% unique). Likely an ID or Name.",
-                        "rule_data": {
-                            "type": "Informational",
-                            "desc": f"High Cardinality warning for '{col}': {df[col].nunique()} unique values"
-                        }
-                    })
-
-                # Whitespace Detection
-                # Check if any values have leading or trailing whitespace.
-                if df[col].dtype == 'object':
-                    has_whitespace = df[col].dropna().astype(str).str.contains(r"^\s+|\s+$").any()
-                    if has_whitespace:
-                        proposals.append({
-                            "type": "Formatting Issue", "column": col, "reason": "Leading or trailing whitespace detected",
-                            "rule_data": {"action": "strip_whitespace", "column": col}
-                        })
+        proposals.extend(_check_null_values(df, col))
+        proposals.extend(_check_constant_column(df, col))
+        proposals.extend(_check_numeric_diagnostics(df, col))
+        proposals.extend(_check_string_diagnostics(df, col))
                     
     return proposals

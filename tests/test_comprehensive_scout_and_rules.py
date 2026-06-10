@@ -175,9 +175,30 @@ def test_comprehensive_code_generation():
     pd.testing.assert_frame_equal(df_clean, df_generated)
     print("Comprehensive code generation compilation and equality tests passed.")
 
+def test_rule_resolution_mapping():
+    from rule_utils import create_resolution_step
+    
+    # 1. Null Check resolutions
+    rule_null = {"type": "Null Check", "col": "age"}
+    assert create_resolution_step(rule_null, "Drop Rows") == {"action": "drop_nulls", "column": "age"}
+    assert create_resolution_step(rule_null, "KNN Imputer") == {"action": "fill_null", "column": "age", "value": "knn"}
+    assert create_resolution_step(rule_null, "Fill with Mean") == {"action": "fill_null", "column": "age", "value": "mean"}
+    
+    # 2. Range Check resolutions
+    rule_range = {"type": "Range Check", "col": "salary", "min": 1000, "max": 5000}
+    assert create_resolution_step(rule_range, "Drop Rows") == {"action": "drop_violated", "rule": rule_range}
+    assert create_resolution_step(rule_range, "Log Transform") == {"action": "log_transform", "column": "salary"}
+    assert create_resolution_step(rule_range, "Cap at Bounds") == {"action": "cap_range", "column": "salary", "min": 1000, "max": 5000}
+    
+    # 3. Default fallback resolutions
+    rule_rel = {"type": "Relational Check", "col_a": "A", "op": ">", "col_b": "B"}
+    assert create_resolution_step(rule_rel, "Drop Violated Rows") == {"action": "drop_violated", "rule": rule_rel}
+    print("Rule resolution mapping tests passed.")
+
 if __name__ == "__main__":
     test_scout_heuristics()
     test_rule_evaluator_edge_cases()
     test_engine_warnings_and_errors()
     test_comprehensive_code_generation()
+    test_rule_resolution_mapping()
     print("ALL COMPREHENSIVE SCOUT, RULE, AND ENGINE TESTS PASSED")

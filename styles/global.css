@@ -52,7 +52,7 @@ svg, svg * {
     margin-bottom: 10px;
 }
 
-/* Subtle Violation Card */
+/* Base Violation Card */
 .violation-card {
     padding: 10px 0;
     padding-right: 20px;
@@ -326,3 +326,55 @@ svg, svg * {
     100% { transform: rotate(360deg); }
 }
 
+/* ============================================================
+   NEW REFACTORED ELEMENT CLASSES - MOVED OUT OF PYTHON CODE
+   ============================================================ */
+
+/* Metric Cards inside Diagnostics Tab */
+.diagnostic-metric {
+    border-left: 3px solid rgba(28, 131, 225, 0.5);
+    padding: 2px 8px;
+    margin-bottom: 10px;
+}
+.diagnostic-metric-label {
+    font-size: 1.25rem;
+    line-height: 2;
+    margin-bottom: 3px;
+    font-weight: 400;
+}
+.diagnostic-metric-value {
+    font-size: 1.0rem;
+    font-weight: 500;
+    line-height: 1;
+    opacity: 0.75;
+}
+
+/* Rulebook Active Rules Violation Card */
+.violation-card.disabled {
+    opacity: 0.5;
+}
+.violation-card-border {
+    padding-left: 15px;
+}
+.violation-card.disabled .rule-type,
+.violation-card.disabled .rule-desc {
+    text-decoration: line-through !important;
+    opacity: 0.5 !important;
+}
+.rule-desc {
+    color: #4F8BF9;
+}
+.rule-violations-count {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+.rule-status-resolved {
+    color: #2ecc71;
+    font-size: 0.85em;
+    font-weight: bold;
+}
+.rule-error-msg {
+    color: #e74c3c;
+    font-size: 0.85em;
+    font-weight: bold;
+}
