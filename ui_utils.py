@@ -1,4 +1,7 @@
 import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 from pathlib import Path
 from rule_utils import evaluate_rule
 
@@ -75,3 +78,90 @@ def get_heatmap_styles(df_d: pd.DataFrame, rules: list) -> tuple[pd.DataFrame, l
             messages.append(f"Heatmap Style Error ({r.get('desc', 'N/A')}): {str(e)}")
             continue
     return sdf, messages
+
+def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
+    """Computes features' correlation matrix and plots a filtered heatmap."""
+    numeric_df = df.select_dtypes(include=[np.number])
+    if len(numeric_df.columns) > 1:
+        corr_matrix = numeric_df.corr()
+        corr_matrix_no_diag = corr_matrix.copy()
+        np.fill_diagonal(corr_matrix_no_diag.values, np.nan)
+        in_range_mask = (corr_matrix_no_diag >= corr_range[0]) & (corr_matrix_no_diag <= corr_range[1])
+        correlated_cols = corr_matrix_no_diag.columns[in_range_mask.any()].tolist()
+
+        if len(correlated_cols) > 1:
+            filtered_corr = corr_matrix.loc[correlated_cols, correlated_cols]
+            fig = px.imshow(
+                filtered_corr,
+                text_auto=".2f",
+                aspect="auto",
+                color_continuous_scale='RdBu_r',
+                range_color=[-1, 1]
+            )
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10))
+            return fig
+    return None
+
+def plot_missingness_map(df: pd.DataFrame) -> tuple:
+    """Generates a binary missingness pattern map representation."""
+    if df.size > 0:
+        null_mask = df.isnull().astype(int)
+        if null_mask.sum().sum() > 0:
+            vis_df = null_mask
+            is_sampled = len(vis_df) > 1000
+            if is_sampled:
+                vis_df = vis_df.sample(1000, random_state=42).sort_index()
+
+            fig = px.imshow(
+                vis_df,
+                aspect="auto",
+                color_continuous_scale=[[0, "#2c3e50"], [0.5, "#2c3e50"], [0.5, "#e74c3c"], [1, "#e74c3c"]],
+                labels=dict(x="Columns", y="Row Index", color="Status")
+            )
+            fig.update_layout(
+                coloraxis_colorbar=dict(
+                    title="Status",
+                    tickvals=[0.25, 0.75],
+                    ticktext=["Present", "Missing"]
+                ),
+                margin=dict(t=10, b=10, l=10, r=10),
+                yaxis_title="Row Index"
+            )
+            return fig, is_sampled
+    return None, False
+
+def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
+    """Computes column Z-scores and plots comparative outlier box plots."""
+    numeric_df = df.select_dtypes(include=[np.number])
+    if len(numeric_df.columns) > 0:
+        z_scored_df = pd.DataFrame()
+        for col in numeric_df.columns:
+            col_std = numeric_df[col].std()
+            if col_std > 0:
+                z_scored_df[col] = (numeric_df[col] - numeric_df[col].mean()) / col_std
+            else:
+                z_scored_df[col] = 0.0
+
+        is_sampled = len(z_scored_df) > 1000
+        plot_z_df = z_scored_df
+        if is_sampled:
+            plot_z_df = plot_z_df.sample(1000, random_state=42)
+
+        melted_z = plot_z_df.melt(var_name="Feature", value_name="Standardized Value")
+
+        fig = px.box(
+            melted_z,
+            x="Standardized Value",
+            y="Feature",
+            color="Feature",
+            height=max(200, 50 * len(numeric_df.columns)),
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig.update_layout(
+            hovermode="closest",
+            showlegend=False,
+            margin=dict(t=10, b=10, l=10, r=10),
+            xaxis_title="Standardized Value (Z-Score)"
+        )
+        return fig, is_sampled
+    return None, False

@@ -127,34 +127,22 @@ def render_diagnostics_tab(df):
                             """, unsafe_allow_html=True)
 
 def render_insights_tab(df):
+    from ui_utils import plot_correlation_matrix, plot_missingness_map, plot_outlier_distribution
+
     # 1. Filtered Correlation Heatmap
     st.markdown("### Feature Correlation")
     st.markdown("Shows relationships between numeric columns. Features without any correlation within the selected range are filtered out.")
     corr_range = st.slider("Correlation Range", -1.0, 1.0, (-1.0, 1.0), 0.05, key="corr_range_val")
 
-    numeric_df = df.select_dtypes(include=[np.number])
-    if len(numeric_df.columns) > 1:
-        corr_matrix = numeric_df.corr()
-        corr_matrix_no_diag = corr_matrix.copy()
-        np.fill_diagonal(corr_matrix_no_diag.values, np.nan)
-        in_range_mask = (corr_matrix_no_diag >= corr_range[0]) & (corr_matrix_no_diag <= corr_range[1])
-        correlated_cols = corr_matrix_no_diag.columns[in_range_mask.any()].tolist()
-
-        if len(correlated_cols) > 1:
-            filtered_corr = corr_matrix.loc[correlated_cols, correlated_cols]
-            fig_corr = px.imshow(
-                filtered_corr,
-                text_auto=".2f",
-                aspect="auto",
-                color_continuous_scale='RdBu_r',
-                range_color=[-1, 1]
-            )
-            fig_corr.update_layout(margin=dict(t=10, b=10, l=10, r=10))
-            st.plotly_chart(fig_corr, width="stretch", theme="streamlit")
+    fig_corr = plot_correlation_matrix(df, corr_range)
+    if fig_corr is not None:
+        st.plotly_chart(fig_corr, width="stretch", theme="streamlit")
+    else:
+        numeric_df = df.select_dtypes(include=[np.number])
+        if len(numeric_df.columns) <= 1:
+            st.caption("Not enough numeric columns for correlation matrix.")
         else:
             st.info("No numeric columns have correlation within the selected range.")
-    else:
-        st.caption("Not enough numeric columns for correlation matrix.")
 
     st.divider()
 
@@ -162,35 +150,16 @@ def render_insights_tab(df):
     st.markdown("### Missingness Pattern Map")
     st.markdown("Visualizes where missing values occur across the rows of the dataset.")
 
-    if df.size > 0:
-        null_mask = df.isnull().astype(int)
-
-        if null_mask.sum().sum() > 0:
-            vis_df = null_mask
-            if len(vis_df) > 1000:
-                st.caption("Showing a representative sample of 1,000 rows for rendering performance.")
-                vis_df = vis_df.sample(1000, random_state=42).sort_index()
-
-            fig_null = px.imshow(
-                vis_df,
-                aspect="auto",
-                color_continuous_scale=[[0, "#2c3e50"], [0.5, "#2c3e50"], [0.5, "#e74c3c"], [1, "#e74c3c"]],
-                labels=dict(x="Columns", y="Row Index", color="Status")
-            )
-            fig_null.update_layout(
-                coloraxis_colorbar=dict(
-                    title="Status",
-                    tickvals=[0.25, 0.75],
-                    ticktext=["Present", "Missing"]
-                ),
-                margin=dict(t=10, b=10, l=10, r=10),
-                yaxis_title="Row Index"
-            )
-            st.plotly_chart(fig_null, width="stretch", theme="streamlit")
-        else:
-            st.success("🎉 No missing values found in the dataset!")
+    fig_null, is_null_sampled = plot_missingness_map(df)
+    if fig_null is not None:
+        st.plotly_chart(fig_null, width="stretch", theme="streamlit")
+        if is_null_sampled:
+            st.caption("Showing a representative sample of 1,000 rows for rendering performance.")
     else:
-        st.caption("Dataset is empty.")
+        if df.size > 0:
+            st.success("🎉 No missing values found in the dataset!")
+        else:
+            st.caption("Dataset is empty.")
 
     st.divider()
 
@@ -198,40 +167,11 @@ def render_insights_tab(df):
     st.markdown("### Global Outlier Distribution")
     st.markdown("Compares distributions of all numeric features on a single box plot visualization to highlight outliers.")
 
-    if len(numeric_df.columns) > 0:
+    fig_outliers, is_outliers_sampled = plot_outlier_distribution(df)
+    if fig_outliers is not None:
         st.markdown("*Note: Features are standardized to Z-scores (mean=0, std=1) to allow direct visual comparison across different scales.*")
-        z_scored_df = pd.DataFrame()
-        for col in numeric_df.columns:
-            col_std = numeric_df[col].std()
-            if col_std > 0:
-                z_scored_df[col] = (numeric_df[col] - numeric_df[col].mean()) / col_std
-            else:
-                z_scored_df[col] = 0.0
-
-        # Downsample for Plotly rendering performance
-        plot_z_df = z_scored_df
-        is_sampled = len(plot_z_df) > 1000
-        if is_sampled:
-            plot_z_df = plot_z_df.sample(1000, random_state=42)
-
-        melted_z = plot_z_df.melt(var_name="Feature", value_name="Standardized Value")
-
-        fig_outliers = px.box(
-            melted_z,
-            x="Standardized Value",
-            y="Feature",
-            color="Feature",
-            height=max(200, 50 * len(numeric_df.columns)),
-            color_discrete_sequence=px.colors.qualitative.Pastel
-        )
-        fig_outliers.update_layout(
-            hovermode="closest",
-            showlegend=False,
-            margin=dict(t=10, b=10, l=10, r=10),
-            xaxis_title="Standardized Value (Z-Score)"
-        )
         st.plotly_chart(fig_outliers, width="stretch", theme="streamlit")
-        if is_sampled:
+        if is_outliers_sampled:
             st.caption("Showing representative sample of 1,000 rows for rendering performance.")
     else:
         st.caption("No numeric features to display outliers.")
