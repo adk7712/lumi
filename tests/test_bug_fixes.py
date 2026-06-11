@@ -347,6 +347,8 @@ def test_notebook_export():
 def test_evidence_report_generation():
     """Verify that generate_evidence_report correctly identifies violations, handles exceptions, and formats the output Markdown."""
     from rule_utils import generate_evidence_report
+    import streamlit as st
+    import unittest.mock as mock
     
     df = pd.DataFrame({
         'age': [25, np.nan, 30, 45, 12],
@@ -360,7 +362,19 @@ def test_evidence_report_generation():
         {'desc': 'informational check', 'type': 'Informational', 'enabled': True}
     ]
     
-    report_md = generate_evidence_report(df, rules)
+    # Mock Streamlit session state and runtime
+    with mock.patch("streamlit.runtime.exists", return_value=True):
+        st.session_state.intermediate_states = [
+            ("Original Data", 80, len(df), df.copy()),
+            ("Final Cleaned", 100, len(df), df.copy())
+        ]
+        st.session_state.cleaning_recipe = [
+            {"action": "drop_column", "column": "redundant"},
+            {"action": "rename_column", "column": "old", "value": "new"}
+        ]
+        
+        report_md = generate_evidence_report(df, rules)
+        
     assert report_md is not None
     
     # Assert report header and totals
@@ -368,6 +382,16 @@ def test_evidence_report_generation():
     assert "Total Rows Evaluated: 5" in report_md
     assert "Total Active Rules: 4" in report_md
     assert "Total Rule Violations: 2" in report_md  # age null (1) + score nan/null (1) = 2
+    
+    # Assert metrics block
+    assert "## Data Cleaning Impact Metrics" in report_md
+    assert "| Metric | Original Dataset | Cleaned Dataset | Change |" in report_md
+    assert "Dimensions" in report_md
+    
+    # Assert lineage block
+    assert "## Data Lineage & Audit Log" in report_md
+    assert "Dropped column `redundant`" in report_md
+    assert "Renamed column `old` to `new`" in report_md
     
     # Assert table contents
     assert "| Null Check | `age is NOT NULL` | FAILED | 1 |" in report_md
