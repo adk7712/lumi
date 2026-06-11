@@ -143,17 +143,15 @@ def render_rulebook_tab(df):
                     error_html = f'<br/><span class="rule-error-msg">⚠️ Error: {rule.get("error")}</span>' if 'error' in rule else ""
 
                     v_text = f"Violations: {v_count}" if rule['type'] != "Informational" else "Type: Info"
-                    st.markdown(f"""
-                    <div class="violation-card {enabled_class}">
-                        <div class="violation-card-border" style="border-left: 8px solid {status_color};">
-                            <strong class="rule-type">{rule["type"]}</strong><br/>
-                            <code class="rule-desc">{rule["desc"]}</code><br/>
-                            <span class="rule-violations-count">{v_text}</span>
-                            {resolved_html}
-                            {error_html}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f"""<div class="violation-card {enabled_class}">
+<div class="violation-card-border" style="border-left: 8px solid {status_color};">
+<strong class="rule-type">{rule["type"]}</strong><br/>
+<code class="rule-desc">{rule["desc"]}</code><br/>
+<span class="rule-violations-count">{v_text}</span>
+{resolved_html}
+{error_html}
+</div>
+</div>""", unsafe_allow_html=True)
 
                     if v_count > 0 and not resolved and rule['type'] != "Informational":
                         if rule['type'] == "Null Check":
