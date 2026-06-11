@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from engine import generate_pipeline_code
+from engine import generate_pipeline_code, generate_notebook_code
 
 def render_pipeline_preview_tab(df):
     v = st.radio("Mode", ["Raw Data (Before)", "Cleaned Data (After)", "Python Code"], horizontal=True, key="p_mode")
@@ -24,5 +24,9 @@ def render_pipeline_preview_tab(df):
             d_col2.error(f"Error generating Excel file: {str(e)}")
     else:
         code_output = generate_pipeline_code(st.session_state.cleaning_recipe, st.session_state.rules)
+        notebook_output = generate_notebook_code(st.session_state.cleaning_recipe, st.session_state.rules)
         st.code(code_output, language="python")
-        st.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", width="stretch", key="download_pipeline_btn")
+        
+        c1, c2 = st.columns(2)
+        c1.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", use_container_width=True, key="download_pipeline_btn")
+        c2.download_button("Download clean_data.ipynb", notebook_output, "clean_data.ipynb", "application/x-ipynb+json", use_container_width=True, key="download_notebook_btn")

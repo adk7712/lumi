@@ -293,6 +293,57 @@ def test_datetime_feature_extraction():
     print("test_datetime_feature_extraction passed.")
 
 
+def test_notebook_export():
+    """Verify that generate_notebook_code produces a valid JSON structure representing a Jupyter Notebook."""
+    import json
+    from codegen import generate_notebook_code
+    
+    recipe = [
+        {'action': 'drop_column', 'column': 'unused'}
+    ]
+    rules = [
+        {'col': 'age', 'desc': 'age is not null', 'type': 'Null Check', 'enabled': True}
+    ]
+    
+    nb_str = generate_notebook_code(recipe, rules)
+    assert nb_str is not None
+    
+    # Verify it is valid JSON
+    data = json.loads(nb_str)
+    
+    # Check top-level keys
+    assert 'cells' in data
+    assert 'metadata' in data
+    assert data['nbformat'] == 4
+    
+    cells = data['cells']
+    assert len(cells) == 5
+    
+    # Cell 0: Markdown overview
+    assert cells[0]['cell_type'] == 'markdown'
+    assert any("Lumi Data Cleaning" in line for line in cells[0]['source'])
+    
+    # Cell 1: Imports
+    assert cells[1]['cell_type'] == 'code'
+    assert any("import pandas" in line for line in cells[1]['source'])
+    
+    # Cell 2: clean_data
+    assert cells[2]['cell_type'] == 'code'
+    assert any("def clean_data" in line for line in cells[2]['source'])
+    assert any("drop(columns=['unused'])" in line for line in cells[2]['source'])
+    
+    # Cell 3: validate_data
+    assert cells[3]['cell_type'] == 'code'
+    assert any("def validate_data" in line for line in cells[3]['source'])
+    assert any("age" in line for line in cells[3]['source'])
+    
+    # Cell 4: Example usage
+    assert cells[4]['cell_type'] == 'code'
+    assert any("Example Usage" in line for line in cells[4]['source'])
+    
+    print("test_notebook_export passed.")
+
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
@@ -307,6 +358,7 @@ if __name__ == "__main__":
         test_sync_column_rename()
         test_render_loading_spinner()
         test_datetime_feature_extraction()
+        test_notebook_export()
         print("ALL BUG FIX TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")
