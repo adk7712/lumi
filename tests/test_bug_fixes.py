@@ -344,6 +344,50 @@ def test_notebook_export():
     print("test_notebook_export passed.")
 
 
+def test_evidence_report_generation():
+    """Verify that generate_evidence_report correctly identifies violations, handles exceptions, and formats the output Markdown."""
+    from rule_utils import generate_evidence_report
+    
+    df = pd.DataFrame({
+        'age': [25, np.nan, 30, 45, 12],
+        'score': [90, 80, 70, 60, np.nan]
+    })
+    
+    rules = [
+        {'col': 'age', 'desc': 'age is NOT NULL', 'type': 'Null Check', 'enabled': True},
+        {'col': 'score', 'min': 0.0, 'max': 100.0, 'desc': 'score in [0.0, 100.0]', 'type': 'Range Check', 'enabled': True},
+        {'col': 'nonexistent', 'desc': 'fails check', 'type': 'Null Check', 'enabled': True}, # This should trigger an ERROR status
+        {'desc': 'informational check', 'type': 'Informational', 'enabled': True}
+    ]
+    
+    report_md = generate_evidence_report(df, rules)
+    assert report_md is not None
+    
+    # Assert report header and totals
+    assert "# LUMI - Data Validation Evidence Report" in report_md
+    assert "Total Rows Evaluated: 5" in report_md
+    assert "Total Active Rules: 4" in report_md
+    assert "Total Rule Violations: 2" in report_md  # age null (1) + score nan/null (1) = 2
+    
+    # Assert table contents
+    assert "| Null Check | `age is NOT NULL` | FAILED | 1 |" in report_md
+    assert "| Range Check | `score in [0.0, 100.0]` | FAILED | 1 |" in report_md
+    assert "| Null Check | `fails check` | ERROR | 0 |" in report_md
+    assert "| Informational | `informational check` | INFO | N/A |" in report_md
+    
+    # Assert violation details
+    assert "### ❌ Null Check: `age is NOT NULL`" in report_md
+    assert "* **Violation Count:** 1" in report_md
+    assert "* **Violating Row Indices:** `[1]`" in report_md
+    
+    # Assert error trace is handled gracefully
+    assert "### ⚠️ Null Check: `fails check`" in report_md
+    assert "* **Status:** Evaluation Error" in report_md
+    assert "KeyError" in report_md or "ValueError" in report_md
+    
+    print("test_evidence_report_generation passed.")
+
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
@@ -359,6 +403,7 @@ if __name__ == "__main__":
         test_render_loading_spinner()
         test_datetime_feature_extraction()
         test_notebook_export()
+        test_evidence_report_generation()
         print("ALL BUG FIX TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")

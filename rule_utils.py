@@ -90,3 +90,88 @@ def create_resolution_step(rule: dict, method: str) -> dict:
         # Default fallback for other rule types (e.g. Relational Check, Custom Expression)
         # where the only method is "Drop Violated Rows"
         return {"action": "drop_violated", "rule": rule}
+
+
+def generate_evidence_report(df: pd.DataFrame, rules: list) -> str:
+    """
+    Generates a Markdown evidence report summarizing active rule evaluations.
+    """
+    import datetime
+    
+    total_rows = len(df)
+    active_rules = [r for r in rules if r.get('enabled', True)]
+    total_rules = len(active_rules)
+    
+    # Pre-evaluate rules and calculate violations
+    violations_summary = []
+    total_violations = 0
+    
+    for r in active_rules:
+        r_type = r['type']
+        desc = r['desc']
+        status = "PASSED"
+        count = 0
+        indices = []
+        error_msg = None
+        
+        if r_type != "Informational":
+            try:
+                mask = evaluate_rule(df, r)
+                count = mask.sum()
+                if count > 0:
+                    status = "FAILED"
+                    total_violations += count
+                    # Get index of violating rows (limit to first 100 for report size protection)
+                    indices = df.index[mask].tolist()[:100]
+            except Exception as e:
+                status = "ERROR"
+                error_msg = str(e)
+        else:
+            status = "INFO"
+            
+        violations_summary.append({
+            'rule': r,
+            'type': r_type,
+            'desc': desc,
+            'status': status,
+            'count': count,
+            'indices': indices,
+            'error': error_msg
+        })
+        
+    report = []
+    report.append("# LUMI - Data Validation Evidence Report\n")
+    report.append(f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report.append(f"Total Rows Evaluated: {total_rows}")
+    report.append(f"Total Active Rules: {total_rules}")
+    report.append(f"Total Rule Violations: {total_violations}\n")
+    
+    report.append("## Rule Evaluation Summary\n")
+    report.append("| Rule Type | Description | Status | Violation Count |")
+    report.append("| :--- | :--- | :--- | :--- |")
+    for s in violations_summary:
+        report.append(f"| {s['type']} | `{s['desc']}` | {s['status']} | {s['count'] if s['type'] != 'Informational' else 'N/A'} |")
+    report.append("\n")
+    
+    # Detail violations
+    has_details = any(s['count'] > 0 or s['status'] == "ERROR" for s in violations_summary if s['type'] != "Informational")
+    if has_details:
+        report.append("## Violation Details\n")
+        for s in violations_summary:
+            if s['type'] == "Informational":
+                continue
+            if s['status'] == "FAILED":
+                report.append(f"### ❌ {s['type']}: `{s['desc']}`")
+                report.append(f"* **Violation Count:** {s['count']}")
+                idx_str = ", ".join(map(str, s['indices']))
+                if s['count'] > 100:
+                    idx_str += ", ... (truncated)"
+                report.append(f"* **Violating Row Indices:** `[{idx_str}]`")
+                report.append("")
+            elif s['status'] == "ERROR":
+                report.append(f"### ⚠️ {s['type']}: `{s['desc']}`")
+                report.append(f"* **Status:** Evaluation Error")
+                report.append(f"* **Error Message:** `{s['error']}`")
+                report.append("")
+                
+    return "\n".join(report)

@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from state_manager import add_step
-from rule_utils import evaluate_rule, create_resolution_step
+from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
 from ui_utils import get_safe_hue
 
 def render_rulebook_tab(df):
@@ -107,11 +107,21 @@ def render_rulebook_tab(df):
                     st.session_state.rules.insert(0, {"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
                     st.rerun()
     with r2:
-        rh1, rh2 = st.columns([2, 1], vertical_alignment="bottom")
-        rh1.subheader("Active Rules")
-        if st.session_state.rules and rh2.button("Clear All", width="stretch", key="clear_all_rules_btn"):
-            st.session_state.rules, st.session_state.cleaning_recipe = [], []
-            st.rerun()
+        st.subheader("Active Rules")
+        if st.session_state.rules:
+            btn_col1, btn_col2 = st.columns(2)
+            report_content = generate_evidence_report(df, st.session_state.rules)
+            btn_col1.download_button(
+                label="Download Evidence Report",
+                data=report_content,
+                file_name="evidence_report.md",
+                mime="text/markdown",
+                use_container_width=True,
+                key="download_evidence_report_btn"
+            )
+            if btn_col2.button("Clear All", use_container_width=True, key="clear_all_rules_btn"):
+                st.session_state.rules, st.session_state.cleaning_recipe = [], []
+                st.rerun()
 
         if not st.session_state.rules:
             st.info("Add a rule from the left panel")
