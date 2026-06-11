@@ -74,29 +74,29 @@ st.divider()
 df = st.session_state.intermediate_states[-1][3]
 
 # --- TABS ---
-tab1, tab2, tab_insights, tab3, tab4, tab5, tab6 = st.tabs([
+tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs([
     "Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"
 ])
 
-with tab1:
+with tab_overview:
     render_overview_tab(df)
 
-with tab2:
+with tab_diagnostics:
     render_diagnostics_tab(df)
 
 with tab_insights:
     render_insights_tab(df)
 
-with tab3:
+with tab_rulebook:
     render_rulebook_tab(df)
 
-with tab4:
+with tab_transformations:
     render_transformations_tab(df)
 
-with tab5:
+with tab_audit:
     render_audit_log_tab()
 
-with tab6:
+with tab_pipeline:
     render_pipeline_preview_tab(df)
 
 # Bottom violation browser
