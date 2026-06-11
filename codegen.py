@@ -146,6 +146,12 @@ def generate_pipeline_code(recipe: list, rules: list = None) -> str:
                 new_order = step['value']
                 code.append(f"    # Reorder columns to the specified layout.")
                 code.append(f"    df = df[{repr(new_order)}]")
+            elif action == "extract_datetime":
+                new_col = step['new_column']
+                component = step['component']
+                accessor = f"dt.{component}" if component != "day_of_week" else "dt.day_name()"
+                code.append(f"    # Extract {component} component from '{col}' into '{new_col}'.")
+                code.append(f"    df['{new_col}'] = pd.to_datetime(df['{col}']).{accessor}")
     code.append("    return df")
 
     # Generate validation logic

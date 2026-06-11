@@ -215,6 +215,84 @@ def test_render_loading_spinner():
     print("render_loading_spinner test passed.")
 
 
+def test_datetime_feature_extraction():
+    """Verify that extract_datetime correctly extracts components (year, month, day, day_of_week, hour) and integrates with codegen."""
+    from engine import apply_recipe
+    from codegen import generate_pipeline_code
+    
+    # Create test DataFrame
+    df = pd.DataFrame({
+        'timestamp': [
+            '2026-06-11 14:30:00',
+            '2025-12-25 08:15:00',
+            '2024-01-01 00:00:00'
+        ]
+    })
+    
+    # Year, month, day, day of week, hour extractions
+    recipe = [
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_year',
+            'component': 'year'
+        },
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_month',
+            'component': 'month'
+        },
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_day',
+            'component': 'day'
+        },
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_day_name',
+            'component': 'day_of_week'
+        },
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_hour',
+            'component': 'hour'
+        }
+    ]
+    
+    df_cleaned, msgs = apply_recipe(df.copy(), recipe)
+    assert len(msgs) == 0
+    
+    # Verify outputs
+    assert df_cleaned['timestamp_year'].tolist() == [2026, 2025, 2024]
+    assert df_cleaned['timestamp_month'].tolist() == [6, 12, 1]
+    assert df_cleaned['timestamp_day'].tolist() == [11, 25, 1]
+    assert df_cleaned['timestamp_day_name'].tolist() == ['Thursday', 'Thursday', 'Monday']
+    assert df_cleaned['timestamp_hour'].tolist() == [14, 8, 0]
+    
+    # Test codegen compilation and run
+    code_str = generate_pipeline_code(recipe)
+    
+    # Execute the generated code
+    namespace = {}
+    exec(code_str, namespace)
+    
+    clean_func = namespace['clean_data']
+    df_gen_cleaned = clean_func(df.copy())
+    
+    # Verify generated function has same result
+    assert df_gen_cleaned['timestamp_year'].tolist() == [2026, 2025, 2024]
+    assert df_gen_cleaned['timestamp_month'].tolist() == [6, 12, 1]
+    assert df_gen_cleaned['timestamp_day'].tolist() == [11, 25, 1]
+    assert df_gen_cleaned['timestamp_day_name'].tolist() == ['Thursday', 'Thursday', 'Monday']
+    assert df_gen_cleaned['timestamp_hour'].tolist() == [14, 8, 0]
+    
+    print("test_datetime_feature_extraction passed.")
+
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
@@ -228,6 +306,7 @@ if __name__ == "__main__":
         test_get_column_dependencies()
         test_sync_column_rename()
         test_render_loading_spinner()
+        test_datetime_feature_extraction()
         print("ALL BUG FIX TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")

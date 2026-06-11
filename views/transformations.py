@@ -1,11 +1,12 @@
 import streamlit as st
+import pandas as pd
 from state_manager import add_step, get_column_dependencies, sync_column_rename
 from streamlit_sortables import sort_items
 from ui_utils import load_style, render_loading_spinner
 
 def render_transformations_tab(df):
     all_cols = df.columns.tolist()
-    t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace", "Rename Column", "Reorder Columns"], key="trans_type_select")
+    t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace", "Rename Column", "Reorder Columns", "Extract Datetime"], key="trans_type_select")
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
         sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
@@ -81,3 +82,33 @@ def render_transformations_tab(df):
             add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
             st.session_state.show_reorder_success = True
             st.rerun()
+    elif t_type == "Extract Datetime":
+        datetime_cols = [c for c in all_cols if pd.api.types.is_datetime64_any_dtype(df[c])]
+        
+        if not datetime_cols:
+            st.warning("⚠️ No datetime columns detected in the active dataset. Convert a column using 'Cast Data Type' to 'datetime64[ns]' first, or select any column to coerce.")
+            target_cols = all_cols
+        else:
+            target_cols = datetime_cols
+            
+        c1, c2 = st.columns(2)
+        target = c1.selectbox("Source Column", target_cols, key="datetime_extract_col")
+        component = c2.selectbox("Component to Extract", ["year", "month", "day", "day_of_week", "hour"], key="datetime_component_select")
+        
+        # Default name helper: {target}_{component}
+        default_new_name = f"{target}_{component}" if target else f"extracted_{component}"
+        new_name = st.text_input("New Column Name", value=default_new_name, key="datetime_new_col_name")
+        
+        if st.button("Add Step", key="btn_extract_datetime"):
+            if not new_name.strip():
+                st.error("New column name cannot be empty")
+            elif new_name in all_cols:
+                st.error(f"A column named '{new_name}' already exists.")
+            else:
+                add_step({
+                    "action": "extract_datetime",
+                    "column": target,
+                    "new_column": new_name,
+                    "component": component
+                })
+                st.rerun()

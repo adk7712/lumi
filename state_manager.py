@@ -94,6 +94,9 @@ def initialize_state(from_reset=False):
         'rel_val_input': "",
         'info_note_input': "",
         'show_reorder_success': False,
+        'datetime_extract_col': first_col,
+        'datetime_component_select': "year",
+        'datetime_new_col_name': "",
     }
 
     # Force reset or initialize for the first time
