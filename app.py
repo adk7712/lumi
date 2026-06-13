@@ -70,6 +70,11 @@ with h_col3: # Column for reset button
 
 st.divider()
 
+# Welcome view if no data is loaded yet
+if st.session_state.raw_data is None:
+    st.info("👋 Welcome to Lumi! Please upload a CSV or Excel file in the header to start cleaning and validating your data.")
+    st.stop()
+
 # Get the latest dataframe from cache
 df = st.session_state.intermediate_states[-1][3]
 
