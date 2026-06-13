@@ -4,9 +4,13 @@
 /* --- Hidden Streamlit Elements --- */
 header,
 [data-testid="stHeaderActionElements"],
-.stMarkdown a,
-[data-testid="stFileUploaderDropzoneInstructions"],
-[data-testid="stFileUploader"] small {
+.stMarkdown a {
+    display: none !important;
+}
+
+/* Hide instructions and small text only for the header uploader */
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploaderDropzoneInstructions"],
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] small {
     display: none !important;
 }
 
@@ -95,14 +99,14 @@ svg, svg * {
 }
 
 /* --- UPLOAD BUTTON FIX --- */
-[data-testid="stFileUploader"] {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] {
     padding: 0 !important;
     width: 100% !important;
 }
-[data-testid="stFileUploader"] > div,
-[data-testid="stFileUploader"] section,
-[data-testid="stFileUploaderDropzone"],
-[data-testid="stFileDropzone"] {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] > div,
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] section,
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploaderDropzone"],
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileDropzone"] {
     padding: 0 !important;
     margin: 0 !important;
     min-height: 0 !important;
@@ -113,7 +117,7 @@ svg, svg * {
     justify-content: stretch !important;
     width: 100% !important;
 }
-[data-testid="stFileUploader"] button {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] button {
     width: 100% !important;
     height: 38px !important;
     margin: 0 !important;
@@ -123,23 +127,16 @@ svg, svg * {
     justify-content: center !important;
     border-radius: 6px !important;
 }
-[data-testid="stFileUploader"] button > * {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] button > * {
     display: none !important;
 }
-[data-testid="stFileUploader"] button::before {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] button::before {
     content: "Upload Dataset" !important;
     visibility: visible !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     border-radius: 6px !important;
-}
-[data-testid="stFileUploader"] button::before {
-    content: "Upload Dataset" !important;
-    visibility: visible !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
     width: 100% !important;
     height: 100% !important;
     font-size: 14px !important;
@@ -379,76 +376,321 @@ svg, svg * {
     font-weight: bold;
 }
 
-/* --- Welcome Page Styles --- */
+/* ============================================
+   WELCOME PAGE — Premium Landing Experience
+   ============================================ */
+
+/* --- Animated Background Orbs --- */
+@keyframes orb-float-1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -40px) scale(1.1); }
+    66% { transform: translate(-20px, 20px) scale(0.95); }
+}
+@keyframes orb-float-2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(-40px, 30px) scale(1.05); }
+    66% { transform: translate(25px, -25px) scale(0.9); }
+}
+@keyframes orb-float-3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(20px, 30px) scale(1.15); }
+    66% { transform: translate(-30px, -20px) scale(0.92); }
+}
+
+.welcome-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+.welcome-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.12;
+}
+.welcome-orb-1 {
+    width: 400px;
+    height: 400px;
+    background: #4F8BF9;
+    top: 5%;
+    left: 10%;
+    animation: orb-float-1 12s ease-in-out infinite;
+}
+.welcome-orb-2 {
+    width: 350px;
+    height: 350px;
+    background: #a88beb;
+    top: 40%;
+    right: 8%;
+    animation: orb-float-2 15s ease-in-out infinite;
+}
+.welcome-orb-3 {
+    width: 300px;
+    height: 300px;
+    background: #2ecc71;
+    bottom: 10%;
+    left: 35%;
+    animation: orb-float-3 18s ease-in-out infinite;
+}
+
+/* --- Trust Badge --- */
+.welcome-badge {
+    display: inline-block;
+    background: rgba(79, 139, 249, 0.1);
+    border: 1px solid rgba(79, 139, 249, 0.25);
+    color: #7eb3ff;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    padding: 0.35rem 1rem;
+    border-radius: 50px;
+    margin-bottom: 1.5rem;
+    letter-spacing: 0.03em;
+}
+
+/* --- Hero Section --- */
 .welcome-hero {
     text-align: center;
-    padding: 3rem 1.5rem 1.5rem 1.5rem;
-    max-width: 800px;
+    padding: 4rem 1.5rem 1.5rem 1.5rem;
+    max-width: 850px;
     margin: 0 auto;
+    position: relative;
+    z-index: 1;
 }
 .welcome-title {
-    font-size: 2.25rem !important;
-    font-weight: 600 !important;
-    margin-bottom: 0.75rem !important;
-    background: linear-gradient(135deg, #4F8BF9 0%, #a88beb 100%);
+    font-size: 2.75rem !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    margin-bottom: 1rem !important;
+    background: linear-gradient(135deg, #4F8BF9 0%, #a88beb 50%, #4F8BF9 100%);
+    background-size: 200% auto;
     -webkit-background-clip: text !important;
     -webkit-text-fill-color: transparent !important;
 }
 .welcome-subtitle {
-    font-size: 1.15rem !important;
+    font-size: 1.1rem !important;
     font-weight: 400 !important;
-    color: rgba(255, 255, 255, 0.7);
-    line-height: 1.5 !important;
-    margin-bottom: 2rem !important;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.7 !important;
+    margin-bottom: 2.5rem !important;
+    max-width: 650px;
+    margin-left: auto !important;
+    margin-right: auto !important;
 }
-.welcome-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    max-width: 1000px;
-    margin: 0 auto 3rem auto;
-    padding: 0 1rem;
+
+/* --- CTA Helper Text --- */
+.cta-helper {
+    text-align: center !important;
+    font-size: 0.8rem !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+    margin-top: 0.75rem !important;
+    letter-spacing: 0.02em;
 }
-.welcome-card {
-    background-color: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(128, 128, 128, 0.1);
-    border-radius: 12px;
-    padding: 1.75rem;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+
+/* --- CTA Button --- */
+@keyframes cta-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(79, 139, 249, 0.5); }
+    50%  { box-shadow: 0 0 0 18px rgba(79, 139, 249, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(79, 139, 249, 0); }
 }
-.welcome-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(79, 139, 249, 0.4);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
-    background-color: rgba(255, 255, 255, 0.05);
+@keyframes cta-shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position: 200% center; }
 }
-.welcome-card-icon {
-    font-size: 2.25rem !important;
-    margin-bottom: 0.75rem;
+
+div:has(> div > .get-started-marker) + div button {
+    display: block !important;
+    margin: 0 auto !important;
+    background: linear-gradient(135deg, #4F8BF9 0%, #7c6cf0 40%, #a88beb 60%, #7c6cf0 80%, #4F8BF9 100%) !important;
+    background-size: 300% 100% !important;
+    color: white !important;
+    font-size: 1.4rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em !important;
+    padding: 1.1rem 3.5rem !important;
+    border: none !important;
+    border-radius: 50px !important;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    height: auto !important;
+    width: auto !important;
+    cursor: pointer !important;
+    animation: cta-pulse 2.5s infinite ease-in-out, cta-shimmer 4s linear infinite !important;
+    position: relative !important;
+    z-index: 1 !important;
 }
-.welcome-card-title {
-    font-size: 1.15rem !important;
-    font-weight: 600 !important;
-    margin-bottom: 0.5rem !important;
-    color: inherit;
+
+div:has(> div > .get-started-marker) + div button:hover {
+    transform: translateY(-3px) scale(1.06) !important;
+    box-shadow: 0 16px 40px rgba(79, 139, 249, 0.55) !important;
+    animation: cta-shimmer 2s linear infinite !important;
 }
-.welcome-card-desc {
-    font-size: 0.85rem !important;
-    line-height: 1.5 !important;
-    opacity: 0.75;
+
+div:has(> div > .get-started-marker) + div button:active {
+    transform: translateY(1px) scale(0.98) !important;
+    box-shadow: 0 4px 12px rgba(79, 139, 249, 0.3) !important;
+}
+
+div:has(> div > .get-started-marker) + div button p {
+    font-size: 1.4rem !important;
+    font-weight: 700 !important;
+    color: white !important;
     margin: 0 !important;
 }
-.welcome-uploader-container {
+
+/* --- Feature Cards Grid --- */
+.welcome-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+    max-width: 1200px;
+    margin: 3.5rem auto 3rem auto !important;
+    padding: 0 1.5rem;
+    position: relative;
+    z-index: 1;
+}
+@media (max-width: 992px) {
+    .welcome-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+    .welcome-grid { grid-template-columns: 1fr; }
+}
+
+/* --- Feature Card --- */
+.welcome-card {
+    position: relative;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(128, 128, 128, 0.12);
+    border-radius: 14px;
+    padding: 2rem 1.5rem 1.75rem 1.5rem;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+}
+.welcome-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #4F8BF9, #a88beb);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+.welcome-card:hover {
+    transform: translateY(-6px);
+    border-color: rgba(79, 139, 249, 0.35);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(79, 139, 249, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+}
+.welcome-card:hover::before {
+    opacity: 1;
+}
+
+/* Step Number Badge */
+.welcome-card-step {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(79, 139, 249, 0.12);
+    border: 1px solid rgba(79, 139, 249, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem !important;
+    font-weight: 600 !important;
+    color: #7eb3ff;
+}
+
+.welcome-card-icon {
+    font-size: 2rem !important;
+    margin-bottom: 0.85rem;
+    display: block;
+}
+.welcome-card-title {
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    margin-bottom: 0.5rem !important;
+    color: rgba(255, 255, 255, 0.92);
+}
+.welcome-card-desc {
+    font-size: 0.82rem !important;
+    line-height: 1.55 !important;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0 !important;
+}
+
+/* ============================================
+   WELCOME UPLOADER — Dropzone Styling
+   ============================================ */
+div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] {
     max-width: 600px;
-    margin: 0 auto;
-    text-align: center;
-    background-color: rgba(255, 255, 255, 0.02);
-    border: 2px dashed rgba(79, 139, 249, 0.3);
-    border-radius: 12px;
-    padding: 2rem;
-    transition: all 0.2s ease-in-out;
+    margin: 0 auto 3rem auto !important;
+    position: relative;
+    z-index: 1;
 }
-.welcome-uploader-container:hover {
-    border-color: #4F8BF9;
-    background-color: rgba(79, 139, 249, 0.02);
+
+div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] label {
+    font-size: 1.15rem !important;
+    font-weight: 600 !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    margin-bottom: 1.25rem !important;
+    text-align: center !important;
+    display: block !important;
+    width: 100% !important;
 }
+
+div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"] {
+    background-color: rgba(79, 139, 249, 0.03) !important;
+    border: 2px dashed rgba(79, 139, 249, 0.3) !important;
+    border-radius: 14px !important;
+    padding: 3rem 2rem !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+}
+
+div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"]:hover {
+    border-color: #4F8BF9 !important;
+    background-color: rgba(79, 139, 249, 0.06) !important;
+    box-shadow: 0 12px 30px rgba(79, 139, 249, 0.1) !important;
+}
+
+/* Browse button in dropzone */
+div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] button {
+    background: linear-gradient(135deg, #4F8BF9, #7c6cf0) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.65rem 1.75rem !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 4px 12px rgba(79, 139, 249, 0.25) !important;
+}
+
+div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] button:hover {
+    box-shadow: 0 8px 20px rgba(79, 139, 249, 0.4) !important;
+    transform: translateY(-1px) !important;
+}
+
+div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] button:active {
+    transform: translateY(0px) !important;
+}
+
+/* Dropzone instructions text */
+div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploaderDropzoneInstructions"] {
+    color: rgba(255, 255, 255, 0.45) !important;
+    font-size: 0.85rem !important;
+    margin-top: 1rem !important;
+}
+

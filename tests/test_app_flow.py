@@ -11,8 +11,10 @@ APP_PATH = str(Path(__file__).parent.parent / "app.py")
 def setup_app_test():
     at = AppTest.from_file(APP_PATH)
     at.run()
+    # Click Get Started first to reveal the uploader
+    at.button(key="get_started_btn").click().run()
     mock_csv = b"Id,Age,Sex,LotArea,Alley\n1,25,male,500,Pave\n2,30,female,600,Grvl\n3,35,male,700,\n"
-    at.file_uploader(key="global_uploader").upload("train.csv", mock_csv, "text/csv").run()
+    at.file_uploader(key="welcome_uploader").upload("train.csv", mock_csv, "text/csv").run()
     return at
 
 
@@ -27,9 +29,12 @@ def test_app_initialization():
     # Verify session state values are correctly initialized to empty welcome state
     assert at.session_state.raw_data is None, "Raw data should be None initially"
     
+    # Click Get Started first to reveal the uploader
+    at.button(key="get_started_btn").click().run()
+    
     # Now upload the file
     mock_csv = b"Id,Age,Sex,LotArea,Alley\n1,25,male,500,Pave\n2,30,female,600,Grvl\n3,35,male,700,\n"
-    at.file_uploader(key="global_uploader").upload("train.csv", mock_csv, "text/csv").run()
+    at.file_uploader(key="welcome_uploader").upload("train.csv", mock_csv, "text/csv").run()
     
     assert not at.exception
     assert at.session_state.raw_data is not None, "Raw data should be loaded"

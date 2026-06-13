@@ -90,6 +90,7 @@ def initialize_state(from_reset=False):
         'datetime_extract_col': first_col,
         'datetime_component_select': "year",
         'datetime_new_col_name': "",
+        'show_uploader': False,
     }
 
     # Force reset or initialize for the first time
