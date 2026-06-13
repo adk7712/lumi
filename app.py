@@ -84,14 +84,11 @@ if st.session_state.raw_data is None:
         <meta name="description" content="Lumi is a professional web app for automated data scouting, interactive profiling diagnostics, and validation pipelines. Export Python script or Jupyter Notebook.">
         <meta name="keywords" content="data cleaning, validation pipeline, data profiling, pandas quality checks, python data cleaning app">
     </head>
-
-    <!-- Animated background orbs -->
     <div class="welcome-bg">
         <div class="welcome-orb welcome-orb-1"></div>
         <div class="welcome-orb welcome-orb-2"></div>
         <div class="welcome-orb welcome-orb-3"></div>
     </div>
-
     <main class="welcome-hero">
         <span class="welcome-badge">✦ Open Source Data Quality Tool</span>
         <h1 class="welcome-title" id="welcome-header">Clean, Validate &amp; Export<br>Production-Ready Data Pipelines</h1>
@@ -101,10 +98,12 @@ if st.session_state.raw_data is None:
 
     # Render CTA button or Uploader
     if not st.session_state.show_uploader:
-        st.markdown('<div class="get-started-marker"></div>', unsafe_allow_html=True)
-        if st.button("Upload Your Dataset →", key="get_started_btn"):
-            st.session_state.show_uploader = True
-            st.rerun()
+        cta_spacer_l, cta_col, cta_spacer_r = st.columns([2, 1, 2])
+        with cta_col:
+            st.markdown('<div class="get-started-marker"></div>', unsafe_allow_html=True)
+            if st.button("Upload Your Dataset →", key="get_started_btn", use_container_width=True):
+                st.session_state.show_uploader = True
+                st.rerun()
         st.markdown('<p class="cta-helper">Free · No sign-up · Works with CSV &amp; XLSX</p>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="welcome-uploader-marker"></div>', unsafe_allow_html=True)
@@ -137,34 +136,12 @@ if st.session_state.raw_data is None:
             st.toast("Dataset Analyzed")
             st.rerun()
 
-    st.markdown("""
-    <section class="welcome-grid">
-        <article class="welcome-card" id="card-scout">
-
-            <span class="material-icons welcome-card-icon" style="color: #f1c40f;">search</span>
-            <h3 class="welcome-card-title">Proactive Scouting</h3>
-            <p class="welcome-card-desc">Automatically scans for structural inconsistencies, high cardinality, outliers, and missing patterns — with recommended fixes.</p>
-        </article>
-        <article class="welcome-card" id="card-diagnose">
-
-            <span class="material-icons welcome-card-icon" style="color: #2ecc71;">insights</span>
-            <h3 class="welcome-card-title">Interactive Diagnostics</h3>
-            <p class="welcome-card-desc">Visual diagnostics with null distributions, unique counts, Z-score outliers, and cross-feature correlation heatmaps.</p>
-        </article>
-        <article class="welcome-card" id="card-rules">
-
-            <span class="material-icons welcome-card-icon" style="color: #3498db;">rule</span>
-            <h3 class="welcome-card-title">Tailored Rulebook</h3>
-            <p class="welcome-card-desc">Enforce validation standards with null checks, relational asserts, range checks, and custom Pandas query expressions.</p>
-        </article>
-        <article class="welcome-card" id="card-export">
-
-            <span class="material-icons welcome-card-icon" style="color: #9b59b6;">code</span>
-            <h3 class="welcome-card-title">One-Click Export</h3>
-            <p class="welcome-card-desc">Export your entire cleaning recipe and quality rules as standalone Python scripts or Jupyter Notebooks.</p>
-        </article>
-    </section>
-    """, unsafe_allow_html=True)
+    st.markdown("""<section class="welcome-grid">
+        <article class="welcome-card" id="card-scout"><span class="material-icons welcome-card-icon" style="color: #f1c40f;">search</span><h3 class="welcome-card-title">Proactive Scouting</h3><p class="welcome-card-desc">Automatically scans for structural inconsistencies, high cardinality, outliers, and missing patterns — with recommended fixes.</p></article>
+        <article class="welcome-card" id="card-diagnose"><span class="material-icons welcome-card-icon" style="color: #2ecc71;">insights</span><h3 class="welcome-card-title">Interactive Diagnostics</h3><p class="welcome-card-desc">Visual diagnostics with null distributions, unique counts, Z-score outliers, and cross-feature correlation heatmaps.</p></article>
+        <article class="welcome-card" id="card-rules"><span class="material-icons welcome-card-icon" style="color: #3498db;">rule</span><h3 class="welcome-card-title">Tailored Rulebook</h3><p class="welcome-card-desc">Enforce validation standards with null checks, relational asserts, range checks, and custom Pandas query expressions.</p></article>
+        <article class="welcome-card" id="card-export"><span class="material-icons welcome-card-icon" style="color: #9b59b6;">code</span><h3 class="welcome-card-title">One-Click Export</h3><p class="welcome-card-desc">Export your entire cleaning recipe and quality rules as standalone Python scripts or Jupyter Notebooks.</p></article>
+    </section>""", unsafe_allow_html=True)
     st.stop()
 
 # Get the latest dataframe from cache

@@ -493,50 +493,35 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 
 /* --- CTA Button --- */
 @keyframes cta-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(79, 139, 249, 0.5); }
-    50%  { box-shadow: 0 0 0 18px rgba(79, 139, 249, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(79, 139, 249, 0); }
+    0%   { box-shadow: 0 0 0 0 rgba(79, 139, 249, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 6px 20px rgba(79, 139, 249, 0.35); }
+    50%  { box-shadow: 0 0 0 18px rgba(79, 139, 249, 0), inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 6px 20px rgba(79, 139, 249, 0.35); }
+    100% { box-shadow: 0 0 0 0 rgba(79, 139, 249, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 6px 20px rgba(79, 139, 249, 0.35); }
 }
 @keyframes cta-shimmer {
     0%   { background-position: -200% center; }
     100% { background-position: 200% center; }
 }
 
-/* Center the Streamlit button container */
-div:has(> div > .get-started-marker) + div {
-    display: flex !important;
-    justify-content: center !important;
-}
-
-div:has(> div > .get-started-marker) + div button {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+div:has(> div > .get-started-marker) ~ div button {
     background: linear-gradient(135deg, #4F8BF9 0%, #7c6cf0 35%, #a88beb 50%, #7c6cf0 65%, #4F8BF9 100%) !important;
     background-size: 300% 100% !important;
     color: white !important;
-    font-size: 1.5rem !important;
+    font-size: 1.35rem !important;
     font-weight: 700 !important;
     letter-spacing: 0.03em !important;
-    padding: 1.15rem 4rem !important;
+    padding: 1.1rem 2rem !important;
     border: none !important;
     border-radius: 50px !important;
     transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
     height: auto !important;
-    width: auto !important;
     cursor: pointer !important;
     animation: cta-pulse 2.5s infinite ease-in-out, cta-shimmer 3.5s linear infinite !important;
     position: relative !important;
     z-index: 1 !important;
-    /* Glass inner highlight */
-    box-shadow:
-        0 0 0 0 rgba(79, 139, 249, 0.5),
-        inset 0 1px 1px rgba(255, 255, 255, 0.25),
-        0 6px 20px rgba(79, 139, 249, 0.35) !important;
 }
 
-div:has(> div > .get-started-marker) + div button:hover {
-    transform: translateY(-4px) scale(1.07) !important;
+div:has(> div > .get-started-marker) ~ div button:hover {
+    transform: translateY(-4px) scale(1.04) !important;
     box-shadow:
         0 20px 50px rgba(79, 139, 249, 0.5),
         inset 0 1px 2px rgba(255, 255, 255, 0.3),
@@ -544,13 +529,13 @@ div:has(> div > .get-started-marker) + div button:hover {
     animation: cta-shimmer 1.8s linear infinite !important;
 }
 
-div:has(> div > .get-started-marker) + div button:active {
+div:has(> div > .get-started-marker) ~ div button:active {
     transform: translateY(1px) scale(0.97) !important;
     box-shadow: 0 4px 12px rgba(79, 139, 249, 0.3) !important;
 }
 
-div:has(> div > .get-started-marker) + div button p {
-    font-size: 1.5rem !important;
+div:has(> div > .get-started-marker) ~ div button p {
+    font-size: 1.35rem !important;
     font-weight: 700 !important;
     color: white !important;
     margin: 0 !important;
