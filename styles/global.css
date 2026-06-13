@@ -493,9 +493,9 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 
 /* --- CTA Button --- */
 @keyframes cta-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(79, 139, 249, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 6px 20px rgba(79, 139, 249, 0.35); }
-    50%  { box-shadow: 0 0 0 18px rgba(79, 139, 249, 0), inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 6px 20px rgba(79, 139, 249, 0.35); }
-    100% { box-shadow: 0 0 0 0 rgba(79, 139, 249, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 6px 20px rgba(79, 139, 249, 0.35); }
+    0%   { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 8px 24px rgba(139, 92, 246, 0.3); }
+    50%  { box-shadow: 0 0 0 20px rgba(139, 92, 246, 0), inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 8px 24px rgba(139, 92, 246, 0.3); }
+    100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 8px 24px rgba(139, 92, 246, 0.3); }
 }
 @keyframes cta-shimmer {
     0%   { background-position: -200% center; }
@@ -503,15 +503,15 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 }
 
 div:has(> div > .get-started-marker) ~ div button {
-    background: linear-gradient(135deg, #4F8BF9 0%, #7c6cf0 35%, #a88beb 50%, #7c6cf0 65%, #4F8BF9 100%) !important;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 30%, #f093fb 50%, #764ba2 70%, #667eea 100%) !important;
     background-size: 300% 100% !important;
     color: white !important;
-    font-size: 1.35rem !important;
+    font-size: 1.6rem !important;
     font-weight: 700 !important;
-    letter-spacing: 0.03em !important;
-    padding: 1.1rem 2rem !important;
+    letter-spacing: 0.04em !important;
+    padding: 1.3rem 2.5rem !important;
     border: none !important;
-    border-radius: 50px !important;
+    border-radius: 60px !important;
     transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
     height: auto !important;
     cursor: pointer !important;
@@ -523,19 +523,19 @@ div:has(> div > .get-started-marker) ~ div button {
 div:has(> div > .get-started-marker) ~ div button:hover {
     transform: translateY(-4px) scale(1.04) !important;
     box-shadow:
-        0 20px 50px rgba(79, 139, 249, 0.5),
-        inset 0 1px 2px rgba(255, 255, 255, 0.3),
-        0 0 60px rgba(168, 139, 235, 0.15) !important;
-    animation: cta-shimmer 1.8s linear infinite !important;
+        0 24px 56px rgba(118, 75, 162, 0.5),
+        inset 0 1px 2px rgba(255, 255, 255, 0.35),
+        0 0 80px rgba(240, 147, 251, 0.15) !important;
+    animation: cta-shimmer 1.5s linear infinite !important;
 }
 
 div:has(> div > .get-started-marker) ~ div button:active {
     transform: translateY(1px) scale(0.97) !important;
-    box-shadow: 0 4px 12px rgba(79, 139, 249, 0.3) !important;
+    box-shadow: 0 4px 12px rgba(118, 75, 162, 0.3) !important;
 }
 
 div:has(> div > .get-started-marker) ~ div button p {
-    font-size: 1.35rem !important;
+    font-size: 1.6rem !important;
     font-weight: 700 !important;
     color: white !important;
     margin: 0 !important;

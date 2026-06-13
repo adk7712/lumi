@@ -98,7 +98,7 @@ if st.session_state.raw_data is None:
 
     # Render CTA button or Uploader
     if not st.session_state.show_uploader:
-        cta_spacer_l, cta_col, cta_spacer_r = st.columns([2, 1, 2])
+        cta_spacer_l, cta_col, cta_spacer_r = st.columns([1, 2, 1])
         with cta_col:
             st.markdown('<div class="get-started-marker"></div>', unsafe_allow_html=True)
             if st.button("Upload Your Dataset →", key="get_started_btn", use_container_width=True):
