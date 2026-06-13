@@ -378,3 +378,77 @@ svg, svg * {
     font-size: 0.85em;
     font-weight: bold;
 }
+
+/* --- Welcome Page Styles --- */
+.welcome-hero {
+    text-align: center;
+    padding: 3rem 1.5rem 1.5rem 1.5rem;
+    max-width: 800px;
+    margin: 0 auto;
+}
+.welcome-title {
+    font-size: 2.25rem !important;
+    font-weight: 600 !important;
+    margin-bottom: 0.75rem !important;
+    background: linear-gradient(135deg, #4F8BF9 0%, #a88beb 100%);
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+}
+.welcome-subtitle {
+    font-size: 1.15rem !important;
+    font-weight: 400 !important;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5 !important;
+    margin-bottom: 2rem !important;
+}
+.welcome-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    max-width: 1000px;
+    margin: 0 auto 3rem auto;
+    padding: 0 1rem;
+}
+.welcome-card {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(128, 128, 128, 0.1);
+    border-radius: 12px;
+    padding: 1.75rem;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.welcome-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(79, 139, 249, 0.4);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+.welcome-card-icon {
+    font-size: 2.25rem !important;
+    margin-bottom: 0.75rem;
+}
+.welcome-card-title {
+    font-size: 1.15rem !important;
+    font-weight: 600 !important;
+    margin-bottom: 0.5rem !important;
+    color: inherit;
+}
+.welcome-card-desc {
+    font-size: 0.85rem !important;
+    line-height: 1.5 !important;
+    opacity: 0.75;
+    margin: 0 !important;
+}
+.welcome-uploader-container {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+    background-color: rgba(255, 255, 255, 0.02);
+    border: 2px dashed rgba(79, 139, 249, 0.3);
+    border-radius: 12px;
+    padding: 2rem;
+    transition: all 0.2s ease-in-out;
+}
+.welcome-uploader-container:hover {
+    border-color: #4F8BF9;
+    background-color: rgba(79, 139, 249, 0.02);
+}
