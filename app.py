@@ -16,7 +16,7 @@ from scout import generate_proposals
 
 # Set page config
 st.set_page_config(
-    page_title="Lumi — Interactive Data Cleaning & Quality Validation Pipeline Generator",
+    page_title="Lumi",
     layout="wide"
 )
 

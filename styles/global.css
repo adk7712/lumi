@@ -491,54 +491,32 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
     letter-spacing: 0.02em;
 }
 
-/* --- CTA Button --- */
-@keyframes cta-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 8px 24px rgba(139, 92, 246, 0.3); }
-    50%  { box-shadow: 0 0 0 20px rgba(139, 92, 246, 0), inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 8px 24px rgba(139, 92, 246, 0.3); }
-    100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3), 0 8px 24px rgba(139, 92, 246, 0.3); }
-}
-@keyframes cta-shimmer {
-    0%   { background-position: -200% center; }
-    100% { background-position: 200% center; }
-}
-
-div:has(> div > .get-started-marker) ~ div button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 30%, #f093fb 50%, #764ba2 70%, #667eea 100%) !important;
-    background-size: 300% 100% !important;
-    color: white !important;
-    font-size: 1.6rem !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.04em !important;
-    padding: 1.3rem 2.5rem !important;
-    border: none !important;
-    border-radius: 60px !important;
-    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    height: auto !important;
-    cursor: pointer !important;
-    animation: cta-pulse 2.5s infinite ease-in-out, cta-shimmer 3.5s linear infinite !important;
-    position: relative !important;
-    z-index: 1 !important;
+/* --- CTA Button (Native HTML via st.html) --- */
+.premium-cta-btn {
+    display: inline-block;
+    padding: 14px 28px;
+    font-family: 'Inter', sans-serif;
+    font-size: 18px;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    background: linear-gradient(90deg, #d884ff 0%, #38bdf8 100%);
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    font-weight: 400;
+    box-shadow: 0px 4px 20px rgba(216, 132, 255, 0.4);
+    transition: all 0.3s ease;
+    text-align: center;
 }
 
-div:has(> div > .get-started-marker) ~ div button:hover {
-    transform: translateY(-4px) scale(1.04) !important;
-    box-shadow:
-        0 24px 56px rgba(118, 75, 162, 0.5),
-        inset 0 1px 2px rgba(255, 255, 255, 0.35),
-        0 0 80px rgba(240, 147, 251, 0.15) !important;
-    animation: cta-shimmer 1.5s linear infinite !important;
+.premium-cta-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0px 6px 25px rgba(56, 189, 248, 0.6);
 }
 
-div:has(> div > .get-started-marker) ~ div button:active {
-    transform: translateY(1px) scale(0.97) !important;
-    box-shadow: 0 4px 12px rgba(118, 75, 162, 0.3) !important;
-}
-
-div:has(> div > .get-started-marker) ~ div button p {
-    font-size: 1.6rem !important;
-    font-weight: 700 !important;
-    color: white !important;
-    margin: 0 !important;
+.premium-cta-btn strong {
+    font-weight: 800;
+    letter-spacing: 0.5px;
 }
 
 /* --- Feature Cards Grid --- */

@@ -13,14 +13,24 @@ with open(os.path.join(TEMPLATES_DIR, 'landing_showcase.html'), 'r') as f:
 def render_landing_page():
     st.markdown(HERO_HTML, unsafe_allow_html=True)
 
+    # 1. Handle Custom Button Query Param Action
+    if st.query_params.get("action") == "upload_dataset":
+        st.session_state.show_uploader = True
+        st.query_params.clear()
+        st.rerun()
+
     # Render CTA button or Uploader
     if not st.session_state.show_uploader:
         cta_spacer_l, cta_col, cta_spacer_r = st.columns([1, 2, 1])
         with cta_col:
-            st.markdown('<div class="get-started-marker"></div>', unsafe_allow_html=True)
-            if st.button("Upload Your Dataset →", key="get_started_btn", use_container_width=True):
-                st.session_state.show_uploader = True
-                st.rerun()
+            custom_button_html = """
+            <div style="text-align: center; margin: 10px 0;">
+                <a href="./?action=upload_dataset" target="_self" class="premium-cta-btn">
+                    <strong>Upload</strong> Your Dataset →
+                </a>
+            </div>
+            """
+            st.html(custom_button_html)
         st.markdown('<p class="cta-helper">Free · No sign-up · Works with CSV &amp; XLSX</p>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="welcome-uploader-marker"></div>', unsafe_allow_html=True)
