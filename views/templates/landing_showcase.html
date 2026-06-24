@@ -1,0 +1,51 @@
+<section class="welcome-grid">
+    <article class="welcome-card" id="card-scout"><span class="material-icons welcome-card-icon" style="color: #f1c40f;">search</span><h3 class="welcome-card-title">Proactive Scouting</h3><p class="welcome-card-desc">Automatically scans for structural inconsistencies, high cardinality, outliers, and missing patterns — with recommended fixes.</p></article>
+    <article class="welcome-card" id="card-diagnose"><span class="material-icons welcome-card-icon" style="color: #a855f7;">insights</span><h3 class="welcome-card-title">Interactive Diagnostics</h3><p class="welcome-card-desc">Visual diagnostics with null distributions, unique counts, Z-score outliers, and cross-feature correlation heatmaps.</p></article>
+    <article class="welcome-card" id="card-rules"><span class="material-icons welcome-card-icon" style="color: #8b5cf6;">rule</span><h3 class="welcome-card-title">Tailored Rulebook</h3><p class="welcome-card-desc">Enforce validation standards with null checks, relational asserts, range checks, and custom Pandas query expressions.</p></article>
+    <article class="welcome-card" id="card-export"><span class="material-icons welcome-card-icon" style="color: #c084fc;">code</span><h3 class="welcome-card-title">One-Click Export</h3><p class="welcome-card-desc">Export your entire cleaning recipe and quality rules as standalone Python scripts or Jupyter Notebooks.</p></article>
+</section>
+<section class="welcome-showcase">
+    <div class="welcome-showcase-card" id="card-pipeline">
+        <div>
+            <span class="wsc-label">Pipeline Export</span>
+            <h2 class="wsc-title">Validated data you can trust.</h2>
+            <p class="wsc-desc">Lumi bridges the gap between raw exploration and production engineering. Stop manually re-cleaning the same messy datasets over and over.</p>
+            <ul class="wsc-bullets">
+                <li>100% client-side privacy — data never leaves your browser</li>
+                <li>Native Pandas integration — scripts run anywhere Python does</li>
+                <li>Export as .py script or Jupyter Notebook (.ipynb)</li>
+            </ul>
+        </div>
+        <div class="wsc-code"><span class="code-comment"># Lumi Generated Pipeline
+import pandas as pd</span>
+<span class="code-keyword">def</span> <span class="code-func">validate_data</span>(df):
+<span class="code-comment"># Check for missing values</span>
+df = df.dropna(subset=[<span class="code-string">'user_id'</span>])
+<span class="code-comment"># Range check: age [0-120]</span>
+df = df[df[<span class="code-string">'age'</span>].between(0, 120)]
+<span class="code-comment"># Outlier detection via Z-score</span>
+z = (df[<span class="code-string">'spend'</span>] - df[<span class="code-string">'spend'</span>].mean()) / df[<span class="code-string">'spend'</span>].std()
+<span class="code-keyword">return</span> df[z.abs() &lt;= 3]</div>
+    </div>
+    <div class="welcome-showcase-card" id="card-audit">
+        <div>
+            <span class="wsc-label">Rulebook &amp; Audit Log</span>
+            <h2 class="wsc-title">Every change tracked. Every rule enforced.</h2>
+            <p class="wsc-desc">Define null checks, range constraints, relational asserts, and custom Pandas expressions. See exactly which rows fail which rules, and undo any step instantly.</p>
+            <ul class="wsc-bullets">
+                <li>Rule violations highlighted row-by-row in the Violation Browser</li>
+                <li>Undo individual steps or reset the entire recipe at any time</li>
+                <li>Enable / disable rules without deleting them</li>
+            </ul>
+        </div>
+        <div class="wsc-visual">
+            <div class="wsc-rule-row"><div class="wsc-rule-dot" style="background:#a855f7;"></div>Null Check — <span style="color:#c084fc;">user_id</span> must not be null<span class="wsc-rule-badge badge-pass">PASS</span></div>
+            <div class="wsc-rule-row"><div class="wsc-rule-dot" style="background:#8b5cf6;"></div>Range Check — <span style="color:#c084fc;">age</span> between 0 and 120<span class="wsc-rule-badge badge-warn">3 rows</span></div>
+            <div class="wsc-rule-row"><div class="wsc-rule-dot" style="background:#6d28d9;"></div>Custom — <span style="color:#c084fc;">spend</span> &gt; 0 AND status == 'active'<span class="wsc-rule-badge badge-fail">12 rows</span></div>
+            <div style="margin-top:0.5rem;font-size:0.72rem;color:rgba(255,255,255,0.35);letter-spacing:0.05em;text-transform:uppercase;">Audit Trail</div>
+            <div class="wsc-audit-row"><span class="wsc-audit-step">01</span>strip_whitespace → <span class="wsc-audit-col">All columns</span></div>
+            <div class="wsc-audit-row"><span class="wsc-audit-step">02</span>normalize_text → <span class="wsc-audit-col">status</span> (lowercase)</div>
+            <div class="wsc-audit-row"><span class="wsc-audit-step">03</span>cast_type → <span class="wsc-audit-col">age</span> to int64</div>
+        </div>
+    </div>
+</section>
