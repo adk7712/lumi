@@ -11,7 +11,7 @@ with open(os.path.join(TEMPLATES_DIR, 'landing_hero.html'), 'r') as f:
 with open(os.path.join(TEMPLATES_DIR, 'landing_showcase.html'), 'r') as f:
     SHOWCASE_HTML = f.read()
 def render_landing_page():
-    st.markdown(HERO_HTML, unsafe_allow_html=True)
+    st.html(HERO_HTML)
 
     # 1. Handle Custom Button Query Param Action
     if st.query_params.get("action") == "upload_dataset":
@@ -63,4 +63,4 @@ def render_landing_page():
             st.toast("Dataset Analyzed")
             st.rerun()
 
-    st.markdown(SHOWCASE_HTML, unsafe_allow_html=True)
+    st.html(SHOWCASE_HTML)
