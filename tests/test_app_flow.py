@@ -8,6 +8,16 @@ from streamlit.testing.v1 import AppTest
 APP_PATH = str(Path(__file__).parent.parent / "app.py")
 
 
+def setup_app_test():
+    at = AppTest.from_file(APP_PATH)
+    at.run()
+    # Click Get Started first to reveal the uploader
+    at.run()
+    mock_csv = b"Id,Age,Sex,LotArea,Alley\n1,25,male,500,Pave\n2,30,female,600,Grvl\n3,35,male,700,\n"
+    at.file_uploader(key="welcome_uploader").upload("train.csv", mock_csv, "text/csv").run()
+    return at
+
+
 def test_app_initialization():
     # Load app in memory
     at = AppTest.from_file(APP_PATH)
@@ -16,16 +26,24 @@ def test_app_initialization():
     # Assert no exceptions occurred during execution
     assert not at.exception, "App should run without exceptions"
     
-    # Verify session state values are correctly initialized
+    # Verify session state values are correctly initialized to empty welcome state
+    assert at.session_state.raw_data is None, "Raw data should be None initially"
+    
+    
+    # Now upload the file
+    mock_csv = b"Id,Age,Sex,LotArea,Alley\n1,25,male,500,Pave\n2,30,female,600,Grvl\n3,35,male,700,\n"
+    at.file_uploader(key="welcome_uploader").upload("train.csv", mock_csv, "text/csv").run()
+    
+    assert not at.exception
     assert at.session_state.raw_data is not None, "Raw data should be loaded"
     assert isinstance(at.session_state.raw_data, pd.DataFrame), "Raw data should be a DataFrame"
     assert len(at.session_state.intermediate_states) == 1, "Should have 1 state initially"
     assert at.session_state.intermediate_states[0][0] == "Original Data"
     print("Test App Initialization passed.")
 
+
 def test_multiselect_diagnostics():
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = setup_app_test()
     
     # Retrieve the multiselect widget by its key
     multiselect = at.multiselect(key="active_features")
@@ -43,9 +61,9 @@ def test_multiselect_diagnostics():
     assert cols[0] in at.session_state.active_features, "Selected column should be in active_features"
     print("Test Multiselect Diagnostics passed.")
 
+
 def test_rule_addition_and_clear():
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = setup_app_test()
     
     # Initial rules list should be empty
     assert len(at.session_state.rules) == 0
@@ -75,9 +93,9 @@ def test_rule_addition_and_clear():
     assert len(at.session_state.rules) == 0
     print("Test Rule Addition and Clear passed.")
 
+
 def test_undo_and_reset():
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = setup_app_test()
     
     # Change manual transformation type to Strip Whitespace
     trans_select = at.selectbox(key="trans_type_select")
@@ -106,9 +124,9 @@ def test_undo_and_reset():
     assert len(at.session_state.cleaning_recipe) == 0
     print("Test Undo and Reset passed.")
 
+
 def test_rename_and_reorder_ui():
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = setup_app_test()
     
     # 1. Add a dummy rule first to test renaming synchronization
     rule_type = at.selectbox(key="rule_type_select")
@@ -178,9 +196,9 @@ def test_rename_and_reorder_ui():
     
     print("Rename and Reorder UI integration tests passed.")
 
+
 def test_visual_insights_tab_ui():
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = setup_app_test()
     
     slider = at.slider(key="corr_range_val")
     assert slider is not None, "Slider for correlation range should be present"
@@ -190,9 +208,9 @@ def test_visual_insights_tab_ui():
     assert not at.exception
     print("Visual Insights UI integration test passed.")
 
+
 def test_audit_log_remove_step():
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = setup_app_test()
     
     # 1. Add three distinct transformations to the recipe
     trans_select = at.selectbox(key="trans_type_select")
@@ -225,9 +243,9 @@ def test_audit_log_remove_step():
     assert "Alley" not in at.session_state.intermediate_states[-1][3].columns
     print("Audit Log Remove step integration test passed.")
 
+
 def test_dataset_download_buttons():
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = setup_app_test()
     
     # Select Cleaned Data (After) preview tab mode
     mode_radio = at.radio(key="p_mode")
@@ -239,6 +257,7 @@ def test_dataset_download_buttons():
     # Verify that the preview dataframe is rendered
     assert len(at.dataframe) > 0, "DataFrame preview should be visible"
     print("Dataset download buttons rendering test passed.")
+
 
 if __name__ == "__main__":
     try:

@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from typing import List, Tuple
 from engine_ops import TRANSFORM_REGISTRY, CleaningStep
-from codegen import generate_pipeline_code
+from codegen import generate_pipeline_code, generate_notebook_code
 
 def apply_recipe(df: pd.DataFrame, recipe: List[CleaningStep]) -> Tuple[pd.DataFrame, List[str]]:
     """

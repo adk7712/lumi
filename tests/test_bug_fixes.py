@@ -116,8 +116,11 @@ def test_uploader_large_file_capping():
     row = b"1.0," + b"x"*1000 + b"\n"
     large_csv_bytes = header + row * 52000
     
+    # Click Get Started first to reveal the uploader
+    at.button(key="get_started_btn").click().run()
+    
     # Upload via AppTest uploader
-    uploader = at.file_uploader(key="global_uploader")
+    uploader = at.file_uploader(key="welcome_uploader")
     assert uploader is not None
     uploader.upload("large_file.csv", large_csv_bytes, "text/csv").run()
     
@@ -215,6 +218,203 @@ def test_render_loading_spinner():
     print("render_loading_spinner test passed.")
 
 
+def test_datetime_feature_extraction():
+    """Verify that extract_datetime correctly extracts components (year, month, day, day_of_week, hour) and integrates with codegen."""
+    from engine import apply_recipe
+    from codegen import generate_pipeline_code
+    
+    # Create test DataFrame
+    df = pd.DataFrame({
+        'timestamp': [
+            '2026-06-11 14:30:00',
+            '2025-12-25 08:15:00',
+            '2024-01-01 00:00:00'
+        ]
+    })
+    
+    # Year, month, day, day of week, hour extractions
+    recipe = [
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_year',
+            'component': 'year'
+        },
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_month',
+            'component': 'month'
+        },
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_day',
+            'component': 'day'
+        },
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_day_name',
+            'component': 'day_of_week'
+        },
+        {
+            'action': 'extract_datetime',
+            'column': 'timestamp',
+            'new_column': 'timestamp_hour',
+            'component': 'hour'
+        }
+    ]
+    
+    df_cleaned, msgs = apply_recipe(df.copy(), recipe)
+    assert len(msgs) == 0
+    
+    # Verify outputs
+    assert df_cleaned['timestamp_year'].tolist() == [2026, 2025, 2024]
+    assert df_cleaned['timestamp_month'].tolist() == [6, 12, 1]
+    assert df_cleaned['timestamp_day'].tolist() == [11, 25, 1]
+    assert df_cleaned['timestamp_day_name'].tolist() == ['Thursday', 'Thursday', 'Monday']
+    assert df_cleaned['timestamp_hour'].tolist() == [14, 8, 0]
+    
+    # Test codegen compilation and run
+    code_str = generate_pipeline_code(recipe)
+    
+    # Execute the generated code
+    namespace = {}
+    exec(code_str, namespace)
+    
+    clean_func = namespace['clean_data']
+    df_gen_cleaned = clean_func(df.copy())
+    
+    # Verify generated function has same result
+    assert df_gen_cleaned['timestamp_year'].tolist() == [2026, 2025, 2024]
+    assert df_gen_cleaned['timestamp_month'].tolist() == [6, 12, 1]
+    assert df_gen_cleaned['timestamp_day'].tolist() == [11, 25, 1]
+    assert df_gen_cleaned['timestamp_day_name'].tolist() == ['Thursday', 'Thursday', 'Monday']
+    assert df_gen_cleaned['timestamp_hour'].tolist() == [14, 8, 0]
+    
+    print("test_datetime_feature_extraction passed.")
+
+
+def test_notebook_export():
+    """Verify that generate_notebook_code produces a valid JSON structure representing a Jupyter Notebook."""
+    import json
+    from codegen import generate_notebook_code
+    
+    recipe = [
+        {'action': 'drop_column', 'column': 'unused'}
+    ]
+    rules = [
+        {'col': 'age', 'desc': 'age is not null', 'type': 'Null Check', 'enabled': True}
+    ]
+    
+    nb_str = generate_notebook_code(recipe, rules)
+    assert nb_str is not None
+    
+    # Verify it is valid JSON
+    data = json.loads(nb_str)
+    
+    # Check top-level keys
+    assert 'cells' in data
+    assert 'metadata' in data
+    assert data['nbformat'] == 4
+    
+    cells = data['cells']
+    assert len(cells) == 5
+    
+    # Cell 0: Markdown overview
+    assert cells[0]['cell_type'] == 'markdown'
+    assert any("Lumi Data Cleaning" in line for line in cells[0]['source'])
+    
+    # Cell 1: Imports
+    assert cells[1]['cell_type'] == 'code'
+    assert any("import pandas" in line for line in cells[1]['source'])
+    
+    # Cell 2: clean_data
+    assert cells[2]['cell_type'] == 'code'
+    assert any("def clean_data" in line for line in cells[2]['source'])
+    assert any("drop(columns=['unused'])" in line for line in cells[2]['source'])
+    
+    # Cell 3: validate_data
+    assert cells[3]['cell_type'] == 'code'
+    assert any("def validate_data" in line for line in cells[3]['source'])
+    assert any("age" in line for line in cells[3]['source'])
+    
+    # Cell 4: Example usage
+    assert cells[4]['cell_type'] == 'code'
+    assert any("Example Usage" in line for line in cells[4]['source'])
+    
+    print("test_notebook_export passed.")
+
+
+def test_evidence_report_generation():
+    """Verify that generate_evidence_report correctly identifies violations, handles exceptions, and formats the output Markdown."""
+    from rule_utils import generate_evidence_report
+    import streamlit as st
+    import unittest.mock as mock
+    
+    df = pd.DataFrame({
+        'age': [25, np.nan, 30, 45, 12],
+        'score': [90, 80, 70, 60, np.nan]
+    })
+    
+    rules = [
+        {'col': 'age', 'desc': 'age is NOT NULL', 'type': 'Null Check', 'enabled': True},
+        {'col': 'score', 'min': 0.0, 'max': 100.0, 'desc': 'score in [0.0, 100.0]', 'type': 'Range Check', 'enabled': True},
+        {'col': 'nonexistent', 'desc': 'fails check', 'type': 'Null Check', 'enabled': True}, # This should trigger an ERROR status
+        {'desc': 'informational check', 'type': 'Informational', 'enabled': True}
+    ]
+    
+    # Mock Streamlit session state and runtime
+    with mock.patch("streamlit.runtime.exists", return_value=True):
+        st.session_state.intermediate_states = [
+            ("Original Data", 80, len(df), df.copy()),
+            ("Final Cleaned", 100, len(df), df.copy())
+        ]
+        st.session_state.cleaning_recipe = [
+            {"action": "drop_column", "column": "redundant"},
+            {"action": "rename_column", "column": "old", "value": "new"}
+        ]
+        
+        report_md = generate_evidence_report(df, rules)
+        
+    assert report_md is not None
+    
+    # Assert report header and totals
+    assert "# LUMI - Data Validation Evidence Report" in report_md
+    assert "Total Rows Evaluated: 5" in report_md
+    assert "Total Active Rules: 4" in report_md
+    assert "Total Rule Violations: 2" in report_md  # age null (1) + score nan/null (1) = 2
+    
+    # Assert metrics block
+    assert "## Data Cleaning Impact Metrics" in report_md
+    assert "| Metric | Original Dataset | Cleaned Dataset | Change |" in report_md
+    assert "Dimensions" in report_md
+    
+    # Assert lineage block
+    assert "## Data Lineage & Audit Log" in report_md
+    assert "Dropped column `redundant`" in report_md
+    assert "Renamed column `old` to `new`" in report_md
+    
+    # Assert table contents
+    assert "| Null Check | `age is NOT NULL` | FAILED | 1 |" in report_md
+    assert "| Range Check | `score in [0.0, 100.0]` | FAILED | 1 |" in report_md
+    assert "| Null Check | `fails check` | ERROR | 0 |" in report_md
+    assert "| Informational | `informational check` | INFO | N/A |" in report_md
+    
+    # Assert violation details
+    assert "### ❌ Null Check: `age is NOT NULL`" in report_md
+    assert "* **Violation Count:** 1" in report_md
+    assert "* **Violating Row Indices:** `[1]`" in report_md
+    
+    # Assert error trace is handled gracefully
+    assert "### ⚠️ Null Check: `fails check`" in report_md
+    assert "* **Status:** Evaluation Error" in report_md
+    assert "KeyError" in report_md or "ValueError" in report_md
+    
+    print("test_evidence_report_generation passed.")
+
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
@@ -228,6 +428,9 @@ if __name__ == "__main__":
         test_get_column_dependencies()
         test_sync_column_rename()
         test_render_loading_spinner()
+        test_datetime_feature_extraction()
+        test_notebook_export()
+        test_evidence_report_generation()
         print("ALL BUG FIX TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")

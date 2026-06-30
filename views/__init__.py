@@ -6,3 +6,4 @@ from .transformations import render_transformations_tab
 from .audit_log import render_audit_log_tab
 from .pipeline import render_pipeline_preview_tab
 from .violation_browser import render_violation_browser
+from .landing import render_landing_page

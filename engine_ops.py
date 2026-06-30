@@ -30,6 +30,8 @@ class CleaningStep(TypedDict, total=False):
     find: str
     replace: str
     regex: bool
+    new_column: str
+    component: str
 
 def _handle_drop_column(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     col = step.get('column')
@@ -207,6 +209,40 @@ def _handle_reorder_columns(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Da
     final_order = existing_order + missing_cols
     return df[final_order], []
 
+def _handle_extract_datetime(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    col = step.get('column')
+    new_col = step.get('new_column')
+    component = step.get('component')
+    
+    if col not in df.columns:
+        return df, [f"Warning: Column '{col}' not found for extract_datetime action."]
+    if not new_col:
+        return df, ["Error: Target column name not specified for extract_datetime."]
+        
+    try:
+        # Coerce to datetime if not already datetime
+        if not pd.api.types.is_datetime64_any_dtype(df[col]):
+            dt_series = pd.to_datetime(df[col], errors='coerce')
+        else:
+            dt_series = df[col]
+            
+        if component == "year":
+            df[new_col] = dt_series.dt.year
+        elif component == "month":
+            df[new_col] = dt_series.dt.month
+        elif component == "day":
+            df[new_col] = dt_series.dt.day
+        elif component == "day_of_week":
+            df[new_col] = dt_series.dt.day_name()
+        elif component == "hour":
+            df[new_col] = dt_series.dt.hour
+        else:
+            return df, [f"Error: Unknown datetime component '{component}'."]
+            
+        return df, []
+    except Exception as e:
+        return df, [f"Error: Could not extract datetime component '{component}' from '{col}': {str(e)}"]
+
 TRANSFORM_REGISTRY = {
     "drop_column": _handle_drop_column,
     "drop_nulls": _handle_drop_nulls,
@@ -220,4 +256,5 @@ TRANSFORM_REGISTRY = {
     "log_transform": _handle_log_transform,
     "rename_column": _handle_rename_column,
     "reorder_columns": _handle_reorder_columns,
+    "extract_datetime": _handle_extract_datetime,
 }

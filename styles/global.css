@@ -4,11 +4,10 @@
 /* --- Hidden Streamlit Elements --- */
 header,
 [data-testid="stHeaderActionElements"],
-.stMarkdown a,
-[data-testid="stFileUploaderDropzoneInstructions"],
-[data-testid="stFileUploader"] small {
+.stMarkdown a {
     display: none !important;
 }
+
 
 /* Push content up to the very top */
 .block-container {
@@ -95,14 +94,14 @@ svg, svg * {
 }
 
 /* --- UPLOAD BUTTON FIX --- */
-[data-testid="stFileUploader"] {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] {
     padding: 0 !important;
     width: 100% !important;
 }
-[data-testid="stFileUploader"] > div,
-[data-testid="stFileUploader"] section,
-[data-testid="stFileUploaderDropzone"],
-[data-testid="stFileDropzone"] {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] > div,
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] section,
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploaderDropzone"],
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileDropzone"] {
     padding: 0 !important;
     margin: 0 !important;
     min-height: 0 !important;
@@ -113,7 +112,7 @@ svg, svg * {
     justify-content: stretch !important;
     width: 100% !important;
 }
-[data-testid="stFileUploader"] button {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] button {
     width: 100% !important;
     height: 38px !important;
     margin: 0 !important;
@@ -123,23 +122,16 @@ svg, svg * {
     justify-content: center !important;
     border-radius: 6px !important;
 }
-[data-testid="stFileUploader"] button > * {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] button > * {
     display: none !important;
 }
-[data-testid="stFileUploader"] button::before {
+div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] button::before {
     content: "Upload Dataset" !important;
     visibility: visible !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     border-radius: 6px !important;
-}
-[data-testid="stFileUploader"] button::before {
-    content: "Upload Dataset" !important;
-    visibility: visible !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
     width: 100% !important;
     height: 100% !important;
     font-size: 14px !important;
@@ -377,4 +369,452 @@ svg, svg * {
     color: #e74c3c;
     font-size: 0.85em;
     font-weight: bold;
+}
+
+/* ============================================
+   WELCOME PAGE — Premium Landing Experience
+   ============================================ */
+
+/* --- Animated Background Orbs --- */
+@keyframes orb-float-1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -40px) scale(1.1); }
+    66% { transform: translate(-20px, 20px) scale(0.95); }
+}
+@keyframes orb-float-2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(-40px, 30px) scale(1.05); }
+    66% { transform: translate(25px, -25px) scale(0.9); }
+}
+@keyframes orb-float-3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(20px, 30px) scale(1.15); }
+    66% { transform: translate(-30px, -20px) scale(0.92); }
+}
+
+.welcome-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+.welcome-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.12;
+}
+.welcome-orb-1 {
+    width: 400px;
+    height: 400px;
+    background: #4F8BF9;
+    top: 5%;
+    left: 10%;
+    animation: orb-float-1 12s ease-in-out infinite;
+}
+.welcome-orb-2 {
+    width: 350px;
+    height: 350px;
+    background: #a88beb;
+    top: 40%;
+    right: 8%;
+    animation: orb-float-2 15s ease-in-out infinite;
+}
+.welcome-orb-3 {
+    width: 300px;
+    height: 300px;
+    background: #2ecc71;
+    bottom: 10%;
+    left: 35%;
+    animation: orb-float-3 18s ease-in-out infinite;
+}
+
+/* --- Trust Badge --- */
+.welcome-badge {
+    display: inline-block;
+    background: rgba(79, 139, 249, 0.1);
+    border: 1px solid rgba(79, 139, 249, 0.25);
+    color: #7eb3ff;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    padding: 0.35rem 1rem;
+    border-radius: 50px;
+    margin-bottom: 1.5rem;
+    letter-spacing: 0.03em;
+}
+
+/* --- Hero Section --- */
+.welcome-hero {
+    text-align: center;
+    padding: 4rem 1.5rem 1.5rem 1.5rem;
+    max-width: 850px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+}
+.welcome-title {
+    font-size: 2.75rem !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    margin-bottom: 1rem !important;
+    background: linear-gradient(135deg, #4F8BF9 0%, #a88beb 50%, #4F8BF9 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+}
+.welcome-subtitle {
+    font-size: 1.1rem !important;
+    font-weight: 400 !important;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.7 !important;
+    margin-bottom: 2.5rem !important;
+    max-width: 650px;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+/* --- CTA Helper Text --- */
+.cta-helper {
+    text-align: center !important;
+    font-size: 0.8rem !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+    margin-top: 0.75rem !important;
+    letter-spacing: 0.02em;
+}
+
+/* --- CTA Button (Native HTML via st.html) --- */
+.premium-cta-btn {
+    display: inline-block;
+    padding: 14px 28px;
+    font-family: 'Inter', sans-serif;
+    font-size: 18px;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    background: linear-gradient(90deg, #d884ff 0%, #38bdf8 100%);
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    font-weight: 400;
+    box-shadow: 0px 4px 20px rgba(216, 132, 255, 0.4);
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.premium-cta-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0px 6px 25px rgba(56, 189, 248, 0.6);
+}
+
+.premium-cta-btn strong {
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+/* --- Feature Cards Grid --- */
+.welcome-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.25rem;
+    max-width: 1200px;
+    margin: 3.5rem auto 3rem auto !important;
+    padding: 0 1.5rem;
+    position: relative;
+    z-index: 1;
+}
+@media (max-width: 992px) {
+    .welcome-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+    .welcome-grid { grid-template-columns: 1fr; }
+}
+
+/* --- Feature Card (Glassmorphism) --- */
+.welcome-card {
+    position: relative;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 2rem 1.5rem 1.75rem 1.5rem;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+    /* Subtle inner glass highlight */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.welcome-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #4F8BF9, #a88beb);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+.welcome-card:hover {
+    transform: translateY(-6px);
+    border-color: rgba(79, 139, 249, 0.25);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 20px 40px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(79, 139, 249, 0.08);
+    background: rgba(255, 255, 255, 0.06);
+}
+.welcome-card:hover::before {
+    opacity: 1;
+}
+
+.welcome-card-icon {
+    font-size: 2rem !important;
+    margin-bottom: 0.85rem;
+    display: block;
+}
+.welcome-card-title {
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    margin-bottom: 0.5rem !important;
+    color: rgba(255, 255, 255, 0.92);
+}
+.welcome-card-desc {
+    font-size: 0.82rem !important;
+    line-height: 1.55 !important;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0 !important;
+}
+
+/* ============================================
+   WELCOME UPLOADER — Dropzone Styled As CTA
+   ============================================ */
+
+/* Hide the invisible marker's container so it takes up no space */
+div.element-container:has(.welcome-uploader-marker),
+div.stMarkdown:has(.welcome-uploader-marker) {
+    display: none !important;
+    height: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Target the Uploader that follows the marker in the DOM */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
+    max-width: fit-content;
+    margin: 10px auto 3rem auto !important;
+    position: relative;
+    z-index: 1;
+}
+
+/* Hide the label */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] label {
+    display: none !important;
+}
+
+/* Hide all internals of the dropzone (Browse button, SVG, limits text) */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] > * {
+    display: none !important;
+}
+
+/* Style the dropzone itself as the premium shiny button */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 14px 28px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 18px !important;
+    color: #ffffff !important;
+    background: linear-gradient(90deg, #d884ff 0%, #38bdf8 100%) !important;
+    border-radius: 12px !important;
+    border: none !important;
+    cursor: pointer !important;
+    box-shadow: 0px 4px 20px rgba(216, 132, 255, 0.4) !important;
+    transition: all 0.3s ease !important;
+    min-height: auto !important;
+}
+
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0px 6px 25px rgba(56, 189, 248, 0.6) !important;
+}
+
+/* Inject the text into the dropzone */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::before {
+    content: "Upload Your Dataset →";
+    font-weight: 800;
+}
+
+/* Hide the dropzone instructions helper text */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInstructions"] {
+    display: none !important;
+}
+
+/* ============================================
+   SHOWCASE CARDS (Pipeline & Audit Log)
+   ============================================ */
+.welcome-showcase {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    max-width: 1200px;
+    margin: 0 auto 5rem auto !important;
+    padding: 0 1.5rem;
+    position: relative;
+    z-index: 1;
+}
+
+.welcome-showcase-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    background: rgba(17, 24, 39, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 3rem;
+    align-items: center;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.welcome-showcase-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+}
+#card-pipeline::before { background: linear-gradient(180deg, #38bdf8, #818cf8); }
+#card-audit::before { background: linear-gradient(180deg, #d884ff, #8b5cf6); }
+
+@media (max-width: 900px) {
+    .welcome-showcase-card {
+        grid-template-columns: 1fr;
+        padding: 2rem;
+    }
+}
+
+.wsc-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 0.75rem;
+    display: block;
+}
+
+.wsc-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 1rem 0;
+    line-height: 1.2;
+}
+
+.wsc-desc {
+    font-size: 1.05rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+.wsc-bullets {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.wsc-bullets li {
+    position: relative;
+    padding-left: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.95rem;
+}
+.wsc-bullets li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: #38bdf8;
+    font-weight: bold;
+}
+#card-audit .wsc-bullets li::before { color: #d884ff; }
+
+/* Code Snippet Block */
+.wsc-code {
+    background: #0f111a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 1.5rem;
+    font-family: 'Fira Code', 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #a6accd;
+    white-space: pre-wrap;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+}
+.code-comment { color: #676e95; font-style: italic; }
+.code-keyword { color: #c792ea; font-weight: bold; }
+.code-func { color: #82aaff; }
+.code-string { color: #c3e88d; }
+
+/* Visual Log Block */
+.wsc-visual {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.wsc-rule-row {
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.03);
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+}
+.wsc-rule-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.75rem;
+}
+.wsc-rule-badge {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+}
+.badge-pass { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
+.badge-warn { background: rgba(241, 196, 15, 0.2); color: #f1c40f; }
+.badge-fail { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
+
+.wsc-audit-row {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+}
+.wsc-audit-step {
+    color: #8b5cf6;
+    font-weight: bold;
+    margin-right: 0.75rem;
+}
+.wsc-audit-col {
+    color: #c084fc;
+    margin-left: 0.5rem;
 }

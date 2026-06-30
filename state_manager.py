@@ -42,21 +42,14 @@ def initialize_state(from_reset=False):
     """Initializes all required session state variables."""
     # 1. Load initial data first to get the columns list for default dropdown selections
     if 'raw_data' not in st.session_state or from_reset:
-        raw_df = load_data("mock_data/train.csv")
-        st.session_state.original_full_data = raw_df
-        if len(raw_df) > MAX_SAMPLE_ROWS:
-            st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
-        else:
-            st.session_state.raw_data = raw_df
-
-        base_df = st.session_state.raw_data
-        bh = int((1 - (base_df.isnull().sum().sum() / base_df.size)) * 100) if base_df.size > 0 else 0
-        st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
-        st.session_state.proposals = generate_proposals(st.session_state.raw_data, set())
+        st.session_state.raw_data = None
+        st.session_state.original_full_data = None
+        st.session_state.intermediate_states = []
+        st.session_state.proposals = []
         st.session_state.scanned_columns = set()
 
     df = st.session_state.raw_data
-    all_cols = df.columns.tolist()
+    all_cols = df.columns.tolist() if df is not None else []
     first_col = all_cols[0] if all_cols else ""
 
     # 2. Define default values for the session state
@@ -94,6 +87,10 @@ def initialize_state(from_reset=False):
         'rel_val_input': "",
         'info_note_input': "",
         'show_reorder_success': False,
+        'datetime_extract_col': first_col,
+        'datetime_component_select': "year",
+        'datetime_new_col_name': "",
+        'show_uploader': False,
     }
 
     # Force reset or initialize for the first time
