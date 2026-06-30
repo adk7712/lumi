@@ -8,11 +8,6 @@ header,
     display: none !important;
 }
 
-/* Hide instructions and small text only for the header uploader */
-div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploaderDropzoneInstructions"],
-div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] small {
-    display: none !important;
-}
 
 /* Push content up to the very top */
 .block-container {

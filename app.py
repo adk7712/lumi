@@ -28,42 +28,11 @@ initialize_state()
 
 # --- HEADER ---
 if st.session_state.raw_data is not None:
-    h_col1, h_col2, h_col3 = st.columns([6, 2, 2], vertical_alignment="bottom")
+    h_col1, h_col2 = st.columns([10, 2], vertical_alignment="bottom")
     with h_col1: # Main column for title
         st.subheader("LUMI")
-    with h_col2: # Column for file uploader
-        st.markdown('<div class="header-uploader-marker"></div>', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Upload Dataset", type=["csv", "xlsx"], label_visibility="collapsed", key="global_uploader")
-        if uploaded_file:
-            # Optimization: Use file attributes for a lightweight identifier instead of full-file hashing
-            # to prevent memory bottlenecks on large datasets.
-            file_id = f"{uploaded_file.file_id}_{uploaded_file.name}_{uploaded_file.size}"
-            if st.session_state.last_file_hash != file_id:
-                is_large = uploaded_file.size > 50 * 1024 * 1024  # 50MB limit warning
-                if is_large:
-                    st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.", icon="⚠️")
-                raw_df = load_data(uploaded_file, nrows=MAX_SAMPLE_ROWS if is_large else None)
-                st.session_state.original_full_data = raw_df
-                if not is_large and len(raw_df) > MAX_SAMPLE_ROWS:
-                    st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
-                else:
-                    st.session_state.raw_data = raw_df
 
-                st.session_state.last_file_hash = file_id
-                # Reset dependent state
-                st.session_state.active_features = []
-                st.session_state.scanned_columns, st.session_state.cleaning_recipe, st.session_state.rules = set(), [], []
-
-                # Reset intermediate states
-                base_df = st.session_state.raw_data
-                bh = int((1 - (base_df.isnull().sum().sum() / base_df.size)) * 100) if base_df.size > 0 else 0
-                st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
-
-                st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
-                st.toast("Dataset Analyzed")
-                st.rerun()
-
-    with h_col3: # Column for reset button
+    with h_col2: # Column for reset button
         u_c1, u_c2 = st.columns(2)
         if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
             st.session_state.cleaning_recipe.pop()
