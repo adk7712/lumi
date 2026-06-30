@@ -594,71 +594,68 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 }
 
 /* ============================================
-   WELCOME UPLOADER — Dropzone Styling
+   WELCOME UPLOADER — Dropzone Styled As CTA
    ============================================ */
-div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] {
-    max-width: 600px;
-    margin: 0 auto 3rem auto !important;
+
+/* Hide the invisible marker's container so it takes up no space */
+div.element-container:has(.welcome-uploader-marker),
+div.stMarkdown:has(.welcome-uploader-marker) {
+    display: none !important;
+    height: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Target the Uploader that follows the marker in the DOM */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
+    max-width: fit-content;
+    margin: 10px auto 3rem auto !important;
     position: relative;
     z-index: 1;
 }
 
-div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] label {
-    font-size: 1.15rem !important;
-    font-weight: 600 !important;
-    color: rgba(255, 255, 255, 0.85) !important;
-    margin-bottom: 1.25rem !important;
-    text-align: center !important;
-    display: block !important;
-    width: 100% !important;
+/* Hide the label */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] label {
+    display: none !important;
 }
 
-div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"] {
-    background-color: rgba(79, 139, 249, 0.03) !important;
-    border: 2px dashed rgba(79, 139, 249, 0.3) !important;
-    border-radius: 14px !important;
-    padding: 3rem 2rem !important;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+/* Hide all internals of the dropzone (Browse button, SVG, limits text) */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] > * {
+    display: none !important;
+}
+
+/* Style the dropzone itself as the premium shiny button */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
     display: flex !important;
-    flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    text-align: center !important;
-}
-
-div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"]:hover {
-    border-color: #4F8BF9 !important;
-    background-color: rgba(79, 139, 249, 0.06) !important;
-    box-shadow: 0 12px 30px rgba(79, 139, 249, 0.1) !important;
-}
-
-/* Browse button in dropzone */
-div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] button {
-    background: linear-gradient(135deg, #4F8BF9, #7c6cf0) !important;
+    padding: 14px 28px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 18px !important;
     color: #ffffff !important;
+    background: linear-gradient(90deg, #d884ff 0%, #38bdf8 100%) !important;
+    border-radius: 12px !important;
     border: none !important;
-    border-radius: 8px !important;
-    padding: 0.65rem 1.75rem !important;
-    font-size: 0.9rem !important;
-    font-weight: 600 !important;
-    transition: all 0.2s ease !important;
-    box-shadow: 0 4px 12px rgba(79, 139, 249, 0.25) !important;
+    cursor: pointer !important;
+    box-shadow: 0px 4px 20px rgba(216, 132, 255, 0.4) !important;
+    transition: all 0.3s ease !important;
+    min-height: auto !important;
 }
 
-div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] button:hover {
-    box-shadow: 0 8px 20px rgba(79, 139, 249, 0.4) !important;
-    transform: translateY(-1px) !important;
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0px 6px 25px rgba(56, 189, 248, 0.6) !important;
 }
 
-div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploader"] button:active {
-    transform: translateY(0px) !important;
+/* Inject the text into the dropzone */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::before {
+    content: "Upload Your Dataset →";
+    font-weight: 800;
 }
 
-/* Dropzone instructions text */
-div:has(> div > .welcome-uploader-marker) + div [data-testid="stFileUploaderDropzoneInstructions"] {
-    color: rgba(255, 255, 255, 0.45) !important;
-    font-size: 0.85rem !important;
-    margin-top: 1rem !important;
+/* Hide the dropzone instructions helper text */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInstructions"] {
+    display: none !important;
 }
 
 /* ============================================
