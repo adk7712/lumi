@@ -9,12 +9,16 @@ from views import (
     render_transformations_tab,
     render_audit_log_tab,
     render_pipeline_preview_tab,
-    render_violation_browser
+    render_violation_browser,
+    render_landing_page
 )
 from scout import generate_proposals
 
 # Set page config
-st.set_page_config(page_title="Lumi", layout="wide")
+st.set_page_config(
+    page_title="Lumi",
+    layout="wide"
+)
 
 # Inject Custom CSS
 inject_custom_css(st)
@@ -23,52 +27,30 @@ inject_custom_css(st)
 initialize_state()
 
 # --- HEADER ---
-h_col1, h_col2, h_col3 = st.columns([6, 2, 2], vertical_alignment="bottom")
-with h_col1: # Main column for title
-    st.subheader("LUMI")
-with h_col2: # Column for file uploader
-    uploaded_file = st.file_uploader("Upload Dataset", type=["csv", "xlsx"], label_visibility="collapsed", key="global_uploader")
-    if uploaded_file:
-        # Optimization: Use file attributes for a lightweight identifier instead of full-file hashing
-        # to prevent memory bottlenecks on large datasets.
-        file_id = f"{uploaded_file.file_id}_{uploaded_file.name}_{uploaded_file.size}"
-        if st.session_state.last_file_hash != file_id:
-            is_large = uploaded_file.size > 50 * 1024 * 1024  # 50MB limit warning
-            if is_large:
-                st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.", icon="⚠️")
-            raw_df = load_data(uploaded_file, nrows=MAX_SAMPLE_ROWS if is_large else None)
-            st.session_state.original_full_data = raw_df
-            if not is_large and len(raw_df) > MAX_SAMPLE_ROWS:
-                st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
-            else:
-                st.session_state.raw_data = raw_df
+if st.session_state.raw_data is not None:
+    h_col1, h_col2 = st.columns([10, 2], vertical_alignment="bottom")
+    with h_col1: # Main column for title
+        st.subheader("LUMI")
 
-            st.session_state.last_file_hash = file_id
-            # Reset dependent state
-            st.session_state.active_features = []
-            st.session_state.scanned_columns, st.session_state.cleaning_recipe, st.session_state.rules = set(), [], []
-
-            # Reset intermediate states
-            base_df = st.session_state.raw_data
-            bh = int((1 - (base_df.isnull().sum().sum() / base_df.size)) * 100) if base_df.size > 0 else 0
-            st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
-
-            st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
-            st.toast("Dataset Analyzed")
+    with h_col2: # Column for reset button
+        u_c1, u_c2 = st.columns(2)
+        if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
+            st.session_state.cleaning_recipe.pop()
+            st.session_state.intermediate_states.pop()
+            st.toast("Last step undone")
             st.rerun()
-
-with h_col3: # Column for reset button
-    u_c1, u_c2 = st.columns(2)
-    if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
-        st.session_state.cleaning_recipe.pop()
-        st.session_state.intermediate_states.pop()
-        st.toast("Last step undone")
-        st.rerun()
-    if u_c2.button("Reset", key="reset_all", width="stretch"):
-        initialize_state(from_reset=True)
-        st.rerun()
+        if u_c2.button("Reset", key="reset_all", width="stretch"):
+            initialize_state(from_reset=True)
+            st.rerun()
+else:
+    st.subheader("LUMI")
 
 st.divider()
+
+# Welcome view if no data is loaded yet
+if st.session_state.raw_data is None:
+    render_landing_page()
+    st.stop()
 
 # Get the latest dataframe from cache
 df = st.session_state.intermediate_states[-1][3]
