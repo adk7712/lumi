@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 from state_manager import load_data, MAX_SAMPLE_ROWS
 from scout import generate_proposals
@@ -47,4 +48,59 @@ def render_landing_page():
         showcase_html = f.read()
     st.html(showcase_html)
 
+    # st.components.v1.html() runs inside a real iframe and can access the
+    # parent page's DOM via window.parent.document (same-origin). This is the
+    # only reliable way to intercept drag events in Streamlit.
+    components.html("""
+    <script>
+    (function() {
+        var doc = window.parent.document;
 
+        function applyDragStyle(dz) {
+            dz.style.setProperty('border-style', 'dashed', 'important');
+            dz.style.setProperty('border-width', '2px', 'important');
+            dz.style.setProperty('border-color', 'rgba(216, 132, 255, 0.85)', 'important');
+            dz.style.setProperty('background', 'rgba(168, 85, 247, 0.07)', 'important');
+            // strip parent wrapper borders
+            var el = dz.parentElement;
+            for (var i = 0; i < 6; i++) {
+                if (!el) break;
+                el.style.setProperty('border', 'none', 'important');
+                el.style.setProperty('outline', 'none', 'important');
+                el.style.setProperty('box-shadow', 'none', 'important');
+                el = el.parentElement;
+            }
+        }
+
+        function clearDragStyle(dz) {
+            dz.style.removeProperty('border-style');
+            dz.style.removeProperty('border-width');
+            dz.style.removeProperty('border-color');
+            dz.style.removeProperty('background');
+        }
+
+        function patchDropzone() {
+            var dz = doc.querySelector('[data-testid="stFileUploaderDropzone"]');
+            if (!dz) return false;
+
+            dz.addEventListener('dragenter', function(e) { applyDragStyle(dz); }, true);
+            dz.addEventListener('dragover',  function(e) { applyDragStyle(dz); }, true);
+            dz.addEventListener('dragleave', function(e) { clearDragStyle(dz); }, true);
+            dz.addEventListener('drop',      function(e) { clearDragStyle(dz); }, true);
+
+            // MutationObserver: whenever Streamlit re-applies its emotion class
+            // during drag (which sets a solid border), immediately force dashed back.
+            var obs = new MutationObserver(function() {
+                var style = dz.getAttribute('style') || '';
+                if (style) applyDragStyle(dz);
+            });
+            obs.observe(dz, { attributes: true, attributeFilter: ['style', 'class'] });
+            return true;
+        }
+
+        var interval = setInterval(function() {
+            if (patchDropzone()) clearInterval(interval);
+        }, 150);
+    })();
+    </script>
+    """, height=0)

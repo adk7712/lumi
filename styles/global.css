@@ -619,27 +619,40 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] >
     display: none !important;
 }
 
-/* Style the dropzone as a premium dashed area */
+/* Strip outlines from wrapper divs at rest */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] div:not([data-testid="stFileUploaderDropzone"]) {
+    border: none !important;
+    outline: none !important;
+}
+
+/* Style the dropzone — force dashed border at ALL times */
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
     padding: 3.5rem 2rem !important;
-    border: 2px dashed rgba(216, 132, 255, 0.4) !important;
+    border-width: 2px !important;
+    border-style: dashed !important;
+    border-color: rgba(216, 132, 255, 0.4) !important;
     border-radius: 16px !important;
     background: rgba(17, 24, 39, 0.4) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
-    transition: all 0.3s ease !important;
+    transition: border-color 0.3s ease, background 0.3s ease !important;
     cursor: pointer !important;
     min-height: auto !important;
+    outline: none !important;
+    box-shadow: none !important;
 }
 
+/* Hover with cursor (no file) — brighten dashed border */
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
-    background: rgba(56, 189, 248, 0.08) !important;
-    border-color: #38bdf8 !important;
+    border-color: rgba(216, 132, 255, 0.8) !important;
+    background: rgba(168, 85, 247, 0.06) !important;
 }
+
+
 
 /* Inject "Drag & drop" text */
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::before {
