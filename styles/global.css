@@ -589,7 +589,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 }
 
 /* ============================================
-   WELCOME UPLOADER — Dropzone Styled As CTA
+   WELCOME UPLOADER — Premium Drag & Drop Area
    ============================================ */
 
 /* Hide the invisible marker's container so it takes up no space */
@@ -603,8 +603,8 @@ div.stMarkdown:has(.welcome-uploader-marker) {
 
 /* Target the Uploader that follows the marker in the DOM */
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
-    max-width: fit-content;
-    margin: 10px auto 3rem auto !important;
+    max-width: 600px;
+    margin: 1rem auto 3rem auto !important;
     position: relative;
     z-index: 1;
 }
@@ -614,38 +614,62 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] label {
     display: none !important;
 }
 
-/* Hide all internals of the dropzone (Browse button, SVG, limits text) */
+/* Hide all internals of the native dropzone (Browse button, SVG, limits text) */
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] > * {
     display: none !important;
 }
 
-/* Style the dropzone itself as the premium shiny button */
+/* Style the dropzone as a premium dashed area */
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
     display: flex !important;
+    flex-direction: column !important;
     align-items: center !important;
     justify-content: center !important;
-    padding: 14px 28px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    font-size: 18px !important;
-    color: #ffffff !important;
-    background: linear-gradient(90deg, #d884ff 0%, #38bdf8 100%) !important;
-    border-radius: 12px !important;
-    border: none !important;
-    cursor: pointer !important;
-    box-shadow: 0px 4px 20px rgba(216, 132, 255, 0.4) !important;
+    padding: 3.5rem 2rem !important;
+    border: 2px dashed rgba(216, 132, 255, 0.4) !important;
+    border-radius: 16px !important;
+    background: rgba(17, 24, 39, 0.4) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
     transition: all 0.3s ease !important;
+    cursor: pointer !important;
     min-height: auto !important;
 }
 
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0px 6px 25px rgba(56, 189, 248, 0.6) !important;
+    background: rgba(56, 189, 248, 0.08) !important;
+    border-color: #38bdf8 !important;
 }
 
-/* Inject the text into the dropzone */
+/* Inject "Drag & drop" text */
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::before {
-    content: "Upload Your Dataset →";
+    content: "Drag & drop your CSV or Excel file here";
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.05rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 1.5rem;
+}
+
+/* Inject the premium button visually using ::after */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::after {
+    content: "Browse Files →";
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
     font-weight: 800;
+    color: #ffffff;
+    background: linear-gradient(90deg, #d884ff 0%, #38bdf8 100%);
+    border-radius: 8px;
+    box-shadow: 0px 4px 15px rgba(216, 132, 255, 0.3);
+    transition: all 0.3s ease;
+}
+
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover::after {
+    transform: translateY(-2px);
+    box-shadow: 0px 6px 20px rgba(56, 189, 248, 0.5);
 }
 
 /* Hide the dropzone instructions helper text */
