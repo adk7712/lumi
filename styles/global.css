@@ -450,7 +450,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 /* --- Hero Section --- */
 .welcome-hero {
     text-align: center;
-    padding: 4rem 1.5rem 1.5rem 1.5rem;
+    padding: 1.5rem 1.5rem 1rem 1.5rem;
     max-width: 850px;
     margin: 0 auto;
     position: relative;
@@ -471,7 +471,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
     font-weight: 400 !important;
     color: rgba(255, 255, 255, 0.6);
     line-height: 1.7 !important;
-    margin-bottom: 2.5rem !important;
+    margin-bottom: 1.25rem !important;
     max-width: 650px;
     margin-left: auto !important;
     margin-right: auto !important;

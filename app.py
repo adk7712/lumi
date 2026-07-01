@@ -26,13 +26,12 @@ inject_custom_css(st)
 # Initialize Session State
 initialize_state()
 
-# --- HEADER ---
+# --- HEADER (only shown after a dataset is loaded) ---
 if st.session_state.raw_data is not None:
     h_col1, h_col2 = st.columns([10, 2], vertical_alignment="bottom")
-    with h_col1: # Main column for title
+    with h_col1:
         st.subheader("LUMI")
-
-    with h_col2: # Column for reset button
+    with h_col2:
         u_c1, u_c2 = st.columns(2)
         if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
             st.session_state.cleaning_recipe.pop()
