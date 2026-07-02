@@ -81,7 +81,7 @@ svg, svg * {
     background-color: rgba(128, 128, 128, 0.05);
     border-radius: 5px;
     margin-bottom: 5px;
-    border-left: 4px solid #4F8BF9;
+    border-left: 4px solid #ff4b4b;
 }
 
 /* Proposal Box */
@@ -199,22 +199,22 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 }
 .stButton > button:hover,
 .stDownloadButton > button:hover {
-    border-color: #4F8BF9;
-    color: #4F8BF9;
-    background-color: rgba(79, 139, 249, 0.05);
+    border-color: #ff4b4b;
+    color: #ff4b4b;
+    background-color: rgba(255, 75, 75, 0.05);
 }
 
-/* Custom Primary Button (Brand Blue instead of Red) */
+/* Custom Primary Button (Brand Red instead of Teal) */
 .stButton > button[data-testid="stBaseButton-primary"] {
-    background-color: #4F8BF9 !important;
+    background-color: #ff4b4b !important;
     color: white !important;
-    border-color: #4F8BF9 !important;
+    border-color: #ff4b4b !important;
 }
 
 .stButton > button[data-testid="stBaseButton-primary"]:hover {
-    background-color: #357ae8 !important;
+    background-color: #d32f2f !important;
     color: white !important;
-    border-color: #357ae8 !important;
+    border-color: #d32f2f !important;
 }
 
 /* ============================================================
@@ -306,7 +306,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 
 .spinner-circle {
     border: 3px solid rgba(128, 128, 128, 0.2);
-    border-top: 3px solid #4F8BF9;
+    border-top: 3px solid #ff4b4b;
     border-radius: 50%;
     width: 22px;
     height: 22px;
@@ -324,7 +324,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 
 /* Metric Cards inside Diagnostics Tab */
 .diagnostic-metric {
-    border-left: 3px solid rgba(28, 131, 225, 0.5);
+    border-left: 3px solid rgba(255, 75, 75, 0.5);
     padding: 2px 8px;
     margin-bottom: 10px;
 }
@@ -354,7 +354,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
     opacity: 0.5 !important;
 }
 .rule-desc {
-    color: #4F8BF9;
+    color: #ff4b4b;
 }
 .rule-violations-count {
     font-size: 0.85em;
@@ -411,7 +411,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 .welcome-orb-1 {
     width: 400px;
     height: 400px;
-    background: #4F8BF9;
+    background: #0d9488;
     top: 5%;
     left: 10%;
     animation: orb-float-1 12s ease-in-out infinite;
@@ -433,94 +433,276 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
     animation: orb-float-3 18s ease-in-out infinite;
 }
 
-/* --- Trust Badge --- */
-.welcome-badge {
-    display: inline-block;
-    background: rgba(79, 139, 249, 0.1);
-    border: 1px solid rgba(79, 139, 249, 0.25);
-    color: #7eb3ff;
-    font-size: 0.8rem !important;
-    font-weight: 500 !important;
-    padding: 0.35rem 1rem;
-    border-radius: 50px;
-    margin-bottom: 1.5rem;
-    letter-spacing: 0.03em;
+/* --- Dotted Grid Background --- */
+.welcome-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+/* --- Dotted Grid Background --- */
+.welcome-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+.welcome-grid-bg {
+    background-image: radial-gradient(rgba(13, 148, 136, 0.08) 1px, transparent 0);
+    background-size: 24px 24px;
+    opacity: 0.8;
 }
 
-/* --- Hero Section --- */
-.welcome-hero {
-    text-align: center;
-    padding: 1.5rem 1.5rem 1rem 1.5rem;
-    max-width: 850px;
-    margin: 0 auto;
+/* --- Tighten Streamlit native header spacing for landing page --- */
+[data-testid="stSubheader"] {
+    margin-bottom: -0.75rem !important;
+    padding-bottom: 0rem !important;
+}
+hr {
+    margin: 0.5rem 0 0.75rem 0 !important;
+}
+
+/* --- Hero Section Split Layout --- */
+.welcome-hero-container {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 3rem;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0.25rem auto 1rem auto;
+    padding: 0 1.5rem;
     position: relative;
     z-index: 1;
 }
+@media (max-width: 900px) {
+    .welcome-hero-container {
+        grid-template-columns: 1fr;
+        text-align: center;
+        gap: 2rem;
+    }
+    .welcome-hero-right {
+        display: none;
+    }
+}
+.welcome-hero-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+@media (max-width: 900px) {
+    .welcome-hero-left {
+        align-items: center;
+    }
+}
 .welcome-title {
-    font-size: 2.75rem !important;
-    font-weight: 700 !important;
-    line-height: 1.2 !important;
-    margin-bottom: 1rem !important;
-    background: linear-gradient(135deg, #4F8BF9 0%, #a88beb 50%, #4F8BF9 100%);
-    background-size: 200% auto;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
+    font-size: 2.8rem !important;
+    font-weight: 800 !important;
+    line-height: 1.25 !important;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.25rem !important;
+    color: #FFFFFF !important;
+    text-align: left;
+}
+@media (max-width: 900px) {
+    .welcome-title {
+        text-align: center;
+        font-size: 2.2rem !important;
+    }
+}
+.highlight-teal {
+    color: #0d9488 !important;
 }
 .welcome-subtitle {
-    font-size: 1.1rem !important;
+    font-size: 1.05rem !important;
     font-weight: 400 !important;
-    color: rgba(255, 255, 255, 0.6);
-    line-height: 1.7 !important;
-    margin-bottom: 1.25rem !important;
-    max-width: 650px;
-    margin-left: auto !important;
-    margin-right: auto !important;
+    color: #A3A3A3 !important;
+    line-height: 1.65 !important;
+    margin-bottom: 1rem !important;
+    max-width: 600px;
+    text-align: left;
+}
+@media (max-width: 900px) {
+    .welcome-subtitle {
+        text-align: center;
+    }
+}
+.hero-image-container {
+    position: relative;
+    border: 1px solid #1A1A1A;
+    border-radius: 12px;
+    background: rgba(10, 10, 10, 0.6);
+    padding: 0.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.hero-image {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
 }
 
-/* --- CTA Helper Text --- */
+/* ============================================
+   WELCOME UPLOADER — Premium Drag & Drop Area
+   ============================================ */
+
+/* Hide the uploader marker elements */
+div.element-container:has(.welcome-uploader-marker),
+div.stMarkdown:has(.welcome-uploader-marker) {
+    display: none !important;
+    height: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Target the Uploader container */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
+    max-width: 700px;
+    margin: 0.5rem auto 2.5rem auto !important;
+    position: relative;
+    z-index: 1;
+}
+
+/* Hide Streamlit default components inside dropzone */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] label {
+    display: none !important;
+}
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] > * {
+    display: none !important;
+}
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] div:not([data-testid="stFileUploaderDropzone"]) {
+    border: none !important;
+    outline: none !important;
+}
+
+/* Styled dropzone outer container */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 3rem 2rem !important;
+    border-width: 1.5px !important;
+    border-style: dashed !important;
+    border-color: #2D2D2D !important;
+    border-radius: 12px !important;
+    background: rgba(18, 18, 18, 0.4) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    transition: all 0.3s ease !important;
+    cursor: pointer !important;
+    min-height: auto !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
+    border-color: #0d9488 !important;
+    background: rgba(13, 148, 136, 0.03) !important;
+}
+
+/* Label text */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::before {
+    content: "Drag & drop your CSV or Excel file here";
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.95rem;
+    color: #A3A3A3;
+    margin-bottom: 1.25rem;
+}
+
+/* CTA browse button */
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::after {
+    content: "Browse Files →";
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: #FFFFFF;
+    background: #0d9488;
+    border-radius: 4px;
+    box-shadow: 0px 4px 15px rgba(13, 148, 136, 0.2);
+    transition: all 0.3s ease;
+}
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover::after {
+    transform: translateY(-1px);
+    box-shadow: 0px 6px 20px rgba(13, 148, 136, 0.4);
+}
+div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInstructions"] {
+    display: none !important;
+}
+
+/* Sub-text */
 .cta-helper {
     text-align: center !important;
     font-size: 0.8rem !important;
-    color: rgba(255, 255, 255, 0.4) !important;
-    margin-top: 0.75rem !important;
+    color: #737373 !important;
+    margin-top: -2.25rem !important;
+    margin-bottom: 2.5rem !important;
     letter-spacing: 0.02em;
 }
 
-/* --- CTA Button (Native HTML via st.html) --- */
-.premium-cta-btn {
-    display: inline-block;
-    padding: 14px 28px;
-    font-family: 'Inter', sans-serif;
-    font-size: 18px;
-    color: #ffffff !important;
-    text-decoration: none !important;
-    background: linear-gradient(90deg, #d884ff 0%, #38bdf8 100%);
+/* ============================================
+   PLATFORM EXPERIENCE
+   ============================================ */
+.platform-experience {
+    max-width: 1200px;
+    margin: 0 auto 3rem auto;
+    padding: 0 1.5rem;
+    position: relative;
+    z-index: 1;
+}
+.showcase-divider {
+    border: 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    margin: 0rem 0 3rem 0 !important;
+}
+.exp-body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.demo-gif-container {
+    position: relative;
+    border: 1px solid #1A1A1A;
     border-radius: 12px;
-    border: none;
-    cursor: pointer;
-    font-weight: 400;
-    box-shadow: 0px 4px 20px rgba(216, 132, 255, 0.4);
-    transition: all 0.3s ease;
-    text-align: center;
+    background: rgba(10, 10, 10, 0.6);
+    padding: 0.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+.demo-gif-placeholder {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    display: block;
 }
 
-.premium-cta-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0px 6px 25px rgba(56, 189, 248, 0.6);
-}
-
-.premium-cta-btn strong {
-    font-weight: 800;
-    letter-spacing: 0.5px;
-}
-
-/* --- Feature Cards Grid --- */
+/* ============================================
+   FEATURE CARDS GRID (BOTTOM)
+   ============================================ */
 .welcome-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 1.25rem;
+    gap: 1.5rem;
     max-width: 1200px;
-    margin: 3.5rem auto 3rem auto !important;
+    margin: 4rem auto 5rem auto !important;
     padding: 0 1.5rem;
     position: relative;
     z-index: 1;
@@ -531,327 +713,87 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 @media (max-width: 600px) {
     .welcome-grid { grid-template-columns: 1fr; }
 }
-
-/* --- Feature Card (Glassmorphism) --- */
 .welcome-card {
     position: relative;
-    background: rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
+    background: rgba(18, 18, 18, 0.4);
+    border: 1px solid #161616;
+    border-radius: 8px;
     padding: 2rem 1.5rem 1.75rem 1.5rem;
-    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-    overflow: hidden;
-    /* Subtle inner glass highlight */
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-.welcome-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #4F8BF9, #a88beb);
-    opacity: 0;
-    transition: opacity 0.35s ease;
+    transition: all 0.3s ease;
 }
 .welcome-card:hover {
-    transform: translateY(-6px);
-    border-color: rgba(79, 139, 249, 0.25);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        0 20px 40px rgba(0, 0, 0, 0.25),
-        0 0 0 1px rgba(79, 139, 249, 0.08);
-    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-4px);
+    border-color: #0d9488;
+    background: rgba(18, 18, 18, 0.6);
+    box-shadow: 0 10px 25px rgba(13, 148, 136, 0.03);
 }
-.welcome-card:hover::before {
-    opacity: 1;
-}
-
 .welcome-card-icon {
-    font-size: 2rem !important;
-    margin-bottom: 0.85rem;
+    color: #0d9488 !important;
+    font-size: 1.5rem !important;
+    margin-bottom: 0.75rem;
     display: block;
 }
 .welcome-card-title {
-    font-size: 1.05rem !important;
-    font-weight: 600 !important;
+    font-size: 1rem !important;
+    font-weight: 700 !important;
     margin-bottom: 0.5rem !important;
-    color: rgba(255, 255, 255, 0.92);
+    color: #FFFFFF;
+    letter-spacing: -0.01em;
 }
 .welcome-card-desc {
-    font-size: 0.82rem !important;
-    line-height: 1.55 !important;
-    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.8rem !important;
+    line-height: 1.5 !important;
+    color: #A3A3A3;
     margin: 0 !important;
 }
 
-/* ============================================
-   WELCOME UPLOADER — Premium Drag & Drop Area
-   ============================================ */
-
-/* Hide the invisible marker's container so it takes up no space */
-div.element-container:has(.welcome-uploader-marker),
-div.stMarkdown:has(.welcome-uploader-marker) {
+/* Hide the logo marker element */
+div.element-container:has(.lumi-logo-button),
+div.stMarkdown:has(.lumi-logo-button) {
     display: none !important;
     height: 0;
     margin: 0;
     padding: 0;
 }
 
-/* Target the Uploader that follows the marker in the DOM */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
-    max-width: 600px;
-    margin: 1rem auto 3rem auto !important;
-    position: relative;
-    z-index: 1;
-}
-
-/* Hide the label */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] label {
-    display: none !important;
-}
-
-/* Hide all internals of the native dropzone (Browse button, SVG, limits text) */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] > * {
-    display: none !important;
-}
-
-/* Strip outlines from wrapper divs at rest */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] div:not([data-testid="stFileUploaderDropzone"]) {
+/* Clickable Header Logo Link */
+div.element-container:has(.lumi-logo-button) + div.element-container [data-testid="stButton"],
+div.element-container:has(.lumi-logo-button) + div.element-container button,
+div.element-container:has(.lumi-logo-button) + div.element-container button p,
+div.element-container:has(.lumi-logo-button) + div.element-container button span {
+    background: transparent !important;
+    background-color: transparent !important;
     border: none !important;
+    border-color: transparent !important;
     outline: none !important;
-}
-
-/* Style the dropzone — force dashed border at ALL times */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 3.5rem 2rem !important;
-    border-width: 2px !important;
-    border-style: dashed !important;
-    border-color: rgba(216, 132, 255, 0.4) !important;
-    border-radius: 16px !important;
-    background: rgba(17, 24, 39, 0.4) !important;
-    backdrop-filter: blur(10px) !important;
-    -webkit-backdrop-filter: blur(10px) !important;
-    transition: border-color 0.3s ease, background 0.3s ease !important;
+    box-shadow: none !important;
+    color: #FFFFFF !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    line-height: 1.2 !important;
     cursor: pointer !important;
-    min-height: auto !important;
-    outline: none !important;
+    font-family: inherit !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    transition: color 0.2s ease !important;
+}
+div.element-container:has(.lumi-logo-button) + div.element-container button:hover,
+div.element-container:has(.lumi-logo-button) + div.element-container button:hover p,
+div.element-container:has(.lumi-logo-button) + div.element-container button:hover span {
+    color: #ff4b4b !important;
+    background: transparent !important;
+    background-color: transparent !important;
+}
+div.element-container:has(.lumi-logo-button) + div.element-container button:active,
+div.element-container:has(.lumi-logo-button) + div.element-container button:active p,
+div.element-container:has(.lumi-logo-button) + div.element-container button:focus,
+div.element-container:has(.lumi-logo-button) + div.element-container button:focus p {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #ff4b4b !important;
     box-shadow: none !important;
 }
 
-/* Hover with cursor (no file) — brighten dashed border */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
-    border-color: rgba(216, 132, 255, 0.8) !important;
-    background: rgba(168, 85, 247, 0.06) !important;
-}
-
-
-
-/* Inject "Drag & drop" text */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::before {
-    content: "Drag & drop your CSV or Excel file here";
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 1.05rem;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 1.5rem;
-}
-
-/* Inject the premium button visually using ::after */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::after {
-    content: "Browse Files →";
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 12px 28px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 16px;
-    font-weight: 800;
-    color: #ffffff;
-    background: linear-gradient(90deg, #d884ff 0%, #38bdf8 100%);
-    border-radius: 8px;
-    box-shadow: 0px 4px 15px rgba(216, 132, 255, 0.3);
-    transition: all 0.3s ease;
-}
-
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover::after {
-    transform: translateY(-2px);
-    box-shadow: 0px 6px 20px rgba(56, 189, 248, 0.5);
-}
-
-/* Hide the dropzone instructions helper text */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInstructions"] {
-    display: none !important;
-}
-
-/* ============================================
-   SHOWCASE CARDS (Pipeline & Audit Log)
-   ============================================ */
-.welcome-showcase {
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-    max-width: 1200px;
-    margin: 0 auto 5rem auto !important;
-    padding: 0 1.5rem;
-    position: relative;
-    z-index: 1;
-}
-
-.welcome-showcase-card {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 3rem;
-    background: rgba(17, 24, 39, 0.6);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    padding: 3rem;
-    align-items: center;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-}
-
-.welcome-showcase-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 6px;
-    height: 100%;
-}
-#card-pipeline::before { background: linear-gradient(180deg, #38bdf8, #818cf8); }
-#card-audit::before { background: linear-gradient(180deg, #d884ff, #8b5cf6); }
-
-@media (max-width: 900px) {
-    .welcome-showcase-card {
-        grid-template-columns: 1fr;
-        padding: 2rem;
-    }
-}
-
-.wsc-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.5);
-    margin-bottom: 0.75rem;
-    display: block;
-}
-
-.wsc-title {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #ffffff;
-    margin: 0 0 1rem 0;
-    line-height: 1.2;
-}
-
-.wsc-desc {
-    font-size: 1.05rem;
-    color: rgba(255, 255, 255, 0.7);
-    line-height: 1.6;
-    margin-bottom: 1.5rem;
-}
-
-.wsc-bullets {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-.wsc-bullets li {
-    position: relative;
-    padding-left: 1.5rem;
-    margin-bottom: 0.75rem;
-    color: rgba(255, 255, 255, 0.85);
-    font-size: 0.95rem;
-}
-.wsc-bullets li::before {
-    content: '→';
-    position: absolute;
-    left: 0;
-    color: #38bdf8;
-    font-weight: bold;
-}
-#card-audit .wsc-bullets li::before { color: #d884ff; }
-
-/* Code Snippet Block */
-.wsc-code {
-    background: #0f111a;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 1.5rem;
-    font-family: 'Fira Code', 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
-    line-height: 1.6;
-    color: #a6accd;
-    white-space: pre-wrap;
-    box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
-}
-.code-comment { color: #676e95; font-style: italic; }
-.code-keyword { color: #c792ea; font-weight: bold; }
-.code-func { color: #82aaff; }
-.code-string { color: #c3e88d; }
-
-/* Visual Log Block */
-.wsc-visual {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-.wsc-rule-row {
-    display: flex;
-    align-items: center;
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.03);
-    padding: 0.6rem 0.8rem;
-    border-radius: 8px;
-}
-.wsc-rule-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 0.75rem;
-}
-.wsc-rule-badge {
-    margin-left: auto;
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-}
-.badge-pass { background: rgba(46, 204, 113, 0.2); color: #2ecc71; }
-.badge-warn { background: rgba(241, 196, 15, 0.2); color: #f1c40f; }
-.badge-fail { background: rgba(231, 76, 60, 0.2); color: #e74c3c; }
-
-.wsc-audit-row {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.6);
-    display: flex;
-    align-items: center;
-}
-.wsc-audit-step {
-    color: #8b5cf6;
-    font-weight: bold;
-    margin-right: 0.75rem;
-}
-.wsc-audit-col {
-    color: #c084fc;
-    margin-left: 0.5rem;
-}

@@ -1,12 +1,14 @@
 import streamlit as st
-import streamlit.components.v1 as components
+import urllib.parse
 import os
 from state_manager import load_data, MAX_SAMPLE_ROWS
 from scout import generate_proposals
 
 def render_landing_page():
-    # Load template path
+    # Load template paths and assets
     TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'templates')
+    ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets')
+
     with open(os.path.join(TEMPLATES_DIR, 'landing_hero.html'), 'r') as f:
         hero_html = f.read()
     st.html(hero_html)
@@ -48,10 +50,10 @@ def render_landing_page():
         showcase_html = f.read()
     st.html(showcase_html)
 
-    # st.components.v1.html() runs inside a real iframe and can access the
-    # parent page's DOM via window.parent.document (same-origin). This is the
-    # only reliable way to intercept drag events in Streamlit.
-    components.html("""
+    # st.iframe runs inside a real sandboxed iframe and can access the parent
+    # page's DOM via window.parent.document (same-origin). We encode the JS as
+    # a data: URI since st.iframe only accepts URLs, not raw HTML.
+    _js = """
     <script>
     (function() {
         var doc = window.parent.document;
@@ -61,7 +63,6 @@ def render_landing_page():
             dz.style.setProperty('border-width', '2px', 'important');
             dz.style.setProperty('border-color', 'rgba(216, 132, 255, 0.85)', 'important');
             dz.style.setProperty('background', 'rgba(168, 85, 247, 0.07)', 'important');
-            // strip parent wrapper borders
             var el = dz.parentElement;
             for (var i = 0; i < 6; i++) {
                 if (!el) break;
@@ -82,17 +83,12 @@ def render_landing_page():
         function patchDropzone() {
             var dz = doc.querySelector('[data-testid="stFileUploaderDropzone"]');
             if (!dz) return false;
-
-            dz.addEventListener('dragenter', function(e) { applyDragStyle(dz); }, true);
-            dz.addEventListener('dragover',  function(e) { applyDragStyle(dz); }, true);
-            dz.addEventListener('dragleave', function(e) { clearDragStyle(dz); }, true);
-            dz.addEventListener('drop',      function(e) { clearDragStyle(dz); }, true);
-
-            // MutationObserver: whenever Streamlit re-applies its emotion class
-            // during drag (which sets a solid border), immediately force dashed back.
+            dz.addEventListener('dragenter', function() { applyDragStyle(dz); }, true);
+            dz.addEventListener('dragover',  function() { applyDragStyle(dz); }, true);
+            dz.addEventListener('dragleave', function() { clearDragStyle(dz); }, true);
+            dz.addEventListener('drop',      function() { clearDragStyle(dz); }, true);
             var obs = new MutationObserver(function() {
-                var style = dz.getAttribute('style') || '';
-                if (style) applyDragStyle(dz);
+                if (dz.getAttribute('style')) applyDragStyle(dz);
             });
             obs.observe(dz, { attributes: true, attributeFilter: ['style', 'class'] });
             return true;
@@ -103,4 +99,8 @@ def render_landing_page():
         }, 150);
     })();
     </script>
-    """, height=0)
+    """
+    st.iframe(
+        src="data:text/html;charset=utf-8," + urllib.parse.quote(_js),
+        height=1
+    )

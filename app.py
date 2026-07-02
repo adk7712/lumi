@@ -30,7 +30,11 @@ initialize_state()
 if st.session_state.raw_data is not None:
     h_col1, h_col2 = st.columns([10, 2], vertical_alignment="bottom")
     with h_col1:
-        st.subheader("LUMI")
+        st.markdown('<div class="lumi-logo-button">', unsafe_allow_html=True)
+        if st.button("LUMI", key="lumi_logo"):
+            initialize_state(from_reset=True)
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     with h_col2:
         u_c1, u_c2 = st.columns(2)
         if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
