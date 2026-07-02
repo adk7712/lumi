@@ -747,3 +747,53 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInst
     margin: 0 !important;
 }
 
+/* Hide the logo marker element */
+div.element-container:has(.lumi-logo-button),
+div.stMarkdown:has(.lumi-logo-button) {
+    display: none !important;
+    height: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Clickable Header Logo Link */
+div.element-container:has(.lumi-logo-button) + div.element-container [data-testid="stButton"],
+div.element-container:has(.lumi-logo-button) + div.element-container button,
+div.element-container:has(.lumi-logo-button) + div.element-container button p,
+div.element-container:has(.lumi-logo-button) + div.element-container button span {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    border-color: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+    color: #FFFFFF !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    line-height: 1.2 !important;
+    cursor: pointer !important;
+    font-family: inherit !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    transition: color 0.2s ease !important;
+}
+div.element-container:has(.lumi-logo-button) + div.element-container button:hover,
+div.element-container:has(.lumi-logo-button) + div.element-container button:hover p,
+div.element-container:has(.lumi-logo-button) + div.element-container button:hover span {
+    color: #ff4b4b !important;
+    background: transparent !important;
+    background-color: transparent !important;
+}
+div.element-container:has(.lumi-logo-button) + div.element-container button:active,
+div.element-container:has(.lumi-logo-button) + div.element-container button:active p,
+div.element-container:has(.lumi-logo-button) + div.element-container button:focus,
+div.element-container:has(.lumi-logo-button) + div.element-container button:focus p {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #ff4b4b !important;
+    box-shadow: none !important;
+}
+
