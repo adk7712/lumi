@@ -74,3 +74,7 @@ def render_overview_tab(df):
 
     summary_df = pd.DataFrame(summary_data)
     st.dataframe(summary_df, width="stretch", hide_index=True)
+
+    with st.expander("Descriptive Statistics (df.describe)", expanded=False):
+        desc_df = df.describe(include='all').astype(str).replace('nan', '')
+        st.dataframe(desc_df, width="stretch")
