@@ -42,7 +42,6 @@ def render_overview_tab(df):
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
 
     st.divider()
-    st.subheader("Column Profiles")
 
     summary_data = []
     for col in df.columns:
@@ -73,8 +72,10 @@ def render_overview_tab(df):
         })
 
     summary_df = pd.DataFrame(summary_data)
-    st.dataframe(summary_df, width="stretch", hide_index=True)
+    desc_df = df.describe(include='all').astype(str).replace('nan', '')
 
-    with st.expander("Descriptive Statistics (df.describe)", expanded=False):
-        desc_df = df.describe(include='all').astype(str).replace('nan', '')
+    t_summary, t_describe = st.tabs(["Column Summary (df.info)", "Descriptive Statistics (df.describe)"])
+    with t_summary:
+        st.dataframe(summary_df, width="stretch", hide_index=True)
+    with t_describe:
         st.dataframe(desc_df, width="stretch")
