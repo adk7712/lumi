@@ -663,23 +663,10 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInst
     position: relative;
     z-index: 1;
 }
-.exp-header {
-    margin-bottom: 2.5rem;
-    border-bottom: 1px solid #1A1A1A;
-    padding-bottom: 1rem;
-}
-.exp-tag {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    color: #0d9488;
-    letter-spacing: 0.05em;
-}
-.exp-title {
-    font-size: 1.75rem !important;
-    font-weight: 700 !important;
-    color: #FFFFFF !important;
-    margin-top: 0.5rem !important;
-    letter-spacing: -0.01em;
+.showcase-divider {
+    border: 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+    margin: 0rem 0 3rem 0 !important;
 }
 .exp-body {
     display: flex;
