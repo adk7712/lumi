@@ -129,7 +129,7 @@ def render_overview_tab(df):
                             sync_column_rename(orig, val)
                         st.rerun()
         else:
-            st.markdown("✨ *Your dataset looks clean! No quick actions recommended.*")
+            st.markdown("*Your dataset looks clean! No quick actions recommended.*")
 
         if duplicates_count > 0:
             with st.expander(f"Preview {duplicates_count} Duplicate Rows", expanded=False):
