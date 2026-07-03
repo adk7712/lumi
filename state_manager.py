@@ -45,7 +45,7 @@ def initialize_state(from_reset=False):
         import sys
         is_testing = ('streamlit.testing' in sys.modules) or any('test' in arg for arg in sys.argv)
         
-        mock_path = Path(__file__).parent / "mock_data" / "train.csv"
+        mock_path = Path(__file__).parent / "mock_data" / "lumi_test_suite.csv"
         if mock_path.exists() and not is_testing:
             df = pd.read_csv(mock_path)
             st.session_state.raw_data = df

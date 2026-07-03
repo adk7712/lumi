@@ -59,10 +59,10 @@ def render_overview_tab(df):
         has_recommended = (duplicates_count > 0 or empty_cols_count > 0 or empty_rows_count > 0 or len(whitespace_cols) > 0)
 
         if has_recommended:
-            with st.container(border=True):
+            with st.container(border=False):
                 if duplicates_count > 0:
                     if st.button(
-                        f"🗑️ Remove {duplicates_count} Duplicate Rows",
+                        f"Remove {duplicates_count} Duplicate Rows",
                         key="qa_drop_duplicates",
                         width="stretch",
                         help=f"Removes the {duplicates_count} rows that contain identical values across all features."
@@ -72,7 +72,7 @@ def render_overview_tab(df):
                 if empty_cols_count > 0:
                     cols_preview = ", ".join(empty_cols[:3]) + ("..." if len(empty_cols) > 3 else "")
                     if st.button(
-                        f"🚫 Drop {empty_cols_count} Empty Columns",
+                        f"Drop {empty_cols_count} Empty Columns",
                         key="qa_drop_empty_cols",
                         width="stretch",
                         help=f"Drops columns containing 100% missing values: {cols_preview}"
@@ -81,7 +81,7 @@ def render_overview_tab(df):
                         st.rerun()
                 if empty_rows_count > 0:
                     if st.button(
-                        f"➖ Remove {empty_rows_count} Empty Rows",
+                        f"Remove {empty_rows_count} Empty Rows",
                         key="qa_drop_empty_rows",
                         width="stretch",
                         help=f"Removes the {empty_rows_count} rows that are entirely empty."
@@ -91,7 +91,7 @@ def render_overview_tab(df):
                 if whitespace_cols:
                     cols_preview = ", ".join(whitespace_cols[:3]) + ("..." if len(whitespace_cols) > 3 else "")
                     if st.button(
-                        "✨ Strip Column Whitespace",
+                        "Strip Column Whitespace",
                         key="qa_strip_whitespace",
                         width="stretch",
                         help=f"Strips leading/trailing whitespaces from text columns: {cols_preview}"

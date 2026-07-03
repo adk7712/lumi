@@ -1,5 +1,5 @@
 import streamlit as st
-# Trigger hot reload for overview view updates with conditional quick actions container
+# Trigger hot reload for overview view updates with borderless quick actions container
 from ui_utils import inject_custom_css
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS
 from views import (
