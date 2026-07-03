@@ -324,7 +324,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 
 /* Metric Cards inside Diagnostics Tab */
 .diagnostic-metric {
-    border-left: 3px solid rgba(255, 75, 75, 0.5);
+    border-left: 3px solid rgba(31, 119, 180, 0.7);
     padding: 2px 8px;
     margin-bottom: 10px;
 }
