@@ -11,7 +11,7 @@ def render_pipeline_preview_tab(df):
         with c1:
             preview_mode = st.selectbox(
                 "Preview Mode", 
-                ["First Rows", "Last Rows", "Random Sample"], 
+                ["First Rows", "Last Rows", "Random Sample", "All Rows"], 
                 index=0, 
                 key="preview_mode_select"
             )
@@ -22,6 +22,7 @@ def render_pipeline_preview_tab(df):
                 max_value=500, 
                 value=100, 
                 step=5, 
+                disabled=(preview_mode == "All Rows"),
                 key="preview_row_count"
             )
             
@@ -32,8 +33,10 @@ def render_pipeline_preview_tab(df):
             display_df = target_df.head(row_count)
         elif preview_mode == "Last Rows":
             display_df = target_df.tail(row_count)
-        else:  # Random Sample
+        elif preview_mode == "Random Sample":
             display_df = target_df.sample(n=min(row_count, len(target_df)), random_state=42) if len(target_df) > 0 else target_df
+        else:  # All Rows
+            display_df = target_df
             
         st.dataframe(display_df, width="stretch")
         
