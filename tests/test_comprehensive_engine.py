@@ -163,12 +163,47 @@ def test_rename_and_reorder():
     pd.testing.assert_frame_equal(df_reorder, df_generated)
     print("Rename and Reorder engine tests passed.")
 
+def test_new_engine_actions():
+    # Setup test dataframe with duplicates, empty cols, empty rows, and unnormalized headers
+    df = pd.DataFrame({
+        'Id-Field': [1.0, 2.0, 2.0, np.nan, 5.0],
+        'Name Field': ['Alice', 'Bob', 'Bob', np.nan, 'Eve'],
+        'Empty Col': [np.nan, np.nan, np.nan, np.nan, np.nan]
+    })
+    
+    recipe = [
+        {'action': 'drop_duplicates'},
+        {'action': 'drop_empty_columns'},
+        {'action': 'drop_empty_rows'},
+        {'action': 'normalize_column_names', 'value': 'snake_case'}
+    ]
+    
+    df_clean, messages = apply_recipe(df, recipe)
+    
+    # Assertions
+    assert 'Empty Col' not in df_clean.columns, "Empty Col should be dropped"
+    assert len(df_clean) == 3, f"Should have exactly 3 rows remaining, got {len(df_clean)}"
+    assert list(df_clean.columns) == ['id_field', 'name_field'], f"Columns should be snake_case, got {list(df_clean.columns)}"
+    assert list(df_clean['id_field']) == [1.0, 2.0, 5.0], "Should retain non-duplicate, non-empty rows"
+    print("New engine actions test passed.")
+    
+    # Verify codegen compilation and execution match
+    code = generate_pipeline_code(recipe)
+    exec_globals = {'pd': pd, 'np': np}
+    exec(code, exec_globals)
+    clean_func = exec_globals['clean_data']
+    df_generated = clean_func(df.copy())
+    
+    pd.testing.assert_frame_equal(df_clean, df_generated)
+    print("New engine actions codegen test passed.")
+
 if __name__ == "__main__":
     try:
         test_all_engine_actions()
         test_advanced_imputation()
         test_rule_violations()
         test_rename_and_reorder()
+        test_new_engine_actions()
         print("ALL COMPREHENSIVE ENGINE TESTS PASSED")
     except Exception as e:
         print(f"TEST FAILED: {e}")

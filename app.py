@@ -1,4 +1,5 @@
 import streamlit as st
+# Trigger hot reload for diagnostics card border style update (teal to Plotly blue)
 from ui_utils import inject_custom_css
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS
 from views import (
@@ -26,13 +27,16 @@ inject_custom_css(st)
 # Initialize Session State
 initialize_state()
 
-# --- HEADER ---
+# --- HEADER (only shown after a dataset is loaded) ---
 if st.session_state.raw_data is not None:
     h_col1, h_col2 = st.columns([10, 2], vertical_alignment="bottom")
-    with h_col1: # Main column for title
-        st.subheader("LUMI")
-
-    with h_col2: # Column for reset button
+    with h_col1:
+        st.markdown('<div class="lumi-logo-button">', unsafe_allow_html=True)
+        if st.button("LUMI", key="lumi_logo"):
+            initialize_state(from_reset=True)
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    with h_col2:
         u_c1, u_c2 = st.columns(2)
         if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
             st.session_state.cleaning_recipe.pop()

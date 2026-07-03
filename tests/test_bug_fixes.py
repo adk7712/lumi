@@ -116,8 +116,6 @@ def test_uploader_large_file_capping():
     row = b"1.0," + b"x"*1000 + b"\n"
     large_csv_bytes = header + row * 52000
     
-    # Click Get Started first to reveal the uploader
-    at.button(key="get_started_btn").click().run()
     
     # Upload via AppTest uploader
     uploader = at.file_uploader(key="welcome_uploader")
