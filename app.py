@@ -1,5 +1,5 @@
 import streamlit as st
-# Trigger hot reload for diagnostics card border style update (teal to Plotly blue)
+# Trigger hot reload for default state initialization update (mock dataset loading removed)
 from ui_utils import inject_custom_css
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS
 from views import (

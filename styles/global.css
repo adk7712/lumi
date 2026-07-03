@@ -411,7 +411,7 @@ div:has(> div > .header-uploader-marker) + div [data-testid="stFileUploader"] bu
 .welcome-orb-1 {
     width: 400px;
     height: 400px;
-    background: #0d9488;
+    background: #ff4b4b;
     top: 5%;
     left: 10%;
     animation: orb-float-1 12s ease-in-out infinite;
@@ -518,7 +518,7 @@ hr {
     }
 }
 .highlight-teal {
-    color: #0d9488 !important;
+    color: #ff4b4b !important;
 }
 .welcome-subtitle {
     font-size: 1.05rem !important;
@@ -606,8 +606,8 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
     box-shadow: none !important;
 }
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
-    border-color: #0d9488 !important;
-    background: rgba(13, 148, 136, 0.03) !important;
+    border-color: #ff4b4b !important;
+    background: rgba(255, 75, 75, 0.03) !important;
 }
 
 /* Label text */
@@ -630,14 +630,14 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::
     font-size: 14px;
     font-weight: 700;
     color: #FFFFFF;
-    background: #0d9488;
+    background: #ff4b4b;
     border-radius: 4px;
-    box-shadow: 0px 4px 15px rgba(13, 148, 136, 0.2);
+    box-shadow: 0px 4px 15px rgba(255, 75, 75, 0.2);
     transition: all 0.3s ease;
 }
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover::after {
     transform: translateY(-1px);
-    box-shadow: 0px 6px 20px rgba(13, 148, 136, 0.4);
+    box-shadow: 0px 6px 20px rgba(255, 75, 75, 0.4);
 }
 div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInstructions"] {
     display: none !important;
@@ -723,12 +723,12 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInst
 }
 .welcome-card:hover {
     transform: translateY(-4px);
-    border-color: #0d9488;
+    border-color: #ff4b4b;
     background: rgba(18, 18, 18, 0.6);
-    box-shadow: 0 10px 25px rgba(13, 148, 136, 0.03);
+    box-shadow: 0 10px 25px rgba(255, 75, 75, 0.03);
 }
 .welcome-card-icon {
-    color: #0d9488 !important;
+    color: #ff4b4b !important;
     font-size: 1.5rem !important;
     margin-bottom: 0.75rem;
     display: block;
