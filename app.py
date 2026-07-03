@@ -1,5 +1,5 @@
 import streamlit as st
-# Trigger hot reload for transformations updates (formatting normalize text options)
+# Trigger hot reload for transformations updates (button labels changed to Execute)
 from ui_utils import inject_custom_css
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS
 from views import (

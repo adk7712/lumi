@@ -41,9 +41,10 @@ def render_overview_tab(df):
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
         st.subheader("Quick Actions")
-
         # Precompute recommendations to decide whether to render the container border box
-        from state_manager import add_step
+        from state_manager import add_step, sync_column_rename
+        import re
+
         duplicates_count = int(df.duplicated().sum())
         empty_cols = [c for c in df.columns if df[c].isnull().all()]
         empty_cols_count = len(empty_cols)
@@ -56,7 +57,13 @@ def render_overview_tab(df):
             if (non_null_strings != non_null_strings.str.strip()).any():
                 whitespace_cols.append(c)
 
-        has_recommended = (duplicates_count > 0 or empty_cols_count > 0 or empty_rows_count > 0 or len(whitespace_cols) > 0)
+        # Scan for column names containing spaces, dashes, or special characters
+        unnormalized_cols = []
+        for c in df.columns:
+            if ' ' in c or '-' in c or any(not (char.isalnum() or char == '_') for char in c):
+                unnormalized_cols.append(c)
+
+        has_recommended = (duplicates_count > 0 or empty_cols_count > 0 or empty_rows_count > 0 or len(whitespace_cols) > 0 or len(unnormalized_cols) > 0)
 
         if has_recommended:
             with st.container(border=False):
@@ -98,8 +105,31 @@ def render_overview_tab(df):
                     ):
                         add_step({"action": "strip_whitespace", "column": "All"})
                         st.rerun()
+                if unnormalized_cols:
+                    cols_preview = ", ".join(f"'{c}'" for c in unnormalized_cols[:3]) + ("..." if len(unnormalized_cols) > 3 else "")
+                    if st.button(
+                        "Normalize Column Names",
+                        key="qa_normalize_cols",
+                        width="stretch",
+                        help=f"Converts column headers to snake_case (lowercase with underscores) to avoid syntax errors: {cols_preview}"
+                    ):
+                        # Predict the rename mapping to keep session state fully synchronized
+                        new_names = {}
+                        for c in df.columns:
+                            orig = c
+                            val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
+                            val = re.sub(r'_+', '_', val).lower()
+                            if not val:
+                                val = f"column_{orig}"
+                            if val != orig:
+                                new_names[orig] = val
+
+                        add_step({"action": "normalize_column_names", "value": "snake_case"})
+                        for orig, val in new_names.items():
+                            sync_column_rename(orig, val)
+                        st.rerun()
         else:
-            st.markdown("*No quick actions recommended.*")
+            st.markdown("✨ *Your dataset looks clean! No quick actions recommended.*")
 
         if duplicates_count > 0:
             with st.expander(f"Preview {duplicates_count} Duplicate Rows", expanded=False):
