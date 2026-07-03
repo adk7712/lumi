@@ -150,6 +150,19 @@ def _generate_clean_data_lines(recipe: list) -> list[str]:
             elif action == "drop_empty_rows":
                 code.append("    # Remove rows that are completely empty (all nulls).")
                 code.append("    df = df.dropna(how='all')")
+            elif action == "normalize_column_names":
+                method = step.get('value', 'snake_case')
+                code.append(f"    # Normalize column names using {method} format.")
+                if method == 'snake_case':
+                    code.append("    import re")
+                    code.append("    df.columns = [re.sub(r'[^a-zA-Z0-9_]', '', c.strip().replace(' ', '_').replace('-', '_')) for c in df.columns]")
+                    code.append("    df.columns = [re.sub(r'_+', '_', c).lower() for c in df.columns]")
+                elif method == 'lowercase':
+                    code.append("    df.columns = [c.lower() for c in df.columns]")
+                elif method == 'uppercase':
+                    code.append("    df.columns = [c.upper() for c in df.columns]")
+                elif method == 'remove_spaces':
+                    code.append("    df.columns = [c.replace(' ', '') for c in df.columns]")
     code.append("    return df")
     return code
 

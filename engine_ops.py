@@ -262,6 +262,31 @@ def _handle_drop_empty_rows(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Da
     dropped = initial_rows - len(df)
     return df, [f"Removed {dropped} empty rows."]
 
+def _handle_normalize_column_names(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    method = step.get('value', 'snake_case')
+    import re
+    
+    new_names = {}
+    for c in df.columns:
+        orig = c
+        if method == 'snake_case':
+            val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
+            val = re.sub(r'_+', '_', val).lower()
+        elif method == 'lowercase':
+            val = orig.lower()
+        elif method == 'uppercase':
+            val = orig.upper()
+        elif method == 'remove_spaces':
+            val = orig.replace(' ', '')
+        else:
+            val = orig
+            
+        if not val:
+            val = f"column_{orig}"
+        new_names[orig] = val
+        
+    return df.rename(columns=new_names), []
+
 TRANSFORM_REGISTRY = {
     "drop_column": _handle_drop_column,
     "drop_nulls": _handle_drop_nulls,
@@ -279,4 +304,5 @@ TRANSFORM_REGISTRY = {
     "drop_duplicates": _handle_drop_duplicates,
     "drop_empty_columns": _handle_drop_empty_columns,
     "drop_empty_rows": _handle_drop_empty_rows,
+    "normalize_column_names": _handle_normalize_column_names,
 }

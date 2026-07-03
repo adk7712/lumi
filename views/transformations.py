@@ -6,7 +6,24 @@ from ui_utils import load_style, render_loading_spinner
 
 def render_transformations_tab(df):
     all_cols = df.columns.tolist()
-    t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace", "Rename Column", "Reorder Columns", "Extract Datetime", "Remove Duplicates", "Drop Empty Columns", "Drop Empty Rows"], key="trans_type_select")
+    t_type = st.selectbox(
+        "Type", 
+        [
+            "Cast Data Type",
+            "Find and Replace",
+            "Strip Whitespace",
+            "Normalize Text",
+            "Normalize Column Names",
+            "Remove Duplicate Rows",
+            "Drop Empty Columns",
+            "Drop Empty Rows",
+            "Rename Column",
+            "Drop Column",
+            "Reorder Columns",
+            "Extract Datetime"
+        ], 
+        key="trans_type_select"
+    )
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
         sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
@@ -16,9 +33,17 @@ def render_transformations_tab(df):
             st.rerun()
     elif t_type == "Normalize Text":
         c1, c2 = st.columns(2)
-        target, method = c1.selectbox("Columns", ["All"] + all_cols, key="norm_target_col"), c2.selectbox("Method", ["lowercase", "uppercase", "titlecase", "remove_punctuation", "fuzzy_dedupe"], key="norm_method_select")
+        norm_methods = {
+            "Lowercase": "lowercase",
+            "Uppercase": "uppercase",
+            "Title Case": "titlecase",
+            "Remove Punctuation": "remove_punctuation",
+            "Fuzzy Deduplicate": "fuzzy_dedupe"
+        }
+        target = c1.selectbox("Columns", ["All"] + all_cols, key="norm_target_col")
+        selected_method_display = c2.selectbox("Method", list(norm_methods.keys()), key="norm_method_select")
         if st.button("Add Step", key="btn_norm"):
-            add_step({"action": "normalize_text", "column": target, "value": method})
+            add_step({"action": "normalize_text", "column": target, "value": norm_methods[selected_method_display]})
             st.rerun()
     elif t_type == "Cast Data Type":
         c1, c2 = st.columns(2)
@@ -112,7 +137,7 @@ def render_transformations_tab(df):
                     "component": component
                 })
                 st.rerun()
-    elif t_type == "Remove Duplicates":
+    elif t_type == "Remove Duplicate Rows":
         st.info("This will remove all exact duplicate rows from the active dataset.")
         if st.button("Add Step", key="btn_remove_dups"):
             add_step({"action": "drop_duplicates"})
@@ -126,4 +151,42 @@ def render_transformations_tab(df):
         st.info("This will remove any rows where all values are completely missing (null).")
         if st.button("Add Step", key="btn_drop_empty_rows"):
             add_step({"action": "drop_empty_rows"})
+            st.rerun()
+    elif t_type == "Normalize Column Names":
+        st.info("This will rename column headers to follow a standardized naming convention (e.g., removing spaces and special characters).")
+        method_options = {
+            "Snake Case (column_name)": "snake_case",
+            "Lowercase (column name)": "lowercase",
+            "Uppercase (COLUMN NAME)": "uppercase",
+            "Remove Spaces (columnname)": "remove_spaces"
+        }
+        selected_method = st.selectbox("Naming Convention", list(method_options.keys()), key="norm_cols_method")
+        if st.button("Add Step", key="btn_norm_cols"):
+            import re
+            method = method_options[selected_method]
+            
+            # Predict the rename mapping to keep session state fully synchronized
+            new_names = {}
+            for c in df.columns:
+                orig = c
+                if method == 'snake_case':
+                    val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
+                    val = re.sub(r'_+', '_', val).lower()
+                elif method == 'lowercase':
+                    val = orig.lower()
+                elif method == 'uppercase':
+                    val = orig.upper()
+                elif method == 'remove_spaces':
+                    val = orig.replace(' ', '')
+                else:
+                    val = orig
+                    
+                if not val:
+                    val = f"column_{orig}"
+                if val != orig:
+                    new_names[orig] = val
+            
+            add_step({"action": "normalize_column_names", "value": method})
+            for orig, val in new_names.items():
+                sync_column_rename(orig, val)
             st.rerun()
