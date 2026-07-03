@@ -47,10 +47,11 @@ def render_overview_tab(df):
     f_col1, f_col2 = st.columns(2)
     with f_col1:
         all_cols = df.columns.tolist()
-        selected_cols = st.multiselect("Filter by Column Name", all_cols, default=[], key="desc_cols")
+        selected_cols = st.multiselect("Filter by Column Name", all_cols, default=[], placeholder="All columns active...", key="desc_cols")
     with f_col2:
         unique_dtypes = sorted(list(set(str(t) for t in df.dtypes)))
-        selected_dtypes = st.multiselect("Filter by Data Type", unique_dtypes, default=[], key="desc_dtypes")
+        selected_dtypes = st.multiselect("Filter by Data Type", unique_dtypes, default=[], placeholder="All datatypes active...", key="desc_dtypes")
+    st.caption("*Tip: Leave filters empty to view all columns/datatypes by default.*")
 
     # Apply global filtering logic
     filtered_df = df
@@ -68,7 +69,7 @@ def render_overview_tab(df):
         for col in filtered_df.columns:
             null_count = int(filtered_df[col].isnull().sum())
             null_pct = f"{(null_count / len(filtered_df)) * 100:.1f}%" if len(filtered_df) > 0 else "0.0%"
-            
+
             # Calculate summary values based on datatype compatibility
             mean_val = "N/A"
             min_val = "N/A"
