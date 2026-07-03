@@ -4,6 +4,9 @@ __pycache__/
 *.pyo
 *.pyd
 
+# jupyter notebook
+*ipynb
+
 # Operating System files
 .DS_Store
 Thumbs.db
