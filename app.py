@@ -1,5 +1,5 @@
 import streamlit as st
-# Trigger hot reload for overview view updates (emoji cleanups complete)
+# Trigger hot reload for pipeline view updates (interactive head/tail/sample previews)
 from ui_utils import inject_custom_css
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS
 from views import (
