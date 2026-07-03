@@ -43,39 +43,61 @@ def render_overview_tab(df):
 
     st.divider()
 
-    summary_data = []
-    for col in df.columns:
-        null_count = int(df[col].isnull().sum())
-        null_pct = f"{(null_count / len(df)) * 100:.1f}%" if len(df) > 0 else "0.0%"
-        
-        # Calculate summary values based on datatype compatibility
-        mean_val = "N/A"
-        min_val = "N/A"
-        max_val = "N/A"
-        if pd.api.types.is_numeric_dtype(df[col]):
-            mean_val = f"{df[col].mean():.2f}" if not df[col].dropna().empty else "N/A"
-            min_val = f"{df[col].min():.2f}" if not df[col].dropna().empty else "N/A"
-            max_val = f"{df[col].max():.2f}" if not df[col].dropna().empty else "N/A"
-        else:
-            mode_series = df[col].mode()
-            mean_val = f"Mode: {str(mode_series[0])}" if not mode_series.empty else "N/A"
+    # Side-by-side filters at the top of the section
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+        all_cols = df.columns.tolist()
+        selected_cols = st.multiselect("Filter by Column Name", all_cols, default=[], key="desc_cols")
+    with f_col2:
+        unique_dtypes = sorted(list(set(str(t) for t in df.dtypes)))
+        selected_dtypes = st.multiselect("Filter by Data Type", unique_dtypes, default=[], key="desc_dtypes")
 
-        summary_data.append({
-            "Column Name": col,
-            "Data Type": str(df[col].dtype),
-            "Null Count": null_count,
-            "Null %": null_pct,
-            "Unique Values": int(df[col].nunique()),
-            "Mean / Mode": mean_val,
-            "Min": min_val,
-            "Max": max_val
-        })
+    # Apply global filtering logic
+    filtered_df = df
+    if selected_cols:
+        filtered_df = filtered_df[selected_cols]
+    if selected_dtypes:
+        matched_cols = [c for c in filtered_df.columns if str(filtered_df[c].dtype) in selected_dtypes]
+        filtered_df = filtered_df[matched_cols] if matched_cols else pd.DataFrame()
 
-    summary_df = pd.DataFrame(summary_data)
-    desc_df = df.describe(include='all').astype(str).replace('nan', '')
+    if filtered_df.empty or len(filtered_df.columns) == 0:
+        st.info("No columns match the selected filters.")
+    else:
+        # Calculate summary metrics per column for the filtered subset
+        summary_data = []
+        for col in filtered_df.columns:
+            null_count = int(filtered_df[col].isnull().sum())
+            null_pct = f"{(null_count / len(filtered_df)) * 100:.1f}%" if len(filtered_df) > 0 else "0.0%"
+            
+            # Calculate summary values based on datatype compatibility
+            mean_val = "N/A"
+            min_val = "N/A"
+            max_val = "N/A"
+            if pd.api.types.is_numeric_dtype(filtered_df[col]):
+                mean_val = f"{filtered_df[col].mean():.2f}" if not filtered_df[col].dropna().empty else "N/A"
+                min_val = f"{filtered_df[col].min():.2f}" if not filtered_df[col].dropna().empty else "N/A"
+                max_val = f"{filtered_df[col].max():.2f}" if not filtered_df[col].dropna().empty else "N/A"
+            else:
+                mode_series = filtered_df[col].mode()
+                mean_val = f"Mode: {str(mode_series[0])}" if not mode_series.empty else "N/A"
 
-    t_summary, t_describe = st.tabs(["Column Summary (df.info)", "Descriptive Statistics (df.describe)"])
-    with t_summary:
-        st.dataframe(summary_df, width="stretch", hide_index=True)
-    with t_describe:
-        st.dataframe(desc_df, width="stretch")
+            summary_data.append({
+                "Column Name": col,
+                "Data Type": str(filtered_df[col].dtype),
+                "Null Count": null_count,
+                "Null %": null_pct,
+                "Unique Values": int(filtered_df[col].nunique()),
+                "Mean / Mode": mean_val,
+                "Min": min_val,
+                "Max": max_val
+            })
+
+        summary_df = pd.DataFrame(summary_data)
+        desc_df = filtered_df.describe(include='all').astype(str).replace('nan', 'NaN')
+
+        # Display tabs side by side
+        t_summary, t_describe = st.tabs(["Column Summary (df.info)", "Descriptive Statistics (df.describe)"])
+        with t_summary:
+            st.dataframe(summary_df, width="stretch", hide_index=True)
+        with t_describe:
+            st.dataframe(desc_df, width="stretch")
