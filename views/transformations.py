@@ -6,7 +6,7 @@ from ui_utils import load_style, render_loading_spinner
 
 def render_transformations_tab(df):
     all_cols = df.columns.tolist()
-    t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace", "Rename Column", "Reorder Columns", "Extract Datetime"], key="trans_type_select")
+    t_type = st.selectbox("Type", ["Find and Replace", "Normalize Text", "Cast Data Type", "Drop Column", "Strip Whitespace", "Rename Column", "Reorder Columns", "Extract Datetime", "Remove Duplicates", "Drop Empty Columns", "Drop Empty Rows"], key="trans_type_select")
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
         sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
@@ -112,3 +112,18 @@ def render_transformations_tab(df):
                     "component": component
                 })
                 st.rerun()
+    elif t_type == "Remove Duplicates":
+        st.info("This will remove all exact duplicate rows from the active dataset.")
+        if st.button("Add Step", key="btn_remove_dups"):
+            add_step({"action": "drop_duplicates"})
+            st.rerun()
+    elif t_type == "Drop Empty Columns":
+        st.info("This will drop any columns that contain 100% missing (null) values.")
+        if st.button("Add Step", key="btn_drop_empty_cols"):
+            add_step({"action": "drop_empty_columns"})
+            st.rerun()
+    elif t_type == "Drop Empty Rows":
+        st.info("This will remove any rows where all values are completely missing (null).")
+        if st.button("Add Step", key="btn_drop_empty_rows"):
+            add_step({"action": "drop_empty_rows"})
+            st.rerun()

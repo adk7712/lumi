@@ -243,6 +243,25 @@ def _handle_extract_datetime(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.D
     except Exception as e:
         return df, [f"Error: Could not extract datetime component '{component}' from '{col}': {str(e)}"]
 
+def _handle_drop_duplicates(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    initial_rows = len(df)
+    df = df.drop_duplicates()
+    dropped = initial_rows - len(df)
+    return df, [f"Removed {dropped} duplicate rows."]
+
+def _handle_drop_empty_columns(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    empty_cols = [c for c in df.columns if df[c].isnull().all()]
+    if empty_cols:
+        df = df.drop(columns=empty_cols)
+        return df, [f"Dropped empty columns: {', '.join(empty_cols)}."]
+    return df, ["No empty columns found to drop."]
+
+def _handle_drop_empty_rows(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    initial_rows = len(df)
+    df = df.dropna(how='all')
+    dropped = initial_rows - len(df)
+    return df, [f"Removed {dropped} empty rows."]
+
 TRANSFORM_REGISTRY = {
     "drop_column": _handle_drop_column,
     "drop_nulls": _handle_drop_nulls,
@@ -257,4 +276,7 @@ TRANSFORM_REGISTRY = {
     "rename_column": _handle_rename_column,
     "reorder_columns": _handle_reorder_columns,
     "extract_datetime": _handle_extract_datetime,
+    "drop_duplicates": _handle_drop_duplicates,
+    "drop_empty_columns": _handle_drop_empty_columns,
+    "drop_empty_rows": _handle_drop_empty_rows,
 }
