@@ -797,3 +797,45 @@ div.element-container:has(.lumi-logo-button) + div.element-container button:focu
     box-shadow: none !important;
 }
 
+/* --- Footer --- */
+.lumi-footer {
+    margin-top: 3rem;
+    padding: 1.2rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    text-align: center;
+}
+
+.footer-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.35);
+    letter-spacing: 0.02em;
+}
+
+.footer-sep {
+    color: rgba(255, 255, 255, 0.15);
+}
+
+.footer-link {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.35rem;
+    color: rgba(255, 255, 255, 0.4) !important;
+    text-decoration: none !important;
+    transition: color 0.2s ease;
+}
+
+.footer-link:hover {
+    color: rgba(255, 75, 75, 0.85) !important;
+}
+
+.footer-gh-icon {
+    vertical-align: middle;
+}
+
+.footer-version {
+    font-variant-numeric: tabular-nums;
+}
