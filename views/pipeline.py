@@ -16,12 +16,12 @@ def render_pipeline_preview_tab(df):
                 key="preview_mode_select"
             )
         with c2:
-            row_count = st.slider(
+            row_count = st.number_input(
                 "Rows to Show", 
-                min_value=5, 
-                max_value=500, 
+                min_value=1, 
+                max_value=len(st.session_state.raw_data) if v == "Raw Data (Before)" else len(df), 
                 value=100, 
-                step=5, 
+                step=10, 
                 disabled=(preview_mode == "All Rows"),
                 key="preview_row_count"
             )
