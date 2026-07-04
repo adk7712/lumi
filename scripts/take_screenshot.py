@@ -15,7 +15,9 @@ async def main():
         
         # Get the outer HTML of the entire stFileUploader
         html = await page.locator('[data-testid="stFileUploader"]').evaluate('el => el.outerHTML')
-        with open("tests/uploader_dom.html", "w") as f:
+        import os
+        os.makedirs("scripts", exist_ok=True)
+        with open("scripts/uploader_dom.html", "w") as f:
             f.write(html)
             
         await browser.close()

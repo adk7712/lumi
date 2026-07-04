@@ -203,17 +203,17 @@ def test_sync_column_rename():
     print("sync_column_rename test passed.")
 
 
-def test_render_loading_spinner():
-    """render_loading_spinner should return HTML containing the provided label and spinner div."""
-    from ui_utils import render_loading_spinner
-    html = render_loading_spinner("Apply Column Order")
+def test_get_loading_spinner_html():
+    """get_loading_spinner_html should return HTML containing the provided label and spinner div."""
+    from ui_utils import get_loading_spinner_html
+    html = get_loading_spinner_html("Apply Column Order")
     assert 'Apply Column Order' in html
     assert 'spinner-circle' in html
     assert '<button disabled' in html
     # Custom text
-    html2 = render_loading_spinner("Processing...")
+    html2 = get_loading_spinner_html("Processing...")
     assert 'Processing...' in html2
-    print("render_loading_spinner test passed.")
+    print("get_loading_spinner_html test passed.")
 
 
 def test_datetime_feature_extraction():
@@ -374,7 +374,12 @@ def test_evidence_report_generation():
             {"action": "rename_column", "column": "old", "value": "new"}
         ]
         
-        report_md = generate_evidence_report(df, rules)
+        report_md = generate_evidence_report(
+            df, 
+            rules,
+            cleaning_recipe=st.session_state.cleaning_recipe,
+            intermediate_states=st.session_state.intermediate_states
+        )
         
     assert report_md is not None
     
@@ -425,7 +430,7 @@ if __name__ == "__main__":
         test_plotly_layout_consolidation()
         test_get_column_dependencies()
         test_sync_column_rename()
-        test_render_loading_spinner()
+        test_get_loading_spinner_html()
         test_datetime_feature_extraction()
         test_notebook_export()
         test_evidence_report_generation()

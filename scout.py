@@ -56,17 +56,19 @@ def _check_numeric_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
         # Outlier Detection (IQR)
         Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
         IQR = Q3 - Q1
-        l, u = Q1 - SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR, Q3 + SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR
+        lower_bound = Q1 - SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR
+        upper_bound = Q3 + SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR
         
         # Use a mask for efficiency and clarity
-        outlier_mask = (df[col] < l) | (df[col] > u)
+        outlier_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
         outliers = outlier_mask.sum()
         
         if outliers > 0:
             proposals.append({
                 "type": "Range Check", "column": col, "reason": f"{outliers} statistical outliers detected",
-                "rule_data": {"type": "Range Check", "col": col, "min": float(l), "max": float(u), "desc": f"{col} within statistical bounds"}
+                "rule_data": {"type": "Range Check", "col": col, "min": float(lower_bound), "max": float(upper_bound), "desc": f"{col} within statistical bounds"}
             })
+
         
         # Skewness Warning
         skew = df[col].skew()

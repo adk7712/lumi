@@ -1,7 +1,35 @@
 import pandas as pd
 import numpy as np
+import re
 from typing import TypedDict, Optional, Any, Union, List, Tuple
 from rule_utils import evaluate_rule
+
+KNN_DEFAULT_NEIGHBORS = 5
+FUZZY_MATCH_THRESHOLD = 85
+
+
+def predict_column_renames(columns: list, method: str, only_changed: bool = False) -> dict:
+    """Predicts how column names will be changed by the normalization logic."""
+    new_names = {}
+    for orig in columns:
+        if method == 'snake_case':
+            val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
+            val = re.sub(r'_+', '_', val).lower()
+        elif method == 'lowercase':
+            val = orig.lower()
+        elif method == 'uppercase':
+            val = orig.upper()
+        elif method == 'remove_spaces':
+            val = orig.replace(' ', '')
+        else:
+            val = orig
+            
+        if not val:
+            val = f"column_{orig}"
+            
+        if not only_changed or val != orig:
+            new_names[orig] = val
+    return new_names
 
 class RuleDef(TypedDict, total=False):
     type: str
@@ -64,7 +92,7 @@ def _handle_fill_null(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
         try:
             from sklearn.experimental import enable_iterative_imputer
             from sklearn.impute import KNNImputer, IterativeImputer
-            imputer = KNNImputer(n_neighbors=5) if val == "knn" else IterativeImputer(random_state=42)
+            imputer = KNNImputer(n_neighbors=KNN_DEFAULT_NEIGHBORS) if val == "knn" else IterativeImputer(random_state=42)
             numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
             if col not in numeric_cols:
                 return df, [f"Error: {val.upper()} imputation requires a numeric column. '{col}' is {df[col].dtype}."]
@@ -169,7 +197,7 @@ def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Dat
                 if v in handled: continue
                 matches = process.extract(v, unique_vals, limit=10)
                 for match, score in matches:
-                    if score > 85: # Threshold for fuzzy matching
+                    if score > FUZZY_MATCH_THRESHOLD: # Threshold for fuzzy matching
                         mapping[match] = v
                         handled.add(match)
             return s.replace(mapping)
@@ -264,27 +292,7 @@ def _handle_drop_empty_rows(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Da
 
 def _handle_normalize_column_names(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     method = step.get('value', 'snake_case')
-    import re
-    
-    new_names = {}
-    for c in df.columns:
-        orig = c
-        if method == 'snake_case':
-            val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
-            val = re.sub(r'_+', '_', val).lower()
-        elif method == 'lowercase':
-            val = orig.lower()
-        elif method == 'uppercase':
-            val = orig.upper()
-        elif method == 'remove_spaces':
-            val = orig.replace(' ', '')
-        else:
-            val = orig
-            
-        if not val:
-            val = f"column_{orig}"
-        new_names[orig] = val
-        
+    new_names = predict_column_renames(df.columns.tolist(), method)
     return df.rename(columns=new_names), []
 
 TRANSFORM_REGISTRY = {
@@ -306,3 +314,22 @@ TRANSFORM_REGISTRY = {
     "drop_empty_rows": _handle_drop_empty_rows,
     "normalize_column_names": _handle_normalize_column_names,
 }
+
+def apply_recipe(df: pd.DataFrame, recipe: List[CleaningStep]) -> Tuple[pd.DataFrame, List[str]]:
+    """
+    Applies a sequence of cleaning steps to a DataFrame using a dispatcher pattern.
+    """
+    df_clean = df.copy()
+    messages = []
+    for step in recipe:
+        action = step.get('action')
+        handler = TRANSFORM_REGISTRY.get(action)
+        if handler:
+            try:
+                df_clean, step_messages = handler(df_clean, step)
+                messages.extend(step_messages)
+            except Exception as e:
+                messages.append(f"An unexpected error occurred applying {action}: {type(e).__name__} - {str(e)}")
+        else:
+            messages.append(f"Warning: Unknown action '{action}' encountered in recipe.")
+    return df_clean, messages

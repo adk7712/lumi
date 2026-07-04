@@ -1,7 +1,7 @@
 import streamlit as st
 import urllib.parse
 import os
-from state_manager import load_data, MAX_SAMPLE_ROWS
+from state_manager import load_data, MAX_SAMPLE_ROWS, calculate_health, LARGE_FILE_THRESHOLD_BYTES
 from scout import generate_proposals
 
 def render_landing_page():
@@ -25,7 +25,7 @@ def render_landing_page():
 
     if welcome_uploader:
         file_id = f"{welcome_uploader.file_id}_{welcome_uploader.name}_{welcome_uploader.size}"
-        is_large = welcome_uploader.size > 50 * 1024 * 1024
+        is_large = welcome_uploader.size > LARGE_FILE_THRESHOLD_BYTES
         if is_large:
             st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.", icon="⚠️")
         raw_df = load_data(welcome_uploader, nrows=MAX_SAMPLE_ROWS if is_large else None)
@@ -40,7 +40,7 @@ def render_landing_page():
         st.session_state.scanned_columns, st.session_state.cleaning_recipe, st.session_state.rules = set(), [], []
 
         base_df = st.session_state.raw_data
-        bh = int((1 - (base_df.isnull().sum().sum() / base_df.size)) * 100) if base_df.size > 0 else 0
+        bh = calculate_health(base_df)
         st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
         st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
         st.toast("Dataset Analyzed")

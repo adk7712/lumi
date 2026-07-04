@@ -1,14 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import re
 from rule_utils import evaluate_rule
+from state_manager import add_step, sync_column_rename, calculate_health
+from engine_ops import predict_column_renames
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
-    total_cells = df.size
-    null_cells = df.isnull().sum().sum()
-    # Calculate overall data health percentage: (1 - proportion of null cells) * 100
-    health = int((1 - (null_cells / total_cells)) * 100) if total_cells > 0 else 0
+    health = calculate_health(df)
     active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
 
     total_violations = 0
@@ -41,10 +41,6 @@ def render_overview_tab(df):
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
         st.subheader("Quick Actions")
-        # Precompute recommendations to decide whether to render the container border box
-        from state_manager import add_step, sync_column_rename
-        import re
-
         duplicates_count = int(df.duplicated().sum())
         empty_cols = [c for c in df.columns if df[c].isnull().all()]
         empty_cols_count = len(empty_cols)
@@ -113,16 +109,7 @@ def render_overview_tab(df):
                         width="stretch",
                         help=f"Converts column headers to snake_case (lowercase with underscores) to avoid syntax errors: {cols_preview}"
                     ):
-                        # Predict the rename mapping to keep session state fully synchronized
-                        new_names = {}
-                        for c in df.columns:
-                            orig = c
-                            val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
-                            val = re.sub(r'_+', '_', val).lower()
-                            if not val:
-                                val = f"column_{orig}"
-                            if val != orig:
-                                new_names[orig] = val
+                        new_names = predict_column_renames(df.columns.tolist(), 'snake_case', only_changed=True)
 
                         add_step({"action": "normalize_column_names", "value": "snake_case"})
                         for orig, val in new_names.items():
