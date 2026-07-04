@@ -1,5 +1,5 @@
 import streamlit as st
-# Trigger hot reload for diagnostics card border style update (teal to Plotly blue)
+# Trigger hot reload for default state initialization update (mock dataset loading removed)
 from ui_utils import inject_custom_css
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS
 from views import (
@@ -14,6 +14,17 @@ from views import (
     render_landing_page
 )
 from scout import generate_proposals
+import os
+
+# --- Footer Helper ---
+_FOOTER_HTML = None
+def render_footer():
+    global _FOOTER_HTML
+    if _FOOTER_HTML is None:
+        footer_path = os.path.join(os.path.dirname(__file__), 'views', 'templates', 'footer.html')
+        with open(footer_path, 'r') as f:
+            _FOOTER_HTML = f.read()
+    st.html(_FOOTER_HTML)
 
 # Set page config
 st.set_page_config(
@@ -54,6 +65,7 @@ st.divider()
 # Welcome view if no data is loaded yet
 if st.session_state.raw_data is None:
     render_landing_page()
+    render_footer()
     st.stop()
 
 # Get the latest dataframe from cache
@@ -87,3 +99,7 @@ with tab_pipeline:
 
 # Bottom violation browser
 render_violation_browser(df)
+
+# --- FOOTER ---
+render_footer()
+

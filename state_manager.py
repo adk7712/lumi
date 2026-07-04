@@ -42,24 +42,11 @@ def initialize_state(from_reset=False):
     """Initializes all required session state variables."""
     # 1. Load initial data first to get the columns list for default dropdown selections
     if 'raw_data' not in st.session_state or from_reset:
-        import sys
-        is_testing = ('streamlit.testing' in sys.modules) or any('test' in arg for arg in sys.argv)
-        
-        mock_path = Path(__file__).parent / "mock_data" / "train.csv"
-        if mock_path.exists() and not is_testing:
-            df = pd.read_csv(mock_path)
-            st.session_state.raw_data = df
-            st.session_state.original_full_data = df.copy()
-            st.session_state.scanned_columns = set()
-            st.session_state.proposals = generate_proposals(df, st.session_state.scanned_columns)
-            bh = int((1 - (df.isnull().sum().sum() / df.size)) * 100) if df.size > 0 else 0
-            st.session_state.intermediate_states = [("Original Data", bh, len(df), df.copy())]
-        else:
-            st.session_state.raw_data = None
-            st.session_state.original_full_data = None
-            st.session_state.intermediate_states = []
-            st.session_state.proposals = []
-            st.session_state.scanned_columns = set()
+        st.session_state.raw_data = None
+        st.session_state.original_full_data = None
+        st.session_state.intermediate_states = []
+        st.session_state.proposals = []
+        st.session_state.scanned_columns = set()
 
     df = st.session_state.raw_data
     all_cols = df.columns.tolist() if df is not None else []

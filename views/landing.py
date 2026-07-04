@@ -61,8 +61,8 @@ def render_landing_page():
         function applyDragStyle(dz) {
             dz.style.setProperty('border-style', 'dashed', 'important');
             dz.style.setProperty('border-width', '2px', 'important');
-            dz.style.setProperty('border-color', 'rgba(216, 132, 255, 0.85)', 'important');
-            dz.style.setProperty('background', 'rgba(168, 85, 247, 0.07)', 'important');
+            dz.style.setProperty('border-color', 'rgba(255, 75, 75, 0.85)', 'important');
+            dz.style.setProperty('background', 'rgba(255, 75, 75, 0.07)', 'important');
             var el = dz.parentElement;
             for (var i = 0; i < 6; i++) {
                 if (!el) break;
