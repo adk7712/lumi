@@ -177,9 +177,9 @@ def render_overview_tab(df):
         summary_df = pd.DataFrame(summary_data)
         desc_df = filtered_df.describe(include='all').astype(str).replace('nan', 'NaN')
 
-        # Display tabs side by side
-        t_summary, t_describe = st.tabs(["Column Summary (df.info)", "Descriptive Statistics (df.describe)"])
-        with t_summary:
-            st.dataframe(summary_df, width="stretch", hide_index=True)
+        # Display tabs side by side with df.describe as default
+        t_describe, t_summary = st.tabs(["Descriptive Statistics (df.describe)", "Column Summary (df.info)"])
         with t_describe:
             st.dataframe(desc_df, width="stretch")
+        with t_summary:
+            st.dataframe(summary_df, width="stretch", hide_index=True)
