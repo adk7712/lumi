@@ -39,8 +39,8 @@ def render_diagnostics_tab(df):
                             chart_data = pd.concat([top_n, pd.Series({"Other": other_sum})])
                         fig = px.bar(x=chart_data.index, y=chart_data.values, height=DIAGNOSTIC_CHART_HEIGHT)
 
-                    # Cleanup chart aesthetics by removing redundant axis labels and disabling hover
-                    fig.update_layout(xaxis_title=None, yaxis_title=None, hovermode=False)
+                    # Cleanup chart aesthetics by removing redundant axis labels
+                    fig.update_layout(xaxis_title=None, yaxis_title=None)
                     st.plotly_chart(fig, width="stretch", theme="streamlit")
                     if pd.api.types.is_numeric_dtype(df[col_name]) and len(df) > 1000:
                         st.caption("Showing representative sample of 1,000 rows for rendering performance.")
