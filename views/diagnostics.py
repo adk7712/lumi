@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from ui_utils import render_diagnostic_metric, downsample_for_plot, DIAGNOSTIC_CHART_HEIGHT
+from ui_utils import render_diagnostic_metric, downsample_for_plot, DIAGNOSTIC_CHART_HEIGHT, MAX_CATEGORIES_DISPLAY
 
 def render_diagnostics_tab(df):
     all_cols = df.columns.tolist()
