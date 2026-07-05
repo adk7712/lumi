@@ -28,7 +28,7 @@ def render_diagnostics_tab(df):
                         fig = px.box(plot_df, x=col_name, height=DIAGNOSTIC_CHART_HEIGHT)
                     else:
                         top_val = df[col_name].mode()[0] if not df[col_name].mode().empty else "N/A"
-                        render_diagnostic_metric(s4, "Top", str(top_val)[:10])
+                        render_diagnostic_metric(s4, "Mode", str(top_val)[:10])
                         counts = df[col_name].value_counts()
                         num_uniques = len(counts)
                         if num_uniques <= MAX_CATEGORIES_DISPLAY:
@@ -71,7 +71,7 @@ def render_diagnostics_tab(df):
 
                             st.markdown(f"""
                             <div style="font-size: 0.72rem; line-height: 1.4; opacity: 0.85; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-                                <div style="grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Most Common:</strong> {str(top_val)[:25]}</div>
+                                <div style="grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Mode:</strong> {str(top_val)[:25]}</div>
                                 <div><strong>Frequency:</strong> {freq_val if pd.notnull(freq_val) else 'N/A'}</div>
                                 <div><strong>Freq %:</strong> {freq_pct:.1f}%</div>
                                 <div><strong>Null Count:</strong> {null_count}</div>
