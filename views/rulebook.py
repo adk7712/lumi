@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
-from state_manager import add_step
+from state_manager import add_step, add_rule
 from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
-from ui_utils import get_safe_hue
 
 def render_rulebook_tab(df):
     all_cols = df.columns.tolist()
@@ -14,9 +13,7 @@ def render_rulebook_tab(df):
                     if 'action' in p['rule_data']:
                         add_step(p['rule_data'])
                     else:
-                        rule = p['rule_data'].copy()
-                        rule.update({'enabled': True, 'color': f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
-                        st.session_state.rules.append(rule)
+                        add_rule(p['rule_data'], at_end=True)
                 st.session_state.proposals = []
                 st.toast("All recommendations accepted")
                 st.rerun()
@@ -31,9 +28,7 @@ def render_rulebook_tab(df):
                         if 'action' in p['rule_data']:
                             add_step(p['rule_data'])
                         else:
-                            rule = p['rule_data'].copy()
-                            rule.update({'enabled': True, 'color': f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
-                            st.session_state.rules.insert(0, rule)
+                            add_rule(p['rule_data'], at_end=False)
                         st.session_state.proposals.pop(p_idx)
                         st.rerun()
                     if dis.button("Dismiss", key=f"p_dis_{p_idx}", width="stretch"):
@@ -49,7 +44,7 @@ def render_rulebook_tab(df):
         if rtype == "Informational":
             note = st.text_area("Note/Warning", placeholder="e.g., This column contains high cardinality data.", key="info_note_input")
             if st.button("Add Rule", key="btn_add_info"):
-                st.session_state.rules.insert(0, {"type": "Informational", "desc": note, "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                add_rule({"type": "Informational", "desc": note})
                 st.rerun()
         elif rtype == "Custom Expression":
             with st.form(key="custom_expr_form", clear_on_submit=True):
@@ -61,9 +56,9 @@ def render_rulebook_tab(df):
                     test_result = df.query(q_str)
 
                     if len(df) > 0 and len(test_result) == 0:
-                        st.error("⚠️ This query returned no matches on the dataset. Please check for typos or type mismatches (e.g., comparing a number to a string). Rule not added.")
+                        st.error("This query returned no matches on the dataset. Please check for typos or type mismatches (e.g., comparing a number to a string). Rule not added.")
                     else:
-                        st.session_state.rules.insert(0, {"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                        add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}"})
                         st.rerun()
                 except Exception as e:
                     err_msg = str(e)
@@ -82,14 +77,14 @@ def render_rulebook_tab(df):
             if target_type == "Another Feature":
                 col_b = st.selectbox("Feature B", all_cols, key="rel_feature_b")
                 if st.button("Add Rule", key="btn_add_rel_feat"):
-                    st.session_state.rules.insert(0, {"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    add_rule({"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}"})
                     st.rerun()
             else:
                 val = st.text_input("Constant Value", key="rel_val_input")
                 if st.button("Add Rule", key="btn_add_rel_val"):
                     try: final_val = float(val)
-                    except: final_val = val
-                    st.session_state.rules.insert(0, {"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    except (ValueError, TypeError): final_val = val
+                    add_rule({"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}"})
                     st.rerun()
         else:
             tcol = st.selectbox("Target Column", all_cols, key="rule_target_col")
@@ -98,19 +93,29 @@ def render_rulebook_tab(df):
                     num_col1, num_col2 = st.columns(2)
                     v_min, v_max = num_col1.number_input("Min", value=float(df[tcol].min()), key="range_min_input"), num_col2.number_input("Max", value=float(df[tcol].max()), key="range_max_input")
                     if st.button("Add Rule", key="btn_add_range"):
-                        st.session_state.rules.insert(0, {"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                        add_rule({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]"})
                         st.rerun()
                 else:
                     st.warning(f"Range Checks are only applicable to numeric columns. '{tcol}' is {df[tcol].dtype}.")
             elif rtype == "Null Check":
                 if st.button("Add Rule", key="btn_add_null"):
-                    st.session_state.rules.insert(0, {"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL", "enabled": True, "color": f"hsla({get_safe_hue(len(st.session_state.rules))}, 70%, 50%, 0.4)"})
+                    add_rule({"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL"})
                     st.rerun()
     with r2:
         st.subheader("Active Rules")
         if st.session_state.rules:
             btn_col1, btn_col2 = st.columns(2)
-            report_content = generate_evidence_report(df, st.session_state.rules)
+            # Cache the report content to avoid recalculating on every rerun/refresh
+            cache_key = (len(df), len(st.session_state.rules), len(st.session_state.cleaning_recipe))
+            if 'report_cache_key' not in st.session_state or st.session_state.report_cache_key != cache_key:
+                st.session_state.report_cache_key = cache_key
+                st.session_state.report_content = generate_evidence_report(
+                    df, 
+                    st.session_state.rules,
+                    cleaning_recipe=st.session_state.cleaning_recipe,
+                    intermediate_states=st.session_state.intermediate_states
+                )
+            report_content = st.session_state.report_content
             btn_col1.download_button(
                 label="Download Evidence Report",
                 data=report_content,
@@ -140,7 +145,7 @@ def render_rulebook_tab(df):
                     status_color, resolved = (rule['color'] if rule['enabled'] else "rgba(100,100,100,0.2)"), rule.get('resolved', False)
                     enabled_class = "enabled" if rule['enabled'] else "disabled"
                     resolved_html = f'<br/><span class="rule-status-resolved">Status: Resolved</span>' if resolved else ""
-                    error_html = f'<br/><span class="rule-error-msg">⚠️ Error: {rule.get("error")}</span>' if 'error' in rule else ""
+                    error_html = f'<br/><span class="rule-error-msg">Error: {rule.get("error")}</span>' if 'error' in rule else ""
 
                     v_text = f"Violations: {v_count}" if rule['type'] != "Informational" else "Type: Info"
                     st.markdown(f"""<div class="violation-card {enabled_class}">

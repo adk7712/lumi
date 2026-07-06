@@ -203,17 +203,17 @@ def test_sync_column_rename():
     print("sync_column_rename test passed.")
 
 
-def test_render_loading_spinner():
-    """render_loading_spinner should return HTML containing the provided label and spinner div."""
-    from ui_utils import render_loading_spinner
-    html = render_loading_spinner("Apply Column Order")
+def test_get_loading_spinner_html():
+    """get_loading_spinner_html should return HTML containing the provided label and spinner div."""
+    from ui_utils import get_loading_spinner_html
+    html = get_loading_spinner_html("Apply Column Order")
     assert 'Apply Column Order' in html
     assert 'spinner-circle' in html
     assert '<button disabled' in html
     # Custom text
-    html2 = render_loading_spinner("Processing...")
+    html2 = get_loading_spinner_html("Processing...")
     assert 'Processing...' in html2
-    print("render_loading_spinner test passed.")
+    print("get_loading_spinner_html test passed.")
 
 
 def test_datetime_feature_extraction():
@@ -374,7 +374,12 @@ def test_evidence_report_generation():
             {"action": "rename_column", "column": "old", "value": "new"}
         ]
         
-        report_md = generate_evidence_report(df, rules)
+        report_md = generate_evidence_report(
+            df, 
+            rules,
+            cleaning_recipe=st.session_state.cleaning_recipe,
+            intermediate_states=st.session_state.intermediate_states
+        )
         
     assert report_md is not None
     
@@ -413,9 +418,42 @@ def test_evidence_report_generation():
     print("test_evidence_report_generation passed.")
 
 
+def test_string_dtype_operations():
+    # 1. Scout whitespace detection with 'string' dtype
+    df_scout = pd.DataFrame({
+        'name': pd.Series(['  Alice  ', 'Bob  ', 'Charlie'], dtype='string')
+    })
+    proposals = generate_proposals(df_scout, set())
+    assert any(p['type'] == 'Formatting Issue' and p['column'] == 'name' for p in proposals)
+
+    # 2. Engine actions targeting 'All' with 'string' dtype
+    df_engine = pd.DataFrame({
+        'name': pd.Series(['  Alice  ', 'Bob  ', '  Charlie'], dtype='string'),
+        'city': pd.Series(['nyc', 'london', 'tokyo'], dtype='string')
+    })
+    
+    # Strip whitespace
+    df_stripped, _ = apply_recipe(df_engine.copy(), [{'action': 'strip_whitespace', 'column': 'All'}])
+    assert list(df_stripped['name']) == ['Alice', 'Bob', 'Charlie']
+    assert df_stripped['name'].dtype == 'string'
+
+    # Replace
+    df_replaced, _ = apply_recipe(df_engine.copy(), [{'action': 'replace', 'column': 'All', 'find': 'nyc', 'replace': 'NYC', 'regex': False}])
+    assert df_replaced.loc[0, 'city'] == 'NYC'
+    assert df_replaced['city'].dtype == 'string'
+
+    # Normalize text
+    df_norm, _ = apply_recipe(df_engine.copy(), [{'action': 'normalize_text', 'column': 'All', 'value': 'uppercase'}])
+    assert list(df_norm['city']) == ['NYC', 'LONDON', 'TOKYO']
+    assert df_norm['city'].dtype == 'string'
+
+    print("test_string_dtype_operations passed.")
+
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
+        test_string_dtype_operations()
         test_intermediate_states_simulation()
         test_diagnostics_histogram_grouping()
         test_chart_updates()
@@ -425,7 +463,7 @@ if __name__ == "__main__":
         test_plotly_layout_consolidation()
         test_get_column_dependencies()
         test_sync_column_rename()
-        test_render_loading_spinner()
+        test_get_loading_spinner_html()
         test_datetime_feature_extraction()
         test_notebook_export()
         test_evidence_report_generation()

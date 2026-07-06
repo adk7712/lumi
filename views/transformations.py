@@ -1,8 +1,11 @@
 import streamlit as st
 import pandas as pd
+import time
+import re
 from state_manager import add_step, get_column_dependencies, sync_column_rename
 from streamlit_sortables import sort_items
-from ui_utils import load_style, render_loading_spinner
+from ui_utils import load_style
+from engine_ops import predict_column_renames
 
 def render_transformations_tab(df):
     all_cols = df.columns.tolist()
@@ -57,7 +60,7 @@ def render_transformations_tab(df):
         # Collision Detection
         dependent_rules = get_column_dependencies(target)
         if dependent_rules:
-            st.warning(f"⚠️ Column '{target}' is used in the following rules: {', '.join(dependent_rules)}. Dropping it may break these rules.")
+            st.warning(f"Column '{target}' is used in the following rules: {', '.join(dependent_rules)}. Dropping it may break these rules.")
 
         if st.button("Execute Column Drop", key="btn_drop"):
             add_step({"action": "drop_column", "column": target})
@@ -89,7 +92,7 @@ def render_transformations_tab(df):
         st.info("Grab any column name card and drag to rearrange the column order. Click \"Apply Column Order\" once done.")
 
         if st.session_state.get('show_reorder_success'):
-            st.toast("Column order applied successfully!", icon="✅")
+            st.toast("Column order applied successfully!")
             st.session_state.show_reorder_success = False
 
         sortable_style = load_style("sortables.css")
@@ -101,9 +104,6 @@ def render_transformations_tab(df):
 
         btn_placeholder = st.empty()
         if btn_placeholder.button("Apply Column Order", key="btn_apply_reorder"):
-            btn_placeholder.markdown(render_loading_spinner("Apply Column Order"), unsafe_allow_html=True)
-            import time
-            time.sleep(0.8)
             add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
             st.session_state.show_reorder_success = True
             st.rerun()
@@ -111,7 +111,7 @@ def render_transformations_tab(df):
         datetime_cols = [c for c in all_cols if pd.api.types.is_datetime64_any_dtype(df[c])]
         
         if not datetime_cols:
-            st.warning("⚠️ No datetime columns detected in the active dataset. Convert a column using 'Cast Data Type' to 'datetime64[ns]' first, or select any column to coerce.")
+            st.warning("No datetime columns detected in the active dataset. Convert a column using 'Cast Data Type' to 'datetime64[ns]' first, or select any column to coerce.")
             target_cols = all_cols
         else:
             target_cols = datetime_cols
@@ -162,29 +162,8 @@ def render_transformations_tab(df):
         }
         selected_method = st.selectbox("Naming Convention", list(method_options.keys()), key="norm_cols_method")
         if st.button("Execute Column Normalization", key="btn_norm_cols"):
-            import re
             method = method_options[selected_method]
-            
-            # Predict the rename mapping to keep session state fully synchronized
-            new_names = {}
-            for c in df.columns:
-                orig = c
-                if method == 'snake_case':
-                    val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
-                    val = re.sub(r'_+', '_', val).lower()
-                elif method == 'lowercase':
-                    val = orig.lower()
-                elif method == 'uppercase':
-                    val = orig.upper()
-                elif method == 'remove_spaces':
-                    val = orig.replace(' ', '')
-                else:
-                    val = orig
-                    
-                if not val:
-                    val = f"column_{orig}"
-                if val != orig:
-                    new_names[orig] = val
+            new_names = predict_column_renames(df.columns.tolist(), method, only_changed=True)
             
             add_step({"action": "normalize_column_names", "value": method})
             for orig, val in new_names.items():

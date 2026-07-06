@@ -1,14 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import re
 from rule_utils import evaluate_rule
+from state_manager import add_step, sync_column_rename, calculate_health
+from engine_ops import predict_column_renames
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
-    total_cells = df.size
-    null_cells = df.isnull().sum().sum()
-    # Calculate overall data health percentage: (1 - proportion of null cells) * 100
-    health = int((1 - (null_cells / total_cells)) * 100) if total_cells > 0 else 0
+    health = calculate_health(df)
     active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
 
     total_violations = 0
@@ -18,7 +18,7 @@ def render_overview_tab(df):
         try:
             total_violations += evaluate_rule(df, rule).sum()
         except (ValueError, KeyError, TypeError) as e:
-            st.toast(f"Overview Rule Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}", icon="🚨")
+            st.toast(f"Overview Rule Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}")
 
     m_col1.metric("Health", f"{health}%")
     m_col2.metric("Rows", f"{len(df):,}")
@@ -41,10 +41,6 @@ def render_overview_tab(df):
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
         st.subheader("Quick Actions")
-        # Precompute recommendations to decide whether to render the container border box
-        from state_manager import add_step, sync_column_rename
-        import re
-
         duplicates_count = int(df.duplicated().sum())
         empty_cols = [c for c in df.columns if df[c].isnull().all()]
         empty_cols_count = len(empty_cols)
@@ -52,10 +48,11 @@ def render_overview_tab(df):
 
         # Scan for columns with leading/trailing whitespaces
         whitespace_cols = []
-        for c in df.select_dtypes(include=['object']).columns:
-            non_null_strings = df[c].dropna().astype(str)
-            if (non_null_strings != non_null_strings.str.strip()).any():
-                whitespace_cols.append(c)
+        for c in df.columns:
+            if df[c].dtype == 'object' or pd.api.types.is_string_dtype(df[c]):
+                non_null_strings = df[c].dropna().astype(str)
+                if (non_null_strings != non_null_strings.str.strip()).any():
+                    whitespace_cols.append(c)
 
         # Scan for column names containing spaces, dashes, or special characters
         unnormalized_cols = []
@@ -113,16 +110,7 @@ def render_overview_tab(df):
                         width="stretch",
                         help=f"Converts column headers to snake_case (lowercase with underscores) to avoid syntax errors: {cols_preview}"
                     ):
-                        # Predict the rename mapping to keep session state fully synchronized
-                        new_names = {}
-                        for c in df.columns:
-                            orig = c
-                            val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
-                            val = re.sub(r'_+', '_', val).lower()
-                            if not val:
-                                val = f"column_{orig}"
-                            if val != orig:
-                                new_names[orig] = val
+                        new_names = predict_column_renames(df.columns.tolist(), 'snake_case', only_changed=True)
 
                         add_step({"action": "normalize_column_names", "value": "snake_case"})
                         for orig, val in new_names.items():
@@ -190,9 +178,9 @@ def render_overview_tab(df):
         summary_df = pd.DataFrame(summary_data)
         desc_df = filtered_df.describe(include='all').astype(str).replace('nan', 'NaN')
 
-        # Display tabs side by side
-        t_summary, t_describe = st.tabs(["Column Summary (df.info)", "Descriptive Statistics (df.describe)"])
-        with t_summary:
-            st.dataframe(summary_df, width="stretch", hide_index=True)
+        # Display tabs side by side with df.describe as default
+        t_describe, t_summary = st.tabs(["Descriptive Statistics (df.describe)", "Column Summary (df.info)"])
         with t_describe:
             st.dataframe(desc_df, width="stretch")
+        with t_summary:
+            st.dataframe(summary_df, width="stretch", hide_index=True)

@@ -7,6 +7,8 @@ from scout import generate_proposals
 
 # Define constants
 MAX_SAMPLE_ROWS = 10000
+LARGE_FILE_THRESHOLD_BYTES = 50 * 1024 * 1024 # 50MB
+
 
 @st.cache_data
 def load_data(file_path_or_buffer, nrows=None):
@@ -37,6 +39,28 @@ def load_data(file_path_or_buffer, nrows=None):
     except Exception as e:
         st.error(f"An unexpected error occurred: {type(e).__name__} - {e}")
         return pd.DataFrame()
+
+def add_rule(rule_dict: dict, at_end: bool = False):
+    """Applies color/enabled status to a rule and adds it to st.session_state.rules."""
+    from ui_utils import get_safe_hue
+    rule = rule_dict.copy()
+    if 'enabled' not in rule:
+        rule['enabled'] = True
+    if 'color' not in rule:
+        hue = get_safe_hue(len(st.session_state.rules))
+        rule['color'] = f"hsla({hue}, 70%, 50%, 0.4)"
+        
+    if at_end:
+        st.session_state.rules.append(rule)
+    else:
+        st.session_state.rules.insert(0, rule)
+
+def calculate_health(df: pd.DataFrame) -> int:
+    """Calculates overall dataset health percentage: (1 - proportion of null cells) * 100"""
+    if df.size == 0:
+        return 0
+    null_cells = df.isnull().sum().sum()
+    return int((1 - (null_cells / df.size)) * 100)
 
 def initialize_state(from_reset=False):
     """Initializes all required session state variables."""
@@ -108,7 +132,7 @@ def add_step(step):
     for msg in messages:
         st.toast(msg)
 
-    th = int((1 - (new_df.isnull().sum().sum() / new_df.size)) * 100) if new_df.size > 0 else 0
+    th = calculate_health(new_df)
     step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
     st.session_state.intermediate_states.append((step_desc, th, len(new_df), new_df))
 

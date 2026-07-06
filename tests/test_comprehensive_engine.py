@@ -4,7 +4,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import pandas as pd
 import numpy as np
-import pytest
 from engine import apply_recipe, generate_pipeline_code
 from rule_utils import evaluate_rule
 

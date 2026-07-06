@@ -5,6 +5,18 @@ import plotly.graph_objects as go
 from pathlib import Path
 from rule_utils import evaluate_rule
 
+# Constants for UI plots and displays
+PLOT_SAMPLE_SIZE = 1000
+DIAGNOSTIC_CHART_HEIGHT = 220
+MAX_CATEGORIES_DISPLAY = 10
+VIOLATION_PREVIEW_LIMIT = 100
+
+def downsample_for_plot(df_or_series, sample_size: int = PLOT_SAMPLE_SIZE):
+    """Downsamples a DataFrame or Series if it exceeds sample_size, returning the sample and an is_sampled bool."""
+    if len(df_or_series) > sample_size:
+        return df_or_series.sample(sample_size, random_state=42).sort_index(), True
+    return df_or_series, False
+
 def render_diagnostic_metric(container, label: str, value: str):
     """
     Render a diagnostic metric with small label text using custom HTML.
@@ -127,10 +139,7 @@ def plot_missingness_map(df: pd.DataFrame) -> tuple:
     if df.size > 0:
         null_mask = df.isnull().astype(int)
         if null_mask.sum().sum() > 0:
-            vis_df = null_mask
-            is_sampled = len(vis_df) > 1000
-            if is_sampled:
-                vis_df = vis_df.sample(1000, random_state=42).sort_index()
+            vis_df, is_sampled = downsample_for_plot(null_mask)
 
             fig = px.imshow(
                 vis_df,
@@ -151,7 +160,7 @@ def plot_missingness_map(df: pd.DataFrame) -> tuple:
     return None, False
 
 
-def render_loading_spinner(text: str = "Apply Column Order") -> str:
+def get_loading_spinner_html(text: str = "Apply Column Order") -> str:
     """Returns HTML for a disabled button accompanied by a CSS loading spinner."""
     return f"""
     <div style="display: inline-flex; align-items: center; gap: 12px; height: 38px; margin-bottom: 1rem;">
@@ -187,10 +196,7 @@ def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
             else:
                 z_scored_df[col] = 0.0
 
-        is_sampled = len(z_scored_df) > 1000
-        plot_z_df = z_scored_df
-        if is_sampled:
-            plot_z_df = plot_z_df.sample(1000, random_state=42)
+        plot_z_df, is_sampled = downsample_for_plot(z_scored_df)
 
         melted_z = plot_z_df.melt(var_name="Feature", value_name="Standardized Value")
 

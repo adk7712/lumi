@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from ui_utils import render_diagnostic_metric
+from ui_utils import render_diagnostic_metric, downsample_for_plot, DIAGNOSTIC_CHART_HEIGHT, MAX_CATEGORIES_DISPLAY
 
 def render_diagnostics_tab(df):
     all_cols = df.columns.tolist()
@@ -23,27 +23,24 @@ def render_diagnostics_tab(df):
                     if pd.api.types.is_numeric_dtype(df[col_name]):
                         render_diagnostic_metric(s4, "Skew", f"{df[col_name].skew():.2f}")
                         
-                        # Downsample for Plotly rendering performance
                         plot_df = df[[col_name]].dropna()
-                        is_sampled = len(plot_df) > 1000
-                        if is_sampled:
-                            plot_df = plot_df.sample(1000, random_state=42)
-                        fig = px.box(plot_df, x=col_name, height=220)
+                        plot_df, is_sampled = downsample_for_plot(plot_df)
+                        fig = px.box(plot_df, x=col_name, height=DIAGNOSTIC_CHART_HEIGHT)
                     else:
                         top_val = df[col_name].mode()[0] if not df[col_name].mode().empty else "N/A"
-                        render_diagnostic_metric(s4, "Top", str(top_val)[:10])
+                        render_diagnostic_metric(s4, "Mode", str(top_val)[:10])
                         counts = df[col_name].value_counts()
                         num_uniques = len(counts)
-                        if num_uniques <= 10:
+                        if num_uniques <= MAX_CATEGORIES_DISPLAY:
                             chart_data = counts
                         else:
-                            top_n = counts.head(9)
-                            other_sum = counts.iloc[9:].sum()
+                            top_n = counts.head(MAX_CATEGORIES_DISPLAY - 1)
+                            other_sum = counts.iloc[MAX_CATEGORIES_DISPLAY - 1:].sum()
                             chart_data = pd.concat([top_n, pd.Series({"Other": other_sum})])
-                        fig = px.bar(x=chart_data.index, y=chart_data.values, height=220)
+                        fig = px.bar(x=chart_data.index, y=chart_data.values, height=DIAGNOSTIC_CHART_HEIGHT)
 
-                    # Cleanup chart aesthetics by removing redundant axis labels and disabling hover
-                    fig.update_layout(xaxis_title=None, yaxis_title=None, hovermode=False)
+                    # Cleanup chart aesthetics by removing redundant axis labels
+                    fig.update_layout(xaxis_title=None, yaxis_title=None)
                     st.plotly_chart(fig, width="stretch", theme="streamlit")
                     if pd.api.types.is_numeric_dtype(df[col_name]) and len(df) > 1000:
                         st.caption("Showing representative sample of 1,000 rows for rendering performance.")
@@ -74,7 +71,7 @@ def render_diagnostics_tab(df):
 
                             st.markdown(f"""
                             <div style="font-size: 0.72rem; line-height: 1.4; opacity: 0.85; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-                                <div style="grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Most Common:</strong> {str(top_val)[:25]}</div>
+                                <div style="grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Mode:</strong> {str(top_val)[:25]}</div>
                                 <div><strong>Frequency:</strong> {freq_val if pd.notnull(freq_val) else 'N/A'}</div>
                                 <div><strong>Freq %:</strong> {freq_pct:.1f}%</div>
                                 <div><strong>Null Count:</strong> {null_count}</div>
