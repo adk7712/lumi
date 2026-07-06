@@ -108,7 +108,7 @@ def _check_string_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
                 })
 
             # Whitespace Detection
-            if df[col].dtype == 'object':
+            if df[col].dtype == 'object' or pd.api.types.is_string_dtype(df[col]):
                 has_whitespace = df[col].dropna().astype(str).str.contains(r"^\s+|\s+$").any()
                 if has_whitespace:
                     proposals.append({

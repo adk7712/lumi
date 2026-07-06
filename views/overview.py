@@ -48,10 +48,11 @@ def render_overview_tab(df):
 
         # Scan for columns with leading/trailing whitespaces
         whitespace_cols = []
-        for c in df.select_dtypes(include=['object']).columns:
-            non_null_strings = df[c].dropna().astype(str)
-            if (non_null_strings != non_null_strings.str.strip()).any():
-                whitespace_cols.append(c)
+        for c in df.columns:
+            if df[c].dtype == 'object' or pd.api.types.is_string_dtype(df[c]):
+                non_null_strings = df[c].dropna().astype(str)
+                if (non_null_strings != non_null_strings.str.strip()).any():
+                    whitespace_cols.append(c)
 
         # Scan for column names containing spaces, dashes, or special characters
         unnormalized_cols = []

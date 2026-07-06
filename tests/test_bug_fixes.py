@@ -418,9 +418,42 @@ def test_evidence_report_generation():
     print("test_evidence_report_generation passed.")
 
 
+def test_string_dtype_operations():
+    # 1. Scout whitespace detection with 'string' dtype
+    df_scout = pd.DataFrame({
+        'name': pd.Series(['  Alice  ', 'Bob  ', 'Charlie'], dtype='string')
+    })
+    proposals = generate_proposals(df_scout, set())
+    assert any(p['type'] == 'Formatting Issue' and p['column'] == 'name' for p in proposals)
+
+    # 2. Engine actions targeting 'All' with 'string' dtype
+    df_engine = pd.DataFrame({
+        'name': pd.Series(['  Alice  ', 'Bob  ', '  Charlie'], dtype='string'),
+        'city': pd.Series(['nyc', 'london', 'tokyo'], dtype='string')
+    })
+    
+    # Strip whitespace
+    df_stripped, _ = apply_recipe(df_engine.copy(), [{'action': 'strip_whitespace', 'column': 'All'}])
+    assert list(df_stripped['name']) == ['Alice', 'Bob', 'Charlie']
+    assert df_stripped['name'].dtype == 'string'
+
+    # Replace
+    df_replaced, _ = apply_recipe(df_engine.copy(), [{'action': 'replace', 'column': 'All', 'find': 'nyc', 'replace': 'NYC', 'regex': False}])
+    assert df_replaced.loc[0, 'city'] == 'NYC'
+    assert df_replaced['city'].dtype == 'string'
+
+    # Normalize text
+    df_norm, _ = apply_recipe(df_engine.copy(), [{'action': 'normalize_text', 'column': 'All', 'value': 'uppercase'}])
+    assert list(df_norm['city']) == ['NYC', 'LONDON', 'TOKYO']
+    assert df_norm['city'].dtype == 'string'
+
+    print("test_string_dtype_operations passed.")
+
+
 if __name__ == "__main__":
     try:
         test_scout_string_dtype()
+        test_string_dtype_operations()
         test_intermediate_states_simulation()
         test_diagnostics_histogram_grouping()
         test_chart_updates()

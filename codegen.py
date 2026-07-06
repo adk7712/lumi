@@ -101,8 +101,8 @@ def _codegen_replace(step: dict) -> list[str]:
     regex_param = f", regex={step.get('regex', False)}"
     if col == "All":
         return [
-            f"    # Replace in all object columns if 'All' is specified.",
-            f"    for c in df.select_dtypes(include=['object']).columns:",
+            f"    # Replace in all object/string columns if 'All' is specified.",
+            f"    for c in df.select_dtypes(include=['object', 'string']).columns:",
             f"        df[c] = df[c].replace({f_repr}, {r_repr}{regex_param})"
         ]
     else:
@@ -115,8 +115,8 @@ def _codegen_strip_whitespace(step: dict) -> list[str]:
     col = step.get('column')
     if col == "All":
         return [
-            f"    # Strip whitespace from all object columns, preserving NaNs.",
-            f"    for c in df.select_dtypes(include=['object']).columns:",
+            f"    # Strip whitespace from all object/string columns, preserving NaNs.",
+            f"    for c in df.select_dtypes(include=['object', 'string']).columns:",
             f"        mask = df[c].notnull()",
             f"        df.loc[mask, c] = df.loc[mask, c].astype(str).str.strip()"
         ]
@@ -132,7 +132,7 @@ def _codegen_normalize_text(step: dict) -> list[str]:
     method = step.get('value', 'lowercase')
     code = [f"    # Normalize text using {method} method."]
     target = f"df['{col}']" if col != "All" else "df[c]"
-    loop_start = [f"    for c in df.select_dtypes(include=['object']).columns:"] if col == "All" else []
+    loop_start = [f"    for c in df.select_dtypes(include=['object', 'string']).columns:"] if col == "All" else []
     indent = "        " if col == "All" else "    "
     
     if method == "remove_punctuation":
