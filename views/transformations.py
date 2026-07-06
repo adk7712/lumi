@@ -60,7 +60,7 @@ def render_transformations_tab(df):
         # Collision Detection
         dependent_rules = get_column_dependencies(target)
         if dependent_rules:
-            st.warning(f"⚠️ Column '{target}' is used in the following rules: {', '.join(dependent_rules)}. Dropping it may break these rules.")
+            st.warning(f"Column '{target}' is used in the following rules: {', '.join(dependent_rules)}. Dropping it may break these rules.")
 
         if st.button("Execute Column Drop", key="btn_drop"):
             add_step({"action": "drop_column", "column": target})
@@ -92,7 +92,7 @@ def render_transformations_tab(df):
         st.info("Grab any column name card and drag to rearrange the column order. Click \"Apply Column Order\" once done.")
 
         if st.session_state.get('show_reorder_success'):
-            st.toast("Column order applied successfully!", icon="✅")
+            st.toast("Column order applied successfully!")
             st.session_state.show_reorder_success = False
 
         sortable_style = load_style("sortables.css")
@@ -111,7 +111,7 @@ def render_transformations_tab(df):
         datetime_cols = [c for c in all_cols if pd.api.types.is_datetime64_any_dtype(df[c])]
         
         if not datetime_cols:
-            st.warning("⚠️ No datetime columns detected in the active dataset. Convert a column using 'Cast Data Type' to 'datetime64[ns]' first, or select any column to coerce.")
+            st.warning("No datetime columns detected in the active dataset. Convert a column using 'Cast Data Type' to 'datetime64[ns]' first, or select any column to coerce.")
             target_cols = all_cols
         else:
             target_cols = datetime_cols

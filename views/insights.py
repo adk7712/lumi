@@ -31,7 +31,7 @@ def render_insights_tab(df):
             st.caption("Showing a representative sample of 1,000 rows for rendering performance.")
     else:
         if df.size > 0:
-            st.success("🎉 No missing values found in the dataset!")
+            st.success("No missing values found in the dataset!")
         else:
             st.caption("Dataset is empty.")
 

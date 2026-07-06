@@ -23,7 +23,7 @@ def render_violation_browser(df):
         
         if errors:
             for err in errors:
-                st.toast(err, icon="⚠️")
+                st.toast(err)
 
         violation_df = df[combined_mask]
 

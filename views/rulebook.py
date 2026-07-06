@@ -56,7 +56,7 @@ def render_rulebook_tab(df):
                     test_result = df.query(q_str)
 
                     if len(df) > 0 and len(test_result) == 0:
-                        st.error("⚠️ This query returned no matches on the dataset. Please check for typos or type mismatches (e.g., comparing a number to a string). Rule not added.")
+                        st.error("This query returned no matches on the dataset. Please check for typos or type mismatches (e.g., comparing a number to a string). Rule not added.")
                     else:
                         add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}"})
                         st.rerun()
@@ -145,7 +145,7 @@ def render_rulebook_tab(df):
                     status_color, resolved = (rule['color'] if rule['enabled'] else "rgba(100,100,100,0.2)"), rule.get('resolved', False)
                     enabled_class = "enabled" if rule['enabled'] else "disabled"
                     resolved_html = f'<br/><span class="rule-status-resolved">Status: Resolved</span>' if resolved else ""
-                    error_html = f'<br/><span class="rule-error-msg">⚠️ Error: {rule.get("error")}</span>' if 'error' in rule else ""
+                    error_html = f'<br/><span class="rule-error-msg">Error: {rule.get("error")}</span>' if 'error' in rule else ""
 
                     v_text = f"Violations: {v_count}" if rule['type'] != "Informational" else "Type: Info"
                     st.markdown(f"""<div class="violation-card {enabled_class}">

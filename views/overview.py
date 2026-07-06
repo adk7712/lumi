@@ -18,7 +18,7 @@ def render_overview_tab(df):
         try:
             total_violations += evaluate_rule(df, rule).sum()
         except (ValueError, KeyError, TypeError) as e:
-            st.toast(f"Overview Rule Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}", icon="🚨")
+            st.toast(f"Overview Rule Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}")
 
     m_col1.metric("Health", f"{health}%")
     m_col2.metric("Rows", f"{len(df):,}")

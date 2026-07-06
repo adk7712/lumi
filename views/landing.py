@@ -27,7 +27,7 @@ def render_landing_page():
         file_id = f"{welcome_uploader.file_id}_{welcome_uploader.name}_{welcome_uploader.size}"
         is_large = welcome_uploader.size > LARGE_FILE_THRESHOLD_BYTES
         if is_large:
-            st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.", icon="⚠️")
+            st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.")
         raw_df = load_data(welcome_uploader, nrows=MAX_SAMPLE_ROWS if is_large else None)
         st.session_state.original_full_data = raw_df
         if not is_large and len(raw_df) > MAX_SAMPLE_ROWS:
