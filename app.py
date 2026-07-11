@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 from ui_utils import inject_custom_css
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS
 from views import (
@@ -13,7 +14,7 @@ from views import (
     render_landing_page
 )
 from scout import generate_proposals
-import os
+
 
 # --- Footer Helper ---
 _FOOTER_HTML = None
@@ -28,6 +29,7 @@ def render_footer():
 # Set page config
 st.set_page_config(
     page_title="Lumi",
+    page_icon="assets/lumi_logo_white.svg",
     layout="wide"
 )
 
