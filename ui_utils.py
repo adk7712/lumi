@@ -220,3 +220,28 @@ def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
         )
         return fig, is_sampled
     return None, False
+
+def inject_posthog(st_object):
+    """Injects PostHog tracking script if a key is configured in st.secrets or environment variables."""
+    posthog_key = None
+    try:
+        if "POSTHOG_API_KEY" in st_object.secrets:
+            posthog_key = st_object.secrets["POSTHOG_API_KEY"]
+    except Exception:
+        pass
+        
+    if not posthog_key:
+        import os
+        posthog_key = os.getenv("POSTHOG_API_KEY")
+        
+    if posthog_key:
+        posthog_js = f"""
+        <script>
+            !function(t,e){{var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){{function g(t,e){{var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){{t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}}} (p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){{var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}},u.people.toString=function(){{return u.toString(".people")}},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing list_properties single_pageview disable_sharing_assets_checking".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])}},e.__SV=1)}}(document,window.posthog||[]);
+            posthog.init('{posthog_key}', {{
+                api_host: 'https://us.i.posthog.com',
+                person_profiles: 'identified_only'
+            }})
+        </script>
+        """
+        st_object.html(posthog_js)

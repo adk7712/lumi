@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from ui_utils import inject_custom_css
+from ui_utils import inject_custom_css, inject_posthog
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state
 from views import (
     render_overview_tab,
@@ -35,6 +35,9 @@ st.set_page_config(
 
 # Inject Custom CSS
 inject_custom_css(st)
+
+# Inject PostHog Analytics
+inject_posthog(st)
 
 # Initialize Session State
 initialize_state()

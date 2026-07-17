@@ -169,10 +169,47 @@ def test_session_resume_recovery():
             
     print("test_session_resume_recovery passed.")
 
+def test_inject_posthog():
+    print("Running test_inject_posthog...")
+    from unittest import mock
+    from ui_utils import inject_posthog
+    
+    # Mock streamlit object
+    st_mock = mock.Mock()
+    # Mock secrets to raise KeyError or be empty
+    st_mock.secrets = {}
+    
+    # 1. No key configured anywhere -> should not call html
+    with mock.patch.dict("os.environ", {}, clear=True):
+        inject_posthog(st_mock)
+        assert not st_mock.html.called, "Should not call st.html when key is missing"
+        
+    # 2. Key configured in environment variables -> should call html
+    st_mock.reset_mock()
+    with mock.patch.dict("os.environ", {"POSTHOG_API_KEY": "phc_test_env_key"}):
+        inject_posthog(st_mock)
+        assert st_mock.html.called, "Should call st.html when env var key is present"
+        call_arg = st_mock.html.call_args[0][0]
+        assert "phc_test_env_key" in call_arg
+        assert "posthog.init" in call_arg
+        
+    # 3. Key configured in secrets -> should call html
+    st_mock.reset_mock()
+    # Mock st_mock.secrets to contain the key
+    st_mock.secrets = {"POSTHOG_API_KEY": "phc_test_secrets_key"}
+    with mock.patch.dict("os.environ", {}, clear=True):
+        inject_posthog(st_mock)
+        assert st_mock.html.called, "Should call st.html when secrets key is present"
+        call_arg = st_mock.html.call_args[0][0]
+        assert "phc_test_secrets_key" in call_arg
+        
+    print("test_inject_posthog passed.")
+
 if __name__ == "__main__":
     test_fuzzy_dedupe_cap()
     test_imputer_column_restriction()
     test_scout_downsampling()
     test_dtype_downcasting()
     test_session_resume_recovery()
+    test_inject_posthog()
     print("ALL OPTIMIZATION TESTS PASSED")
