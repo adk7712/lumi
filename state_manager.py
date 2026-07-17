@@ -10,6 +10,19 @@ MAX_SAMPLE_ROWS = 10000
 LARGE_FILE_THRESHOLD_BYTES = 50 * 1024 * 1024 # 50MB
 
 
+def downcast_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+    """Downcasts float and integer columns to more memory-efficient types."""
+    if df.empty:
+        return df
+    df = df.copy()
+    for col in df.columns:
+        if pd.api.types.is_float_dtype(df[col]):
+            df[col] = pd.to_numeric(df[col], downcast='float')
+        elif pd.api.types.is_integer_dtype(df[col]):
+            df[col] = pd.to_numeric(df[col], downcast='integer')
+    return df
+
+
 @st.cache_data
 def load_data(file_path_or_buffer, nrows=None):
     """Loads data from a file path or buffer, supporting CSV and Excel."""
@@ -18,20 +31,26 @@ def load_data(file_path_or_buffer, nrows=None):
         if hasattr(file_path_or_buffer, 'type'):
             file_type = file_path_or_buffer.type
             if file_type == "text/csv":
-                return pd.read_csv(file_path_or_buffer, nrows=nrows)
+                df = pd.read_csv(file_path_or_buffer, nrows=nrows)
             elif file_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-                return pd.read_excel(file_path_or_buffer, nrows=nrows)
+                df = pd.read_excel(file_path_or_buffer, nrows=nrows)
+            else:
+                df = pd.DataFrame()
         # For local file paths
         elif isinstance(file_path_or_buffer, str):
             suffix = Path(file_path_or_buffer).suffix.lower()
             if suffix == '.csv':
-                return pd.read_csv(file_path_or_buffer, nrows=nrows)
+                df = pd.read_csv(file_path_or_buffer, nrows=nrows)
             elif suffix == '.xlsx':
-                return pd.read_excel(file_path_or_buffer, nrows=nrows)
+                df = pd.read_excel(file_path_or_buffer, nrows=nrows)
+            else:
+                df = pd.DataFrame()
+        else:
+            # Fallback for buffers without a clear type
+            st.warning("Could not determine file type, attempting to read as CSV. May fail for other formats.")
+            df = pd.read_csv(file_path_or_buffer, nrows=nrows)
 
-        # Fallback for buffers without a clear type
-        st.warning("Could not determine file type, attempting to read as CSV. May fail for other formats.")
-        return pd.read_csv(file_path_or_buffer, nrows=nrows)
+        return downcast_dtypes(df)
 
     except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         st.error(f"Error loading data: {type(e).__name__} - {e}. Please check the file format and content.")

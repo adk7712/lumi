@@ -3,6 +3,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
+import streamlit as st
 from rule_utils import evaluate_rule
 
 # Constants for UI plots and displays
@@ -112,6 +113,7 @@ def apply_lumi_layout(fig: go.Figure) -> go.Figure:
     )
     return fig
 
+@st.cache_data
 def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
     """Computes features' correlation matrix and plots a filtered heatmap."""
     numeric_df = df.select_dtypes(include=[np.number])
@@ -134,6 +136,7 @@ def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
             return apply_lumi_layout(fig)
     return None
 
+@st.cache_data
 def plot_missingness_map(df: pd.DataFrame) -> tuple:
     """Generates a binary missingness pattern map representation."""
     if df.size > 0:
@@ -184,6 +187,7 @@ def get_loading_spinner_html(text: str = "Apply Column Order") -> str:
     </div>
     """
 
+@st.cache_data
 def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
     """Computes column Z-scores and plots comparative outlier box plots."""
     numeric_df = df.select_dtypes(include=[np.number])

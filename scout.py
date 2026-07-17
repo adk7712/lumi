@@ -145,6 +145,10 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
     
     if df.empty:
         return proposals
+        
+    # Sample down to 10,000 rows if dataset is larger, to ensure scouts run fast
+    if len(df) > 10000:
+        df = df.sample(n=10000, random_state=42).reset_index(drop=True)
 
     for col in df.columns:
         # Skip columns that have already been processed or whose proposals have been handled.
