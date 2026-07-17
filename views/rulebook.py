@@ -113,7 +113,7 @@ def render_rulebook_tab(df):
                     df, 
                     st.session_state.rules,
                     cleaning_recipe=st.session_state.cleaning_recipe,
-                    intermediate_states=st.session_state.intermediate_states
+                    original_df=st.session_state.raw_data
                 )
             report_content = st.session_state.report_content
             btn_col1.download_button(

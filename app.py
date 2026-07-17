@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 from ui_utils import inject_custom_css
-from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS
+from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step
 from views import (
     render_overview_tab,
     render_diagnostics_tab,
@@ -58,6 +58,7 @@ with h_col2:
     if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
         st.session_state.cleaning_recipe.pop()
         st.session_state.intermediate_states.pop()
+        st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
         st.toast("Last step undone")
         st.rerun()
     if u_c2.button("Reset", key="reset_all", width="stretch"):
@@ -67,7 +68,7 @@ with h_col2:
 st.divider()
 
 # Get the latest dataframe from cache
-df = st.session_state.intermediate_states[-1][3]
+df = st.session_state.current_df
 
 # --- TABS ---
 tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs([

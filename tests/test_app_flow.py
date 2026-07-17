@@ -131,7 +131,7 @@ def test_rename_and_reorder_ui():
     # 1. Add a dummy rule first to test renaming synchronization
     rule_type = at.selectbox(key="rule_type_select")
     rule_type.select("Null Check").run()
-    target_col = at.session_state.intermediate_states[-1][3].columns[0]
+    target_col = at.session_state.current_df.columns[0]
     target_col_select = at.selectbox(key="rule_target_col")
     target_col_select.select(target_col).run()
     add_rule_btn = at.button(key="btn_add_null")
@@ -240,7 +240,7 @@ def test_audit_log_remove_step():
     assert len(at.session_state.intermediate_states) == 3
     assert at.session_state.cleaning_recipe[0]["action"] == "strip_whitespace"
     assert at.session_state.cleaning_recipe[1]["action"] == "drop_column"
-    assert "Alley" not in at.session_state.intermediate_states[-1][3].columns
+    assert "Alley" not in at.session_state.current_df.columns
     print("Audit Log Remove step integration test passed.")
 
 

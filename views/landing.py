@@ -45,7 +45,8 @@ def render_landing_page():
 
         base_df = st.session_state.raw_data
         bh = calculate_health(base_df)
-        st.session_state.intermediate_states = [("Original Data", bh, len(base_df), base_df.copy())]
+        st.session_state.intermediate_states = [("Original Data", bh, len(base_df))]
+        st.session_state.current_df = base_df.copy()
         st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
         st.toast("Dataset Analyzed")
         st.rerun()

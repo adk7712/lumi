@@ -69,6 +69,7 @@ def initialize_state(from_reset=False):
         st.session_state.raw_data = None
         st.session_state.original_full_data = None
         st.session_state.intermediate_states = []
+        st.session_state.current_df = None
         st.session_state.proposals = []
         st.session_state.scanned_columns = set()
 
@@ -82,6 +83,7 @@ def initialize_state(from_reset=False):
         'rules': [],
         'cleaning_recipe': [],
         'intermediate_states': st.session_state.intermediate_states,
+        'current_df': st.session_state.current_df,
         'proposals': st.session_state.proposals,
         'scanned_columns': st.session_state.scanned_columns,
         'last_file_hash': None,
@@ -126,17 +128,27 @@ def add_step(step):
     """Adds a cleaning step to the recipe, updates the cached state, and shows a toast."""
     st.session_state.cleaning_recipe.append(step)
 
-    # Calculate delta state and cache it
-    last_df = st.session_state.intermediate_states[-1][3]
-    new_df, messages = apply_recipe(last_df, [step])
+    # Calculate delta state from current_df and cache metadata only (no full df copy)
+    new_df, messages = apply_recipe(st.session_state.current_df, [step])
     for msg in messages:
         st.toast(msg)
 
     th = calculate_health(new_df)
     step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
-    st.session_state.intermediate_states.append((step_desc, th, len(new_df), new_df))
+    st.session_state.intermediate_states.append((step_desc, th, len(new_df)))
+    st.session_state.current_df = new_df
 
     st.toast(f"Step Added: {step['action']}")
+
+
+def get_state_at_step(n: int) -> pd.DataFrame:
+    """Reconstructs the dataframe at step N by replaying the first N recipe steps from raw_data."""
+    original = st.session_state.raw_data
+    if n <= 0:
+        return original.copy()
+    recipe_so_far = st.session_state.cleaning_recipe[:n]
+    df, _ = apply_recipe(original.copy(), recipe_so_far)
+    return df
 
 
 def get_column_dependencies(target: str) -> list[str]:
