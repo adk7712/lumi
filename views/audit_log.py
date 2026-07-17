@@ -1,5 +1,5 @@
 import streamlit as st
-from state_manager import add_step, get_state_at_step
+from state_manager import add_step, get_state_at_step, save_session_state
 
 def render_audit_log_tab():
     if not st.session_state.cleaning_recipe:
@@ -18,4 +18,5 @@ def render_audit_log_tab():
                     for r_step in remaining_recipe:
                         add_step(r_step)
                     st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
+                    save_session_state()
                     st.rerun()

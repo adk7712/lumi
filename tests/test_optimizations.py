@@ -4,6 +4,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import pandas as pd
 import numpy as np
+import ui_utils
 from engine_ops import _handle_normalize_text, _handle_fill_null
 from scout import generate_proposals
 from state_manager import downcast_dtypes
@@ -96,9 +97,82 @@ def test_dtype_downcasting():
     np.testing.assert_allclose(df_downcast["dec_float"].iloc[0], 1.1234567, rtol=1e-6)
     print("test_dtype_downcasting passed.")
 
+def test_session_resume_recovery():
+    print("Running test_session_resume_recovery...")
+    import io
+    import streamlit as st
+    from unittest import mock
+    from state_manager import (
+        calculate_file_hash,
+        save_session_state,
+        load_session_state,
+        initialize_state,
+        add_step,
+        add_rule
+    )
+    
+    # 1. Mock file upload buffer
+    class MockUploadedFile(io.BytesIO):
+        def __init__(self, name, content, size):
+            super().__init__(content)
+            self.name = name
+            self.size = size
+            self.type = "text/csv"
+            
+    mock_csv = b"col1,col2\n1,abc\n2,def\n"
+    file_buffer = MockUploadedFile("test.csv", mock_csv, len(mock_csv))
+    
+    file_hash = calculate_file_hash(file_buffer)
+    assert file_hash is not None
+    
+    # 2. Mock streamlit session state and runtime
+    with mock.patch("streamlit.runtime.exists", return_value=True), \
+         mock.patch("state_manager.load_data", side_effect=lambda buf, nrows=None: pd.read_csv(buf, nrows=nrows)):
+        initialize_state(from_reset=True)
+        st.session_state.raw_data = pd.read_csv(io.BytesIO(mock_csv))
+        st.session_state.current_df = st.session_state.raw_data.copy()
+        st.session_state.last_file_hash = file_hash
+        st.session_state.intermediate_states = [("Original Data", 100, len(st.session_state.raw_data))]
+        
+        # Add a step and a rule
+        step = {"action": "strip_whitespace", "column": "col2"}
+        rule = {"type": "Null Check", "col": "col1", "desc": "col1 is NOT NULL", "enabled": True, "color": "hsla(200, 70%, 50%, 0.4)"}
+        
+        add_step(step)
+        add_rule(rule)
+        
+        # Verify JSON cache exists
+        cache_file = Path(".lumi_cache") / f"{file_hash}.json"
+        assert cache_file.exists(), "Cache file should be created"
+        
+        # 3. Simulate session teardown/refresh by resetting state
+        initialize_state(from_reset=True)
+        assert len(st.session_state.cleaning_recipe) == 0
+        assert len(st.session_state.rules) == 0
+        
+        # 4. Load/restore from cache
+        # Create a fresh file buffer to read again
+        fresh_buffer = MockUploadedFile("test.csv", mock_csv, len(mock_csv))
+        load_session_state(file_hash, fresh_buffer)
+        
+        # 5. Verify restored state
+        assert len(st.session_state.cleaning_recipe) == 1
+        assert st.session_state.cleaning_recipe[0]["action"] == "strip_whitespace"
+        assert len(st.session_state.rules) == 1
+        assert st.session_state.rules[0]["col"] == "col1"
+        assert len(st.session_state.intermediate_states) == 2
+        assert st.session_state.intermediate_states[1][0] == "strip_whitespace on col2"
+        
+        # Cleanup
+        if cache_file.exists():
+            cache_file.unlink()
+            
+    print("test_session_resume_recovery passed.")
+
 if __name__ == "__main__":
     test_fuzzy_dedupe_cap()
     test_imputer_column_restriction()
     test_scout_downsampling()
     test_dtype_downcasting()
+    test_session_resume_recovery()
     print("ALL OPTIMIZATION TESTS PASSED")

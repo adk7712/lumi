@@ -13,6 +13,7 @@ def setup_app_test():
     at.run()
     # Click Get Started first to reveal the uploader
     at.run()
+    at.session_state["_is_testing"] = True
     mock_csv = b"Id,Age,Sex,LotArea,Alley\n1,25,male,500,Pave\n2,30,female,600,Grvl\n3,35,male,700,\n"
     at.file_uploader(key="welcome_uploader").upload("train.csv", mock_csv, "text/csv").run()
     return at
@@ -31,6 +32,7 @@ def test_app_initialization():
     
     
     # Now upload the file
+    at.session_state["_is_testing"] = True
     mock_csv = b"Id,Age,Sex,LotArea,Alley\n1,25,male,500,Pave\n2,30,female,600,Grvl\n3,35,male,700,\n"
     at.file_uploader(key="welcome_uploader").upload("train.csv", mock_csv, "text/csv").run()
     

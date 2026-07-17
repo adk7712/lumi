@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 from ui_utils import inject_custom_css
-from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step
+from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state
 from views import (
     render_overview_tab,
     render_diagnostics_tab,
@@ -59,6 +59,7 @@ with h_col2:
         st.session_state.cleaning_recipe.pop()
         st.session_state.intermediate_states.pop()
         st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
+        save_session_state()
         st.toast("Last step undone")
         st.rerun()
     if u_c2.button("Reset", key="reset_all", width="stretch"):

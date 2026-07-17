@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from state_manager import add_step, add_rule
+from state_manager import add_step, add_rule, save_session_state
 from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
 
 def render_rulebook_tab(df):
@@ -34,6 +34,7 @@ def render_rulebook_tab(df):
                     if dis.button("Dismiss", key=f"p_dis_{p_idx}", width="stretch"):
                         st.session_state.scanned_columns.add(p['column'])
                         st.session_state.proposals.pop(p_idx)
+                        save_session_state()
                         st.rerun()
         st.divider()
 
@@ -126,6 +127,7 @@ def render_rulebook_tab(df):
             )
             if btn_col2.button("Clear All", use_container_width=True, key="clear_all_rules_btn"):
                 st.session_state.rules, st.session_state.cleaning_recipe = [], []
+                save_session_state()
                 st.rerun()
 
         if not st.session_state.rules:
@@ -182,7 +184,9 @@ def render_rulebook_tab(df):
                     btn_c1, btn_c2 = st.columns(2)
                     if btn_c1.button("Ignore" if rule['enabled'] else "Enable", key=f"tg_{idx}", width="stretch"):
                         st.session_state.rules[idx]['enabled'] = not rule['enabled']
+                        save_session_state()
                         st.rerun()
                     if btn_c2.button("Remove", key=f"del_{idx}", width="stretch"):
                         st.session_state.rules.pop(idx)
+                        save_session_state()
                         st.rerun()
