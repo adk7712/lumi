@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lumi | Interactive Data Cleaning & Validation Assistant</title>
+    
+    <!-- Meta tags for SEO -->
+    <meta name="description" content="Lumi is an interactive web app that automatically scans your CSV or Excel files to flag data quality issues, lets you clean them visually, and exports your workflow as a ready-to-run Python pipeline.">
+    <meta name="keywords" content="data cleaning tool, data validation, python pipeline generator, pandas code generator, csv cleaner, excel validator, data profiling">
+    <meta name="author" content="adk">
+    
+    <!-- OpenGraph Meta Tags for Social Sharing -->
+    <meta property="og:title" content="Lumi | Interactive Data Cleaning & Validation Assistant">
+    <meta property="og:description" content="Scout your dataset, visually build data validation rulebooks, clean formatting issues, and instantly export production-ready Python pipelines.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://github.com/adk7712/lumi">
+    
+    <!-- Tab Favicon -->
+    <link rel="icon" type="image/svg+xml" href="assets/lumi_logo_white.svg">
+
+    <!-- Fonts & Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+
+    <style>
+        /* --- Global Reset & Scrollbar --- */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            background-color: #0e1117;
+            color: #ffffff;
+            overflow-x: hidden;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* --- Custom Scrollbar --- */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0e1117;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262730;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #31333f;
+        }
+
+        /* --- Ambient Background Animations --- */
+        @keyframes orb-float-1 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, 40px) scale(1.1); }
+            66% { transform: translate(-20px, -30px) scale(0.95); }
+        }
+        @keyframes orb-float-2 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-40px, 30px) scale(1.15); }
+        }
+        @keyframes orb-float-3 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(20px, -30px) scale(0.9); }
+            66% { transform: translate(-30px, 20px) scale(1.05); }
+        }
+
+        .welcome-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            overflow: hidden;
+        }
+
+        .welcome-grid-bg {
+            background-image: radial-gradient(rgba(13, 148, 136, 0.08) 1px, transparent 0);
+            background-size: 24px 24px;
+            opacity: 0.8;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .welcome-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.1;
+        }
+
+        .welcome-orb-1 {
+            width: 500px;
+            height: 500px;
+            background: #ff4b4b;
+            top: 5%;
+            left: 5%;
+            animation: orb-float-1 15s ease-in-out infinite;
+        }
+
+        .welcome-orb-2 {
+            width: 450px;
+            height: 450px;
+            background: #a88beb;
+            top: 35%;
+            right: 5%;
+            animation: orb-float-2 18s ease-in-out infinite;
+        }
+
+        .welcome-orb-3 {
+            width: 400px;
+            height: 400px;
+            background: #2ecc71;
+            bottom: 15%;
+            left: 30%;
+            animation: orb-float-3 20s ease-in-out infinite;
+        }
+
+        /* --- Header / Navigation --- */
+        header {
+            position: relative;
+            z-index: 10;
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem 1.5rem 0 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: #ffffff;
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            transition: color 0.2s ease;
+        }
+
+        .logo-container:hover {
+            color: #ff4b4b;
+        }
+
+        .logo-img {
+            width: 32px;
+            height: 32px;
+        }
+
+        /* --- Hero Section Split Layout --- */
+        .welcome-hero-container {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 4rem;
+            align-items: center;
+            max-width: 1200px;
+            margin: 3rem auto;
+            padding: 0 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        @media (max-width: 900px) {
+            .welcome-hero-container {
+                grid-template-columns: 1fr;
+                text-align: center;
+                gap: 2.5rem;
+                margin: 2rem auto;
+            }
+            .welcome-hero-right {
+                display: none;
+            }
+        }
+
+        .welcome-hero-left {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        @media (max-width: 900px) {
+            .welcome-hero-left {
+                align-items: center;
+            }
+        }
+
+        .welcome-title {
+            font-size: 2.8rem;
+            font-weight: 800;
+            line-height: 1.25;
+            letter-spacing: -0.02em;
+            margin-bottom: 1.25rem;
+            color: #ffffff;
+        }
+
+        @media (max-width: 900px) {
+            .welcome-title {
+                font-size: 2.2rem;
+            }
+        }
+
+        .highlight-teal {
+            color: #ff4b4b;
+        }
+
+        .welcome-subtitle {
+            font-size: 1.05rem;
+            font-weight: 400;
+            color: #a3a3a3;
+            line-height: 1.65;
+            margin-bottom: 2rem;
+            max-width: 600px;
+        }
+
+        /* --- Launch Call to Action Button --- */
+        .launch-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: #ff4b4b;
+            color: #ffffff;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(255, 75, 75, 0.3);
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+            border: none;
+            cursor: pointer;
+        }
+
+        .launch-btn:hover {
+            background: #ff3333;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 75, 75, 0.45);
+        }
+
+        .launch-btn:active {
+            transform: translateY(0);
+        }
+
+        .cta-helper {
+            font-size: 0.8rem;
+            color: #737373;
+            margin-top: 0.75rem;
+            letter-spacing: 0.02em;
+        }
+
+        .hero-image-container {
+            position: relative;
+            border: 1px solid #1a1a1a;
+            border-radius: 12px;
+            background: rgba(10, 10, 10, 0.6);
+            padding: 0.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .hero-image {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            display: block;
+        }
+
+        /* --- Showcase Section --- */
+        .platform-experience {
+            max-width: 1200px;
+            margin: 2rem auto 4rem auto;
+            padding: 0 1.5rem;
+            position: relative;
+            z-index: 1;
+            width: 100%;
+        }
+
+        .showcase-divider {
+            border: 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            margin: 0 0 3rem 0;
+        }
+
+        .exp-body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .demo-gif-container {
+            position: relative;
+            border: 1px solid #1a1a1a;
+            border-radius: 12px;
+            background: rgba(10, 10, 10, 0.6);
+            padding: 0.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            width: 100%;
+        }
+
+        .demo-gif-placeholder {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            display: block;
+        }
+
+        /* --- Features Cards Grid --- */
+        .welcome-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            max-width: 1200px;
+            margin: 4rem auto 5rem auto;
+            padding: 0 1.5rem;
+            position: relative;
+            z-index: 1;
+            width: 100%;
+        }
+
+        @media (max-width: 992px) {
+            .welcome-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 600px) {
+            .welcome-grid { grid-template-columns: 1fr; }
+        }
+
+        .welcome-card {
+            position: relative;
+            background: rgba(18, 18, 18, 0.4);
+            border: 1px solid #161616;
+            border-radius: 8px;
+            padding: 2rem 1.5rem 1.75rem 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .welcome-card:hover {
+            transform: translateY(-4px);
+            border-color: #ff4b4b;
+            background: rgba(18, 18, 18, 0.6);
+            box-shadow: 0 10px 25px rgba(255, 75, 75, 0.03);
+        }
+
+        .welcome-card-icon {
+            color: #ff4b4b;
+            font-size: 1.5rem;
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+
+        .welcome-card-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+        }
+
+        .welcome-card-desc {
+            font-size: 0.8rem;
+            line-height: 1.5;
+            color: #a3a3a3;
+        }
+
+        /* --- Footer Styles --- */
+        footer {
+            margin-top: auto;
+            padding: 2rem 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            text-align: center;
+            position: relative;
+            z-index: 10;
+            width: 100%;
+        }
+
+        .footer-inner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.78rem;
+            color: rgba(255, 255, 255, 0.35);
+            letter-spacing: 0.02em;
+        }
+
+        .footer-sep {
+            color: rgba(255, 255, 255, 0.15);
+        }
+
+        .footer-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: rgba(255, 255, 255, 0.4);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-link:hover {
+            color: rgba(255, 75, 75, 0.85);
+        }
+
+        .footer-gh-icon {
+            vertical-align: middle;
+        }
+
+        .footer-version {
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Background Orbs & Grid -->
+    <div class="welcome-bg welcome-grid-bg">
+        <div class="welcome-orb welcome-orb-1"></div>
+        <div class="welcome-orb welcome-orb-2"></div>
+        <div class="welcome-orb welcome-orb-3"></div>
+    </div>
+
+    <!-- Navigation Header -->
+    <header>
+        <a href="#" class="logo-container">
+            <img src="assets/lumi_logo_white.png" class="logo-img" alt="Lumi Logo">
+            <span>LUMI</span>
+        </a>
+    </header>
+
+    <!-- Hero Section -->
+    <main class="welcome-hero-container">
+        <div class="welcome-hero-left">
+            <h1 class="welcome-title">UPGRADE YOUR <span class="highlight-teal">DATA EXPLORATION AND CLEANING</span> PROCESS.</h1>
+            <p class="welcome-subtitle">Lumi scouts your dataset, recommends actions, enforces your rules, and exports your workflow as clean Python code. All in your browser. No headache, just logic.</p>
+            
+            <!-- CTA Button directing to the hosted Streamlit App -->
+            <a href="https://lumi.streamlit.app" target="_blank" class="launch-btn">
+                <span>Launch Web App</span>
+                <span class="material-icons">launch</span>
+            </a>
+            <p class="cta-helper">Free · Open Source · Works with CSV &amp; XLSX</p>
+        </div>
+        <div class="welcome-hero-right">
+            <div class="hero-image-container">
+                <img id="hero-graphic" src="assets/hero_graphics/hero_1.svg" class="hero-image" alt="Data Flow Illustration">
+            </div>
+        </div>
+    </main>
+
+    <!-- Demo Showcase -->
+    <section class="platform-experience">
+        <hr class="showcase-divider">
+        <div class="exp-body">
+            <div class="demo-gif-container">
+                <img src="https://i.giphy.com/3o7TKSjRrfIPjei1nG.gif" class="demo-gif-placeholder" alt="App Demo GIF">
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Cards Grid -->
+    <section class="welcome-grid">
+        <article class="welcome-card" id="card-scout">
+            <span class="material-icons welcome-card-icon">auto_fix_high</span>
+            <h3 class="welcome-card-title">Smart Scout</h3>
+            <p class="welcome-card-desc">Drop a file and Lumi automatically scans every column for missing values, outliers, mixed types, whitespace, and zero-variance fields — then suggests one-click fixes.</p>
+        </article>
+        <article class="welcome-card" id="card-rules">
+            <span class="material-icons welcome-card-icon">rule</span>
+            <h3 class="welcome-card-title">Visual Rulebook</h3>
+            <p class="welcome-card-desc">Build null checks, range constraints, relational comparisons, and custom Pandas expressions. Resolve violations with strategies like mean fill, KNN imputation, or row drops.</p>
+        </article>
+        <article class="welcome-card" id="card-export">
+            <span class="material-icons welcome-card-icon">code</span>
+            <h3 class="welcome-card-title">Export Everything</h3>
+            <p class="welcome-card-desc">Download your cleaned dataset as CSV or Excel. Or export the entire pipeline as a standalone Python script or Jupyter Notebook with built-in validation assertions.</p>
+        </article>
+        <article class="welcome-card" id="card-audit">
+            <span class="material-icons welcome-card-icon">history</span>
+            <h3 class="welcome-card-title">Full Audit Trail</h3>
+            <p class="welcome-card-desc">Every transformation is logged with health scores and row counts. Undo any step, remove steps mid-pipeline, and download a compliance-ready evidence report.</p>
+        </article>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-inner">
+            <span>Built by adk</span>
+            <span class="footer-sep">·</span>
+            <a href="https://github.com/adk7712/lumi" target="_blank" class="footer-link">
+                <svg class="footer-gh-icon" height="14" viewBox="0 0 16 16" width="14" fill="currentColor">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                </svg>
+                <span>GitHub</span>
+            </a>
+            <span class="footer-sep">·</span>
+            <span class="footer-version">v1.0.0</span>
+        </div>
+    </footer>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const totalGraphics = 3;
+            const randomIndex = Math.floor(Math.random() * totalGraphics) + 1;
+            const heroImg = document.getElementById('hero-graphic');
+            if (heroImg) {
+                heroImg.src = `assets/hero_graphics/hero_${randomIndex}.svg`;
+            }
+        });
+    </script>
+</body>
+</html>
