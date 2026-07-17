@@ -5,13 +5,17 @@ from state_manager import load_data, MAX_SAMPLE_ROWS, calculate_health, LARGE_FI
 from scout import generate_proposals
 
 def render_landing_page():
-    # Load template paths and assets
-    TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), 'templates')
-    ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets')
+    # Render clean background grid and orbs
+    st.html('<div class="welcome-bg welcome-grid-bg"><div class="welcome-orb welcome-orb-1"></div><div class="welcome-orb welcome-orb-2"></div><div class="welcome-orb welcome-orb-3"></div></div>')
 
-    with open(os.path.join(TEMPLATES_DIR, 'landing_hero.html'), 'r') as f:
-        hero_html = f.read()
-    st.html(hero_html)
+    # Render centered uploader title & description
+    st.markdown(
+        '<div style="text-align: center; margin-top: 6rem; margin-bottom: 2.5rem; position: relative; z-index: 1;">'
+        '<h1 style="font-weight: 800; font-size: 2.8rem; letter-spacing: 0.05em; color: #ffffff; margin-bottom: 0.5rem;">LUMI</h1>'
+        '<p style="color: #a3a3a3; font-size: 1.05rem;">Upload your CSV or Excel dataset to start cleaning and validation</p>'
+        '</div>',
+        unsafe_allow_html=True
+    )
 
     cta_spacer_l, cta_col, cta_spacer_r = st.columns([1, 2, 1])
     with cta_col:
@@ -21,7 +25,7 @@ def render_landing_page():
             type=["csv", "xlsx"],
             key="welcome_uploader"
         )
-    st.markdown('<p class="cta-helper">Free · No sign-up · Works with CSV &amp; XLSX</p>', unsafe_allow_html=True)
+    st.markdown('<p class="cta-helper" style="position: relative; z-index: 1;">Free · No sign-up · Works with CSV &amp; XLSX</p>', unsafe_allow_html=True)
 
     if welcome_uploader:
         file_id = f"{welcome_uploader.file_id}_{welcome_uploader.name}_{welcome_uploader.size}"
@@ -45,10 +49,6 @@ def render_landing_page():
         st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
         st.toast("Dataset Analyzed")
         st.rerun()
-
-    with open(os.path.join(TEMPLATES_DIR, 'landing_showcase.html'), 'r') as f:
-        showcase_html = f.read()
-    st.html(showcase_html)
 
     # st.iframe runs inside a real sandboxed iframe and can access the parent
     # page's DOM via window.parent.document (same-origin). We encode the JS as
