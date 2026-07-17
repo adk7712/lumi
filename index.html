@@ -466,7 +466,7 @@
         </div>
         <div class="welcome-hero-right">
             <div class="hero-image-container">
-                <img src="https://i.giphy.com/L1R1QHUR4YTRD3iyRR.gif" class="hero-image" alt="Data Flow Illustration">
+                <img id="hero-graphic" src="assets/hero_graphics/hero_1.svg" class="hero-image" alt="Data Flow Illustration">
             </div>
         </div>
     </main>
@@ -521,5 +521,15 @@
         </div>
     </footer>
 
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const totalGraphics = 3;
+            const randomIndex = Math.floor(Math.random() * totalGraphics) + 1;
+            const heroImg = document.getElementById('hero-graphic');
+            if (heroImg) {
+                heroImg.src = `assets/hero_graphics/hero_${randomIndex}.svg`;
+            }
+        });
+    </script>
 </body>
 </html>
