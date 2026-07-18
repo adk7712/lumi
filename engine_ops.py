@@ -97,8 +97,17 @@ def _handle_fill_null(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
             if col not in numeric_cols:
                 return df, [f"Error: {val.upper()} imputation requires a numeric column. '{col}' is {df[col].dtype}."]
             
-            df_numeric = df[numeric_cols].copy()
-            df_imputed = pd.DataFrame(imputer.fit_transform(df_numeric), columns=numeric_cols, index=df.index)
+            # Select target column and up to 10 other numeric columns (sorted by correlation) to avoid performance bottlenecks
+            other_numeric = [c for c in numeric_cols if c != col]
+            if len(other_numeric) > 10:
+                corrs = df[numeric_cols].corrwith(df[col]).abs().fillna(0)
+                sorted_others = sorted(other_numeric, key=lambda x: corrs.get(x, 0), reverse=True)
+                selected_cols = [col] + sorted_others[:10]
+            else:
+                selected_cols = numeric_cols
+            
+            df_numeric = df[selected_cols].copy()
+            df_imputed = pd.DataFrame(imputer.fit_transform(df_numeric), columns=selected_cols, index=df.index)
             df[col] = df_imputed[col]
             return df, []
         except Exception as e:
@@ -184,8 +193,9 @@ def _handle_strip_whitespace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.D
 def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     col = step.get('column')
     method = step.get('value', 'lowercase')
+    messages = []
     
-    def normalize_series(s, orig_dtype):
+    def normalize_series(s, orig_dtype, col_name):
         if method == "lowercase": res = s.astype(str).str.lower()
         elif method == "uppercase": res = s.astype(str).str.upper()
         elif method == "titlecase": res = s.astype(str).str.title()
@@ -193,8 +203,11 @@ def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Dat
             import string
             res = s.astype(str).str.replace(f'[{string.punctuation}]', '', regex=True)
         elif method == "fuzzy_dedupe":
-            from thefuzz import process
             unique_vals = s.dropna().unique()
+            if len(unique_vals) > 1000:
+                messages.append(f"Fuzzy deduplication skipped on '{col_name}' because it has too many unique values ({len(unique_vals)} > 1000) to prevent performance hangs.")
+                return s
+            from thefuzz import process
             mapping = {}
             handled = set()
             for v in unique_vals:
@@ -211,11 +224,11 @@ def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Dat
 
     if col == "All":
         for c in df.select_dtypes(include=['object', 'string']).columns:
-            df[c] = normalize_series(df[c], df[c].dtype)
-        return df, []
+            df[c] = normalize_series(df[c], df[c].dtype, c)
+        return df, messages
     elif col in df.columns:
-        df[col] = normalize_series(df[col], df[col].dtype)
-        return df, []
+        df[col] = normalize_series(df[col], df[col].dtype, col)
+        return df, messages
     return df, [f"Warning: Column '{col}' not found for normalize_text action."]
 
 def _handle_log_transform(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:

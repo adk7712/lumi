@@ -5,7 +5,7 @@ def generate_evidence_report(
     df: pd.DataFrame, 
     rules: list, 
     cleaning_recipe: list = None, 
-    intermediate_states: list = None
+    original_df: pd.DataFrame = None
 ) -> str:
     """
     Generates a Markdown evidence report summarizing active rule evaluations,
@@ -21,8 +21,8 @@ def generate_evidence_report(
     metrics_block = []
     has_metrics = False
     try:
-        if intermediate_states and len(intermediate_states) > 0:
-            orig_df = intermediate_states[0][3]
+        if original_df is not None:
+            orig_df = original_df
             orig_rows, orig_cols = orig_df.shape
             orig_nulls = orig_df.isnull().sum().sum()
             orig_size = orig_df.size
@@ -42,7 +42,7 @@ def generate_evidence_report(
             metrics_block.append("\n")
             has_metrics = True
     except Exception:
-        # Gracefully degrade if intermediate_states are not mockable or not present
+        # Gracefully degrade if original_df is not available or not valid
         pass
 
     # 2. Gather Data Lineage / Audit Log

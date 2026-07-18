@@ -124,13 +124,13 @@ def test_rule_utils_coverage_gaps():
     with mock.patch('streamlit.runtime.exists', return_value=True), \
          mock.patch.dict('streamlit.session_state', {
              'cleaning_recipe': mock_recipe,
-             'intermediate_states': [("Baseline", 100, 10, df_report)]
+             'intermediate_states': [("Baseline", 100, 10)]
          }):
         report_lineage = generate_evidence_report(
             df_report, 
             [], 
             cleaning_recipe=mock_recipe, 
-            intermediate_states=[("Baseline", 100, 10, df_report)]
+            original_df=df_report
         )
         assert "Dropped column `col1`" in report_lineage
         assert "Renamed column `col2` to `col2_new`" in report_lineage

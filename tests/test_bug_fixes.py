@@ -23,29 +23,30 @@ def test_scout_string_dtype():
     print("Scout string dtype test passed.")
 
 def test_intermediate_states_simulation():
-    # Simulate intermediate states list as maintained in app.py
+    # Simulate intermediate states list as maintained in state_manager.py
     df_raw = pd.DataFrame({
         'name': ['  Alice  ', 'Bob'],
         'age': [25, 30]
     })
     
-    # Setup initial state
+    # Setup initial state (3-tuple: desc, health, row_count — no dataframe)
     intermediate_states = []
     bh = 100
-    intermediate_states.append(("Original Data", bh, len(df_raw), df_raw.copy()))
+    intermediate_states.append(("Original Data", bh, len(df_raw)))
+    current_df = df_raw.copy()
     
     # Apply a step
     step1 = {'action': 'strip_whitespace', 'column': 'name'}
-    last_df = intermediate_states[-1][3]
-    new_df, messages = apply_recipe(last_df, [step1])
+    new_df, messages = apply_recipe(current_df, [step1])
     
-    # Append new state
-    intermediate_states.append(("strip_whitespace on name", bh, len(new_df), new_df))
+    # Append new state metadata only
+    intermediate_states.append(("strip_whitespace on name", bh, len(new_df)))
+    current_df = new_df
     
-    # Retrieve the latest dataframe like df = st.session_state.intermediate_states[-1][3]
-    current_df = intermediate_states[-1][3]
-    
-    assert all(current_df['name'] == ['Alice', 'Bob']), "Cached dataframe should have whitespace stripped"
+    # Verify current_df holds the latest state
+    assert all(current_df['name'] == ['Alice', 'Bob']), "current_df should have whitespace stripped"
+    # Verify intermediate_states only has metadata (3-tuple)
+    assert len(intermediate_states[-1]) == 3, "intermediate_states should store 3-tuples (no dataframe)"
     print("Intermediate states simulation test passed.")
 
 def test_diagnostics_histogram_grouping():
@@ -366,9 +367,10 @@ def test_evidence_report_generation():
     # Mock Streamlit session state and runtime
     with mock.patch("streamlit.runtime.exists", return_value=True):
         st.session_state.intermediate_states = [
-            ("Original Data", 80, len(df), df.copy()),
-            ("Final Cleaned", 100, len(df), df.copy())
+            ("Original Data", 80, len(df)),
+            ("Final Cleaned", 100, len(df))
         ]
+        st.session_state.current_df = df.copy()
         st.session_state.cleaning_recipe = [
             {"action": "drop_column", "column": "redundant"},
             {"action": "rename_column", "column": "old", "value": "new"}
@@ -378,7 +380,7 @@ def test_evidence_report_generation():
             df, 
             rules,
             cleaning_recipe=st.session_state.cleaning_recipe,
-            intermediate_states=st.session_state.intermediate_states
+            original_df=df.copy()
         )
         
     assert report_md is not None

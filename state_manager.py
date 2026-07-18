@@ -2,12 +2,27 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import json
+import hashlib
 from engine import apply_recipe
 from scout import generate_proposals
 
 # Define constants
 MAX_SAMPLE_ROWS = 10000
 LARGE_FILE_THRESHOLD_BYTES = 50 * 1024 * 1024 # 50MB
+
+
+def downcast_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+    """Downcasts float and integer columns to more memory-efficient types."""
+    if df.empty:
+        return df
+    df = df.copy()
+    for col in df.columns:
+        if pd.api.types.is_float_dtype(df[col]):
+            df[col] = pd.to_numeric(df[col], downcast='float')
+        elif pd.api.types.is_integer_dtype(df[col]):
+            df[col] = pd.to_numeric(df[col], downcast='integer')
+    return df
 
 
 @st.cache_data
@@ -18,20 +33,26 @@ def load_data(file_path_or_buffer, nrows=None):
         if hasattr(file_path_or_buffer, 'type'):
             file_type = file_path_or_buffer.type
             if file_type == "text/csv":
-                return pd.read_csv(file_path_or_buffer, nrows=nrows)
+                df = pd.read_csv(file_path_or_buffer, nrows=nrows)
             elif file_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-                return pd.read_excel(file_path_or_buffer, nrows=nrows)
+                df = pd.read_excel(file_path_or_buffer, nrows=nrows)
+            else:
+                df = pd.DataFrame()
         # For local file paths
         elif isinstance(file_path_or_buffer, str):
             suffix = Path(file_path_or_buffer).suffix.lower()
             if suffix == '.csv':
-                return pd.read_csv(file_path_or_buffer, nrows=nrows)
+                df = pd.read_csv(file_path_or_buffer, nrows=nrows)
             elif suffix == '.xlsx':
-                return pd.read_excel(file_path_or_buffer, nrows=nrows)
+                df = pd.read_excel(file_path_or_buffer, nrows=nrows)
+            else:
+                df = pd.DataFrame()
+        else:
+            # Fallback for buffers without a clear type
+            st.warning("Could not determine file type, attempting to read as CSV. May fail for other formats.")
+            df = pd.read_csv(file_path_or_buffer, nrows=nrows)
 
-        # Fallback for buffers without a clear type
-        st.warning("Could not determine file type, attempting to read as CSV. May fail for other formats.")
-        return pd.read_csv(file_path_or_buffer, nrows=nrows)
+        return downcast_dtypes(df)
 
     except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         st.error(f"Error loading data: {type(e).__name__} - {e}. Please check the file format and content.")
@@ -54,6 +75,7 @@ def add_rule(rule_dict: dict, at_end: bool = False):
         st.session_state.rules.append(rule)
     else:
         st.session_state.rules.insert(0, rule)
+    save_session_state()
 
 def calculate_health(df: pd.DataFrame) -> int:
     """Calculates overall dataset health percentage: (1 - proportion of null cells) * 100"""
@@ -69,6 +91,7 @@ def initialize_state(from_reset=False):
         st.session_state.raw_data = None
         st.session_state.original_full_data = None
         st.session_state.intermediate_states = []
+        st.session_state.current_df = None
         st.session_state.proposals = []
         st.session_state.scanned_columns = set()
 
@@ -82,6 +105,7 @@ def initialize_state(from_reset=False):
         'rules': [],
         'cleaning_recipe': [],
         'intermediate_states': st.session_state.intermediate_states,
+        'current_df': st.session_state.current_df,
         'proposals': st.session_state.proposals,
         'scanned_columns': st.session_state.scanned_columns,
         'last_file_hash': None,
@@ -126,17 +150,28 @@ def add_step(step):
     """Adds a cleaning step to the recipe, updates the cached state, and shows a toast."""
     st.session_state.cleaning_recipe.append(step)
 
-    # Calculate delta state and cache it
-    last_df = st.session_state.intermediate_states[-1][3]
-    new_df, messages = apply_recipe(last_df, [step])
+    # Calculate delta state from current_df and cache metadata only (no full df copy)
+    new_df, messages = apply_recipe(st.session_state.current_df, [step])
     for msg in messages:
         st.toast(msg)
 
     th = calculate_health(new_df)
     step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
-    st.session_state.intermediate_states.append((step_desc, th, len(new_df), new_df))
+    st.session_state.intermediate_states.append((step_desc, th, len(new_df)))
+    st.session_state.current_df = new_df
 
     st.toast(f"Step Added: {step['action']}")
+    save_session_state()
+
+
+def get_state_at_step(n: int) -> pd.DataFrame:
+    """Reconstructs the dataframe at step N by replaying the first N recipe steps from raw_data."""
+    original = st.session_state.raw_data
+    if n <= 0:
+        return original.copy()
+    recipe_so_far = st.session_state.cleaning_recipe[:n]
+    df, _ = apply_recipe(original.copy(), recipe_so_far)
+    return df
 
 
 def get_column_dependencies(target: str) -> list[str]:
@@ -168,3 +203,116 @@ def sync_column_rename(target: str, new_name: str):
     if target in st.session_state.active_features:
         idx = st.session_state.active_features.index(target)
         st.session_state.active_features[idx] = new_name
+
+
+CACHE_DIR = Path(".lumi_cache")
+
+def calculate_file_hash(file_buffer) -> str:
+    """Generates a unique hash for a file using its name, size, and first 8KB of content."""
+    hasher = hashlib.md5()
+    name = getattr(file_buffer, 'name', '')
+    size = getattr(file_buffer, 'size', 0)
+    hasher.update(name.encode('utf-8'))
+    hasher.update(str(size).encode('utf-8'))
+    
+    try:
+        pos = file_buffer.tell()
+        file_buffer.seek(0)
+        chunk = file_buffer.read(8192)
+        if isinstance(chunk, str):
+            hasher.update(chunk.encode('utf-8'))
+        else:
+            hasher.update(chunk)
+        file_buffer.seek(pos)
+    except Exception:
+        pass
+        
+    return hasher.hexdigest()
+
+def save_session_state():
+    """Saves the current recipe and rules to the local cache directory."""
+    file_hash = st.session_state.get('last_file_hash')
+    if not file_hash:
+        return
+        
+    try:
+        CACHE_DIR.mkdir(exist_ok=True)
+        cache_path = CACHE_DIR / f"{file_hash}.json"
+        
+        # Serialize scanned_columns as list
+        scanned_cols = list(st.session_state.get('scanned_columns', set()))
+        
+        data = {
+            'cleaning_recipe': st.session_state.get('cleaning_recipe', []),
+            'rules': st.session_state.get('rules', []),
+            'scanned_columns': scanned_cols
+        }
+        
+        with open(cache_path, 'w') as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+def process_uploaded_file(file_buffer, file_hash: str):
+    """Processes a newly uploaded file and initializes the session state."""
+    is_large = file_buffer.size > LARGE_FILE_THRESHOLD_BYTES
+    if is_large:
+        st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.")
+    raw_df = load_data(file_buffer, nrows=MAX_SAMPLE_ROWS if is_large else None)
+    st.session_state.original_full_data = raw_df
+    if not is_large and len(raw_df) > MAX_SAMPLE_ROWS:
+        st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
+    else:
+        st.session_state.raw_data = raw_df
+
+    st.session_state.last_file_hash = file_hash
+    st.session_state.active_features = []
+    st.session_state.scanned_columns = set()
+    st.session_state.cleaning_recipe = []
+    st.session_state.rules = []
+
+    base_df = st.session_state.raw_data
+    bh = calculate_health(base_df)
+    st.session_state.intermediate_states = [("Original Data", bh, len(base_df))]
+    st.session_state.current_df = base_df.copy()
+    st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+    st.toast("Dataset Analyzed")
+
+def load_session_state(file_hash: str, file_buffer):
+    """Loads and restores the cleaning recipe and rules from the local cache."""
+    process_uploaded_file(file_buffer, file_hash)
+    
+    cache_path = CACHE_DIR / f"{file_hash}.json"
+    if not cache_path.exists():
+        return
+        
+    try:
+        with open(cache_path, 'r') as f:
+            data = json.load(f)
+            
+        st.session_state.cleaning_recipe = data.get('cleaning_recipe', [])
+        st.session_state.rules = data.get('rules', [])
+        st.session_state.scanned_columns = set(data.get('scanned_columns', []))
+        
+        # Apply the full recipe to restore intermediate states and current_df
+        recipe = st.session_state.cleaning_recipe
+        st.session_state.current_df, _ = apply_recipe(st.session_state.raw_data.copy(), recipe)
+        
+        # Re-build intermediate_states metadata list
+        intermediate_states = [st.session_state.intermediate_states[0]]
+        temp_df = st.session_state.raw_data.copy()
+        
+        for step in recipe:
+            temp_df, _ = apply_recipe(temp_df, [step])
+            th = calculate_health(temp_df)
+            step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
+            intermediate_states.append((step_desc, th, len(temp_df)))
+            
+        st.session_state.intermediate_states = intermediate_states
+        
+        # Re-generate proposals based on scanned columns
+        st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+        
+        st.toast("Session Restored successfully")
+    except Exception as e:
+        st.error(f"Error restoring session: {str(e)}")

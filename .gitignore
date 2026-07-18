@@ -23,3 +23,6 @@ image*.png
 # Keep git history clean of auxiliary markdown notes/docs
 *.md
 !README.md
+
+# Session Cache
+.lumi_cache/
