@@ -9,22 +9,30 @@
 .stDeployButton,
 .stAppDeployButton,
 [data-testid="stAppDeployButton"],
-header button,
-.stMarkdown a {
+footer,
+.viewerBadge,
+[data-testid="viewerBadge"] {
     display: none !important;
 }
 
-/* Ensure only the sidebar toggle chevron inside header remains visible and header is transparent */
+/* Ensure header is transparent and behind main content — never intercepts clicks */
 header,
-[data-testid="stHeader"] {
+[data-testid="stHeader"],
+.stAppHeader {
     background: transparent !important;
     background-color: transparent !important;
     box-shadow: none !important;
     border: none !important;
+    pointer-events: none !important;
+    z-index: 0 !important;
 }
 
-header [data-testid="collapsedControl"] button {
-    display: inline-flex !important;
+/* Hide sidebar and its toggle — no sidebar used in this app */
+[data-testid="stSidebar"],
+[data-testid="collapsedControl"],
+header [data-testid="collapsedControl"],
+.stAppHeader [data-testid="collapsedControl"] {
+    display: none !important;
 }
 
 /* Tight top padding for maximum viewport size */
@@ -774,15 +782,24 @@ div.stMarkdown:has(.lumi-logo-button) {
     padding: 0;
 }
 
-/* Clickable Header Logo Link */
-div.element-container:has(.lumi-logo-button) + div.element-container [data-testid="stButton"],
-div.element-container:has(.lumi-logo-button) + div.element-container button,
-div.element-container:has(.lumi-logo-button) + div.element-container button p,
-div.element-container:has(.lumi-logo-button) + div.element-container button span {
+/* ---- LUMI logo button — scoped via st-key- class (most reliable targeting) ---- */
+/* Shrink the stButton wrapper to match text size exactly */
+.st-key-lumi_logo {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    width: fit-content !important;
+    display: inline-block !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Style the actual <button> element */
+.st-key-lumi_logo button {
     background: transparent !important;
     background-color: transparent !important;
     border: none !important;
-    border-color: transparent !important;
     outline: none !important;
     box-shadow: none !important;
     color: #FFFFFF !important;
@@ -791,26 +808,38 @@ div.element-container:has(.lumi-logo-button) + div.element-container button span
     padding: 0 !important;
     margin: 0 !important;
     height: auto !important;
+    min-height: unset !important;
     line-height: 1.2 !important;
     cursor: pointer !important;
     font-family: inherit !important;
     text-align: left !important;
     justify-content: flex-start !important;
     transition: color 0.2s ease !important;
+    /* Ensure it is fully above any overlay */
+    position: relative !important;
+    z-index: 9999 !important;
 }
-div.element-container:has(.lumi-logo-button) + div.element-container button:hover,
-div.element-container:has(.lumi-logo-button) + div.element-container button:hover p,
-div.element-container:has(.lumi-logo-button) + div.element-container button:hover span {
+
+.st-key-lumi_logo button p,
+.st-key-lumi_logo button span {
+    color: #FFFFFF !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+}
+
+.st-key-lumi_logo button:hover,
+.st-key-lumi_logo button:hover p,
+.st-key-lumi_logo button:hover span {
     color: #ff4b4b !important;
     background: transparent !important;
-    background-color: transparent !important;
 }
-div.element-container:has(.lumi-logo-button) + div.element-container button:active,
-div.element-container:has(.lumi-logo-button) + div.element-container button:active p,
-div.element-container:has(.lumi-logo-button) + div.element-container button:focus,
-div.element-container:has(.lumi-logo-button) + div.element-container button:focus p {
+
+.st-key-lumi_logo button:active,
+.st-key-lumi_logo button:active p,
+.st-key-lumi_logo button:focus,
+.st-key-lumi_logo button:focus p {
     background: transparent !important;
-    background-color: transparent !important;
     color: #ff4b4b !important;
     box-shadow: none !important;
 }

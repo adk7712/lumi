@@ -42,64 +42,30 @@ inject_posthog(st)
 # Initialize Session State
 initialize_state()
 
-# --- SIDEBAR AUTH & RECENT PROJECTS ---
-with st.sidebar:
-    st.markdown('<h2 style="font-weight: 700; font-size: 1.5rem; color: #ffffff;">Lumi Workspace</h2>', unsafe_allow_html=True)
-    st.write("---")
-    
-    # Optional login via OIDC
-    user_email = get_logged_in_user()
-        
-    if user_email:
-        st.markdown(f"Signed in as:<br/><strong>{user_email}</strong>", unsafe_allow_html=True)
-        if st.button("Sign Out", key="auth_signout_btn", use_container_width=True):
-            handle_signout()
-            
-        # Task 2: Reconciliation flow - if there was an active anonymous session
-        session_id = st.session_state.get("session_id")
-        if session_id:
-            from persistence import load_session, reconcile_session
-            db_session = load_session(session_id)
-            if db_session and db_session.get("user_id") != user_email:
-                reconcile_session(session_id, user_email)
-                st.toast("Workspace saved to your account!")
-                
-        # List recent projects
-        st.write("---")
-        st.markdown('<h3 style="font-weight: 600; font-size: 1.1rem; color: #ffffff;">Recent Projects</h3>', unsafe_allow_html=True)
-        from persistence import get_user_projects
-        projects = get_user_projects(user_email)
-        if projects:
-            for proj in projects:
-                p_name = proj["project_name"] or f"Project ({proj['session_id'][:8]})"
-                if st.button(p_name, key=f"side_proj_{proj['session_id']}", use_container_width=True):
-                    st.query_params["session"] = proj["session_id"]
-                    # Reset data to force the landing page to load the selected project
-                    st.session_state.raw_data = None
-                    st.session_state.session_id = proj["session_id"]
-                    st.rerun()
-        else:
-            st.caption("No saved projects yet.")
-    else:
-        st.markdown('<p style="color: #a3a3a3; font-size: 0.9rem;">Sign in to sync your cleaning projects across devices.</p>', unsafe_allow_html=True)
-        if st.button("Sign In", key="auth_signin_btn", use_container_width=True):
-            if is_auth_configured():
-                try:
-                    st.login()
-                    st.rerun()
-                except Exception:
-                    show_auth_dialog()
-            else:
-                show_auth_dialog()
 
-# Welcome view if no data is loaded yet
+# Resolve current user (used in header sign-out button)
+user_email = get_logged_in_user()
+
+# Reconciliation flow for signed-in users
+if user_email:
+    session_id = st.session_state.get("session_id")
+    if session_id:
+        from persistence import load_session, reconcile_session
+        db_session = load_session(session_id)
+        if db_session and db_session.get("user_id") != user_email:
+            reconcile_session(session_id, user_email)
+            st.toast("Workspace saved to your account!")
+
+# Landing page (no dataset loaded yet)
 if st.session_state.raw_data is None:
     render_landing_page()
     render_footer()
     st.stop()
 
+
+
 # --- HEADER (only shown after a dataset is loaded) ---
-h_col1, h_col2, h_col3 = st.columns([7, 3, 2], vertical_alignment="bottom")
+h_col1, h_col2, h_col3 = st.columns([7, 3, 2])
 with h_col1:
     st.markdown('<div class="lumi-logo-button">', unsafe_allow_html=True)
     if st.button("LUMI", key="lumi_logo"):
