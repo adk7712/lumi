@@ -143,6 +143,8 @@ def test_plot_data_downsampling():
 
 def test_plotly_layout_consolidation():
     from ui_utils import plot_correlation_matrix
+    import streamlit as st
+    st.cache_data.clear()
     df = pd.DataFrame({'A': [1, 2, 3], 'B': [2, 4, 6]})
     fig = plot_correlation_matrix(df, (-1.0, 1.0))
     assert fig is not None

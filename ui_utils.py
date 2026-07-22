@@ -113,8 +113,8 @@ def apply_lumi_layout(fig: go.Figure) -> go.Figure:
     )
     return fig
 
-@st.cache_data
-def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple, df_state_key: str = "default") -> go.Figure:
     """Computes features' correlation matrix and plots a filtered heatmap."""
     numeric_df = df.select_dtypes(include=[np.number])
     if len(numeric_df.columns) > 1:
@@ -136,8 +136,8 @@ def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
             return apply_lumi_layout(fig)
     return None
 
-@st.cache_data
-def plot_missingness_map(df: pd.DataFrame) -> tuple:
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+def plot_missingness_map(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Generates a binary missingness pattern map representation."""
     if df.size > 0:
         null_mask = df.isnull().astype(int)
@@ -187,8 +187,8 @@ def get_loading_spinner_html(text: str = "Apply Column Order") -> str:
     </div>
     """
 
-@st.cache_data
-def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+def plot_outlier_distribution(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Computes column Z-scores and plots comparative outlier box plots."""
     numeric_df = df.select_dtypes(include=[np.number])
     if len(numeric_df.columns) > 0:

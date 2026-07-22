@@ -26,3 +26,7 @@ image*.png
 
 # Session Cache
 .lumi_cache/
+
+# SQLite Databases
+*.db
+lumi.db

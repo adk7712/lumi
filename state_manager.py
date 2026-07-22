@@ -76,6 +76,7 @@ def add_rule(rule_dict: dict, at_end: bool = False):
     else:
         st.session_state.rules.insert(0, rule)
     save_session_state()
+    save_db_session()
 
 def calculate_health(df: pd.DataFrame) -> int:
     """Calculates overall dataset health percentage: (1 - proportion of null cells) * 100"""
@@ -109,6 +110,8 @@ def initialize_state(from_reset=False):
         'proposals': st.session_state.proposals,
         'scanned_columns': st.session_state.scanned_columns,
         'last_file_hash': None,
+        'session_id': None,
+        'filename': None,
         'raw_data': st.session_state.raw_data,
         'original_full_data': st.session_state.original_full_data,
 
@@ -162,6 +165,7 @@ def add_step(step):
 
     st.toast(f"Step Added: {step['action']}")
     save_session_state()
+    save_db_session()
 
 
 def get_state_at_step(n: int) -> pd.DataFrame:
@@ -266,6 +270,17 @@ def process_uploaded_file(file_buffer, file_hash: str):
         st.session_state.raw_data = raw_df
 
     st.session_state.last_file_hash = file_hash
+    st.session_state.filename = file_buffer.name
+    
+    # Generate session_id if not present
+    session_id = st.query_params.get("session")
+    if not session_id:
+        import uuid
+        session_id = str(uuid.uuid4())
+        st.query_params["session"] = session_id
+        
+    st.session_state.session_id = session_id
+
     st.session_state.active_features = []
     st.session_state.scanned_columns = set()
     st.session_state.cleaning_recipe = []
@@ -276,6 +291,8 @@ def process_uploaded_file(file_buffer, file_hash: str):
     st.session_state.intermediate_states = [("Original Data", bh, len(base_df))]
     st.session_state.current_df = base_df.copy()
     st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+    
+    save_db_session()
     st.toast("Dataset Analyzed")
 
 def load_session_state(file_hash: str, file_buffer):
@@ -316,3 +333,70 @@ def load_session_state(file_hash: str, file_buffer):
         st.toast("Session Restored successfully")
     except Exception as e:
         st.error(f"Error restoring session: {str(e)}")
+
+def save_db_session():
+    """Saves the current session state to the SQLite database."""
+    session_id = st.session_state.get("session_id")
+    if not session_id:
+        return
+        
+    user_id = None
+    try:
+        if st.experimental_user and st.experimental_user.get("email"):
+            user_id = st.experimental_user.get("email")
+    except Exception:
+        pass
+        
+    filename = st.session_state.get("filename", "untitled.csv")
+    recipe = st.session_state.get("cleaning_recipe", [])
+    rules = st.session_state.get("rules", [])
+    scanned_columns = st.session_state.get("scanned_columns", set())
+    
+    from persistence import save_session
+    save_session(
+        session_id=session_id,
+        filename=filename,
+        recipe=recipe,
+        rules=rules,
+        scanned_columns=scanned_columns,
+        user_id=user_id
+    )
+
+def load_db_session(session_id: str, file_buffer) -> bool:
+    """Loads and restores the cleaning recipe and rules from the SQLite database."""
+    from persistence import load_session
+    db_session = load_session(session_id)
+    if not db_session:
+        return False
+        
+    # Process the file buffer to load data, using the retrieved session_id
+    process_uploaded_file(file_buffer, session_id)
+    
+    # Restore metadata from DB
+    st.session_state.cleaning_recipe = db_session.get('cleaning_recipe', [])
+    st.session_state.rules = db_session.get('rules', [])
+    st.session_state.scanned_columns = db_session.get('scanned_columns', set())
+    st.session_state.session_id = session_id
+    st.session_state.filename = db_session.get('filename', file_buffer.name)
+    
+    # Apply the full recipe to restore intermediate states and current_df
+    recipe = st.session_state.cleaning_recipe
+    st.session_state.current_df, _ = apply_recipe(st.session_state.raw_data.copy(), recipe)
+    
+    # Re-build intermediate_states metadata list
+    intermediate_states = [st.session_state.intermediate_states[0]]
+    temp_df = st.session_state.raw_data.copy()
+    
+    for step in recipe:
+        temp_df, _ = apply_recipe(temp_df, [step])
+        th = calculate_health(temp_df)
+        step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
+        intermediate_states.append((step_desc, th, len(temp_df)))
+        
+    st.session_state.intermediate_states = intermediate_states
+    
+    # Re-generate proposals based on scanned columns
+    st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+    
+    st.toast("Session Restored successfully")
+    return True

@@ -6,6 +6,7 @@ from state_manager import (
     calculate_file_hash,
     process_uploaded_file,
     load_session_state,
+    load_db_session,
     LARGE_FILE_THRESHOLD_BYTES
 )
 
@@ -13,7 +14,59 @@ def render_landing_page():
     # Render clean background grid and orbs
     st.html('<div class="welcome-bg welcome-grid-bg"><div class="welcome-orb welcome-orb-1"></div><div class="welcome-orb welcome-orb-2"></div><div class="welcome-orb welcome-orb-3"></div></div>')
 
-    # If there is a pending restore dialog
+    # Task 1: Check query parameters for an existing session recovery
+    session_id = st.query_params.get("session")
+    if session_id:
+        from persistence import load_session
+        db_session = load_session(session_id)
+        if db_session:
+            filename = db_session.get("filename", "dataset")
+            project_name = db_session.get("project_name", "Untitled Project")
+            
+            st.markdown(
+                f'<div style="text-align: center; margin-top: 6rem; margin-bottom: 2.5rem; position: relative; z-index: 1;">'
+                f'<h1 style="font-weight: 800; font-size: 2.8rem; letter-spacing: 0.05em; color: #ffffff; margin-bottom: 0.5rem;">RESUME WORKSPACE</h1>'
+                f'<p style="color: #a3a3a3; font-size: 1.05rem;">Project: <strong>{project_name}</strong></p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            
+            cta_spacer_l, cta_col, cta_spacer_r = st.columns([1, 2, 1])
+            with cta_col:
+                st.markdown(
+                    f'<div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 1.5rem; text-align: center; margin-bottom: 1.5rem;">'
+                    f'<p style="color: #e5e5e5; font-size: 0.95rem; margin-bottom: 0.5rem;">Lumi found a saved session. Please re-upload the original file to resume:</p>'
+                    f'<strong style="color: #ff4b4b; font-size: 1.1rem;">{filename}</strong>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                
+                resume_uploader = st.file_uploader(
+                    "Drop the file here or browse",
+                    type=["csv", "xlsx"],
+                    key="resume_uploader"
+                )
+                
+                if resume_uploader:
+                    success = load_db_session(session_id, resume_uploader)
+                    if success:
+                        st.rerun()
+                    else:
+                        st.error("Failed to restore session. Please make sure you uploaded the correct file.")
+                        
+                st.write("")
+                if st.button("Start a new project instead", key="btn_cancel_resume", use_container_width=True):
+                    st.query_params.pop("session", None)
+                    st.session_state.session_id = None
+                    st.rerun()
+            st.stop()
+        else:
+            # Clear invalid session parameter to avoid locking the user
+            st.query_params.pop("session", None)
+            st.session_state.session_id = None
+            st.rerun()
+
+    # If there is a pending local cache restore dialog
     if st.session_state.get("pending_restore_hash"):
         st.markdown(
             '<div style="text-align: center; margin-top: 6rem; margin-bottom: 2.5rem; position: relative; z-index: 1;">'
@@ -83,9 +136,7 @@ def render_landing_page():
             process_uploaded_file(welcome_uploader, file_hash)
             st.rerun()
 
-    # st.iframe runs inside a real sandboxed iframe and can access the parent
-    # page's DOM via window.parent.document (same-origin). We encode the JS as
-    # a data: URI since st.iframe only accepts URLs, not raw HTML.
+    # st.iframe Dropzone mutation observer patch
     _js = """
     <script>
     (function() {

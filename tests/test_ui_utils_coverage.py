@@ -31,6 +31,8 @@ def test_plot_missingness_map():
         'a': [1, np.nan, 3],
         'b': [np.nan, 2, 3]
     })
+    import streamlit as st
+    st.cache_data.clear()
     fig, is_sampled = plot_missingness_map(df_nulls)
     assert isinstance(fig, go.Figure)
     assert len(fig.data) > 0
@@ -38,6 +40,7 @@ def test_plot_missingness_map():
     
     # 2. DataFrame with zero nulls
     df_clean = pd.DataFrame({'a': [1, 2, 3]})
+    st.cache_data.clear()
     fig_clean, is_sampled_clean = plot_missingness_map(df_clean)
     assert fig_clean is None
     assert not is_sampled_clean
@@ -47,12 +50,14 @@ def test_plot_missingness_map():
         'a': [np.nan] * 1200,
         'b': [1.0] * 1200
     })
+    st.cache_data.clear()
     fig_large, is_sampled_large = plot_missingness_map(df_large)
     assert isinstance(fig_large, go.Figure)
     assert is_sampled_large
     
     # 4. Single column DataFrame with nulls
     df_single = pd.DataFrame({'a': [1, np.nan]})
+    st.cache_data.clear()
     fig_single, is_sampled_single = plot_missingness_map(df_single)
     assert isinstance(fig_single, go.Figure)
     
@@ -65,6 +70,8 @@ def test_plot_outlier_distribution():
         'a': [1, 2, 3, 4, 100],
         'b': [10, 20, 30, 40, 50]
     })
+    import streamlit as st
+    st.cache_data.clear()
     fig, is_sampled = plot_outlier_distribution(df_num)
     assert isinstance(fig, go.Figure)
     assert len(fig.data) > 0
@@ -72,6 +79,7 @@ def test_plot_outlier_distribution():
     
     # 2. DataFrame with no numeric columns
     df_str = pd.DataFrame({'a': ['x', 'y', 'z']})
+    st.cache_data.clear()
     fig_str, is_sampled_str = plot_outlier_distribution(df_str)
     assert fig_str is None
     assert not is_sampled_str
@@ -81,6 +89,7 @@ def test_plot_outlier_distribution():
         'a': [5.0, 5.0, 5.0, 5.0],
         'b': [1, 2, 3, 4]
     })
+    st.cache_data.clear()
     fig_zero_std, is_sampled_zero = plot_outlier_distribution(df_zero_std)
     assert isinstance(fig_zero_std, go.Figure)
     
@@ -89,6 +98,7 @@ def test_plot_outlier_distribution():
         'a': np.random.randn(1200),
         'b': np.random.randn(1200)
     })
+    st.cache_data.clear()
     fig_large, is_sampled_large = plot_outlier_distribution(df_large)
     assert isinstance(fig_large, go.Figure)
     assert is_sampled_large
@@ -102,6 +112,8 @@ def test_plot_correlation_matrix():
         'a': [1, 2, 3],
         'b': ['x', 'y', 'z']
     })
+    import streamlit as st
+    st.cache_data.clear()
     fig_one = plot_correlation_matrix(df_one, (-1.0, 1.0))
     assert fig_one is None
     
@@ -112,6 +124,7 @@ def test_plot_correlation_matrix():
         'b': [5, 1, 4, 2, 3]
     })
     # Filter for high correlation only (e.g. 0.95 to 1.0), which 'a' and 'b' won't meet
+    st.cache_data.clear()
     fig_filter = plot_correlation_matrix(df_uncorrelated, (0.95, 1.0))
     assert fig_filter is None
     
@@ -120,6 +133,7 @@ def test_plot_correlation_matrix():
         'a': [1.0, 2.0, 3.0, 4.0, 5.0],
         'b': [2.0, 4.0, 6.0, 8.0, 10.0]
     })
+    st.cache_data.clear()
     fig = plot_correlation_matrix(df_corr, (-1.0, 1.0))
     assert isinstance(fig, go.Figure)
     assert len(fig.data) > 0
