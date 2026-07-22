@@ -14,15 +14,22 @@ header button,
     display: none !important;
 }
 
-/* Ensure only the sidebar toggle chevron inside header remains visible */
+/* Ensure only the sidebar toggle chevron inside header remains visible and header is transparent */
+header,
+[data-testid="stHeader"] {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
 header [data-testid="collapsedControl"] button {
     display: inline-flex !important;
 }
 
-
-/* Push content up to the very top */
+/* Tight top padding for maximum viewport size */
 .block-container {
-    padding-top: 0rem;
+    padding-top: 0.5rem !important;
     padding-bottom: 1rem;
 }
 
