@@ -9,7 +9,7 @@ from state_manager import (
     load_db_session,
     LARGE_FILE_THRESHOLD_BYTES
 )
-from ui_utils import is_auth_configured
+from ui_utils import is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog
 
 def render_landing_page():
     # Render clean background grid and orbs
@@ -219,25 +219,21 @@ def render_landing_page():
 
     c_login_l, c_login, c_login_r = st.columns([1.5, 1, 1.5])
     with c_login:
-        user_email = None
-        try:
-            if st.experimental_user and st.experimental_user.get("email"):
-                user_email = st.experimental_user.get("email")
-        except Exception:
-            pass
-            
+        user_email = get_logged_in_user()
         if user_email:
             st.markdown(f'<div style="text-align: center; margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 0.9rem; color: #a3a3a3;">Logged in as <strong>{user_email}</strong></div>', unsafe_allow_html=True)
             if st.button("Sign Out", key="landing_signout_btn", use_container_width=True):
-                st.logout()
-                st.rerun()
+                handle_signout()
         else:
             if st.button("Sign In to Sync Projects", key="landing_signin_btn", use_container_width=True):
-                try:
-                    st.login()
-                    st.rerun()
-                except Exception:
-                    st.warning("To use authentication, please configure an OIDC provider in `.streamlit/secrets.toml`.")
+                if is_auth_configured():
+                    try:
+                        st.login()
+                        st.rerun()
+                    except Exception:
+                        show_auth_dialog()
+                else:
+                    show_auth_dialog()
 
 
     if welcome_uploader:

@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from ui_utils import inject_custom_css, inject_posthog, is_auth_configured
+from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state
 from views import (
     render_overview_tab,
@@ -48,18 +48,12 @@ with st.sidebar:
     st.write("---")
     
     # Optional login via OIDC
-    user_email = None
-    try:
-        if st.experimental_user and st.experimental_user.get("email"):
-            user_email = st.experimental_user.get("email")
-    except Exception:
-        pass
+    user_email = get_logged_in_user()
         
     if user_email:
         st.markdown(f"Signed in as:<br/><strong>{user_email}</strong>", unsafe_allow_html=True)
         if st.button("Sign Out", key="auth_signout_btn", use_container_width=True):
-            st.logout()
-            st.rerun()
+            handle_signout()
             
         # Task 2: Reconciliation flow - if there was an active anonymous session
         session_id = st.session_state.get("session_id")
@@ -89,11 +83,14 @@ with st.sidebar:
     else:
         st.markdown('<p style="color: #a3a3a3; font-size: 0.9rem;">Sign in to sync your cleaning projects across devices.</p>', unsafe_allow_html=True)
         if st.button("Sign In", key="auth_signin_btn", use_container_width=True):
-            try:
-                st.login()
-                st.rerun()
-            except Exception:
-                st.warning("To use authentication, please configure an OIDC provider in `.streamlit/secrets.toml`.")
+            if is_auth_configured():
+                try:
+                    st.login()
+                    st.rerun()
+                except Exception:
+                    show_auth_dialog()
+            else:
+                show_auth_dialog()
 
 # Welcome view if no data is loaded yet
 if st.session_state.raw_data is None:
@@ -122,24 +119,21 @@ with h_col2:
         initialize_state(from_reset=True)
         st.rerun()
 with h_col3:
-    user_email = None
-    try:
-        if st.experimental_user and st.experimental_user.get("email"):
-            user_email = st.experimental_user.get("email")
-    except Exception:
-        pass
+    user_email = get_logged_in_user()
     if user_email:
         st.markdown(f'<div style="font-size: 0.75rem; color: #a3a3a3; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 2px;">{user_email}</div>', unsafe_allow_html=True)
         if st.button("Sign Out", key="header_signout_btn", use_container_width=True):
-            st.logout()
-            st.rerun()
+            handle_signout()
     else:
         if st.button("Sign In", key="header_signin_btn", use_container_width=True):
-            try:
-                st.login()
-                st.rerun()
-            except Exception:
-                st.warning("To use authentication, please configure an OIDC provider in `.streamlit/secrets.toml`.")
+            if is_auth_configured():
+                try:
+                    st.login()
+                    st.rerun()
+                except Exception:
+                    show_auth_dialog()
+            else:
+                show_auth_dialog()
 
 st.divider()
 
