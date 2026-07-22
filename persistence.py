@@ -21,6 +21,7 @@ def init_db():
                 session_id TEXT PRIMARY KEY,
                 filename TEXT,
                 cleaning_recipe TEXT,
+                step_count INTEGER,
                 rules TEXT,
                 scanned_columns TEXT,
                 user_id TEXT,
@@ -46,6 +47,7 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
         recipe_json = json.dumps(recipe)
         rules_json = json.dumps(rules)
         scanned_columns_json = json.dumps(list(scanned_columns))
+        step_count = len(recipe)
         
         # Check if session exists to preserve project_name/user_id/created_at
         cursor.execute("SELECT project_name, user_id FROM sessions WHERE session_id = ?", (session_id,))
@@ -68,17 +70,18 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
         now = datetime.now().isoformat()
         
         cursor.execute("""
-            INSERT INTO sessions (session_id, filename, cleaning_recipe, rules, scanned_columns, user_id, project_name, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, filename, cleaning_recipe, step_count, rules, scanned_columns, user_id, project_name, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
                 filename = excluded.filename,
                 cleaning_recipe = excluded.cleaning_recipe,
+                step_count = excluded.step_count,
                 rules = excluded.rules,
                 scanned_columns = excluded.scanned_columns,
                 user_id = COALESCE(excluded.user_id, sessions.user_id),
                 project_name = COALESCE(excluded.project_name, sessions.project_name),
                 updated_at = excluded.updated_at
-        """, (session_id, filename, recipe_json, rules_json, scanned_columns_json, final_user_id, final_project_name, now))
+        """, (session_id, filename, recipe_json, step_count, rules_json, scanned_columns_json, final_user_id, final_project_name, now))
         
         conn.commit()
     except Exception as e:
@@ -99,10 +102,12 @@ def load_session(session_id: str) -> dict:
                 "session_id": row["session_id"],
                 "filename": row["filename"],
                 "cleaning_recipe": json.loads(row["cleaning_recipe"]),
-                "rules": json.loads(row["rules"]),
-                "scanned_columns": set(json.loads(row["scanned_columns"])),
+                "step_count": row["step_count"],
+                "rules": json.loads(row["rules"]) if row["rules"] else [],
+                "scanned_columns": set(json.loads(row["scanned_columns"])) if row["scanned_columns"] else set(),
                 "user_id": row["user_id"],
-                "project_name": row["project_name"]
+                "project_name": row["project_name"],
+                "updated_at": row["updated_at"]
             }
         return None
     except Exception as e:
@@ -125,7 +130,8 @@ def get_user_projects(user_id: str) -> list:
                 "session_id": row["session_id"],
                 "filename": row["filename"],
                 "project_name": row["project_name"],
-                "updated_at": row["updated_at"]
+                "updated_at": row["updated_at"],
+                "step_count": row["step_count"]
             })
         return projects
     except Exception as e:

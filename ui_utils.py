@@ -12,6 +12,18 @@ DIAGNOSTIC_CHART_HEIGHT = 220
 MAX_CATEGORIES_DISPLAY = 10
 VIOLATION_PREVIEW_LIMIT = 100
 
+def is_auth_configured() -> bool:
+    """Check if streamlit OIDC auth credentials are set in secrets.toml."""
+    try:
+        if "auth" in st.secrets:
+            auth_sec = st.secrets["auth"]
+            for key in auth_sec.keys():
+                if key in ["google", "microsoft"] or isinstance(auth_sec[key], dict):
+                    return True
+    except Exception:
+        pass
+    return False
+
 def downsample_for_plot(df_or_series, sample_size: int = PLOT_SAMPLE_SIZE):
     """Downsamples a DataFrame or Series if it exceeds sample_size, returning the sample and an is_sampled bool."""
     if len(df_or_series) > sample_size:

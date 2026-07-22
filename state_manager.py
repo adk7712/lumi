@@ -257,7 +257,7 @@ def save_session_state():
     except Exception:
         pass
 
-def process_uploaded_file(file_buffer, file_hash: str):
+def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str = None):
     """Processes a newly uploaded file and initializes the session state."""
     is_large = file_buffer.size > LARGE_FILE_THRESHOLD_BYTES
     if is_large:
@@ -272,14 +272,21 @@ def process_uploaded_file(file_buffer, file_hash: str):
     st.session_state.last_file_hash = file_hash
     st.session_state.filename = file_buffer.name
     
-    # Generate session_id if not present
-    session_id = st.query_params.get("session")
-    if not session_id:
+    if restore_session_id:
+        session_id = restore_session_id
+    else:
         import uuid
         session_id = str(uuid.uuid4())
-        st.query_params["session"] = session_id
         
     st.session_state.session_id = session_id
+
+    # Store it in a browser cookie via CookieController (not a URL param)
+    try:
+        from streamlit_cookies_controller import CookieController
+        controller = CookieController()
+        controller.set("lumi_session", session_id)
+    except Exception as e:
+        print(f"Error setting cookie: {e}")
 
     st.session_state.active_features = []
     st.session_state.scanned_columns = set()
@@ -370,7 +377,7 @@ def load_db_session(session_id: str, file_buffer) -> bool:
         return False
         
     # Process the file buffer to load data, using the retrieved session_id
-    process_uploaded_file(file_buffer, session_id)
+    process_uploaded_file(file_buffer, session_id, restore_session_id=session_id)
     
     # Restore metadata from DB
     st.session_state.cleaning_recipe = db_session.get('cleaning_recipe', [])

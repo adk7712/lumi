@@ -2,10 +2,21 @@
 @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
 /* --- Hidden Streamlit Elements --- */
-header,
 [data-testid="stHeaderActionElements"],
+[data-testid="stHeaderDeployButton"],
+[data-testid="stMainMenu"],
+[data-testid="stBaseButton-headerNoPadding"],
+.stDeployButton,
+.stAppDeployButton,
+[data-testid="stAppDeployButton"],
+header button,
 .stMarkdown a {
     display: none !important;
+}
+
+/* Ensure only the sidebar toggle chevron inside header remains visible */
+header [data-testid="collapsedControl"] button {
+    display: inline-flex !important;
 }
 
 
