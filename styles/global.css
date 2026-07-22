@@ -584,7 +584,7 @@ div.stMarkdown:has(.welcome-uploader-marker) {
 }
 
 /* Target the Uploader container */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
+[data-testid="stFileUploader"] {
     max-width: 700px;
     margin: 0.5rem auto 2.5rem auto !important;
     position: relative;
@@ -592,19 +592,19 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
 }
 
 /* Hide Streamlit default components inside dropzone */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] label {
+[data-testid="stFileUploader"] label {
     display: none !important;
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] > * {
+[data-testid="stFileUploaderDropzone"] > * {
     display: none !important;
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] div:not([data-testid="stFileUploaderDropzone"]) {
+[data-testid="stFileUploader"] div:not([data-testid="stFileUploaderDropzone"]) {
     border: none !important;
     outline: none !important;
 }
 
 /* Styled dropzone outer container */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
+[data-testid="stFileUploaderDropzone"] {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -623,13 +623,13 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
     outline: none !important;
     box-shadow: none !important;
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
+[data-testid="stFileUploaderDropzone"]:hover {
     border-color: #ff4b4b !important;
     background: rgba(255, 75, 75, 0.03) !important;
 }
 
 /* Label text */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::before {
+[data-testid="stFileUploaderDropzone"]::before {
     content: "Drag & drop your CSV or Excel file here";
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.95rem;
@@ -638,7 +638,7 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::
 }
 
 /* CTA browse button */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::after {
+[data-testid="stFileUploaderDropzone"]::after {
     content: "Browse Files →";
     display: flex;
     align-items: center;
@@ -653,11 +653,11 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::
     box-shadow: 0px 4px 15px rgba(255, 75, 75, 0.2);
     transition: all 0.3s ease;
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover::after {
+[data-testid="stFileUploaderDropzone"]:hover::after {
     transform: translateY(-1px);
     box-shadow: 0px 6px 20px rgba(255, 75, 75, 0.4);
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInstructions"] {
+[data-testid="stFileUploaderDropzoneInstructions"] {
     display: none !important;
 }
 

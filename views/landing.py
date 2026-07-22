@@ -11,6 +11,59 @@ from state_manager import (
 )
 from ui_utils import is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog
 
+def render_iframe_dropzone_patch():
+    _js = """
+    <script>
+    (function() {
+        var doc = window.parent.document;
+
+        function applyDragStyle(dz) {
+            dz.style.setProperty('border-style', 'dashed', 'important');
+            dz.style.setProperty('border-width', '2px', 'important');
+            dz.style.setProperty('border-color', 'rgba(255, 75, 75, 0.85)', 'important');
+            dz.style.setProperty('background', 'rgba(255, 75, 75, 0.07)', 'important');
+            var el = dz.parentElement;
+            for (var i = 0; i < 6; i++) {
+                if (!el) break;
+                el.style.setProperty('border', 'none', 'important');
+                el.style.setProperty('outline', 'none', 'important');
+                el.style.setProperty('box-shadow', 'none', 'important');
+                el = el.parentElement;
+            }
+        }
+
+        function clearDragStyle(dz) {
+            dz.style.removeProperty('border-style');
+            dz.style.removeProperty('border-width');
+            dz.style.removeProperty('border-color');
+            dz.style.removeProperty('background');
+        }
+
+        function patchDropzone() {
+            var dz = doc.querySelector('[data-testid="stFileUploaderDropzone"]');
+            if (!dz) return false;
+            dz.addEventListener('dragenter', function() { applyDragStyle(dz); }, true);
+            dz.addEventListener('dragover',  function() { applyDragStyle(dz); }, true);
+            dz.addEventListener('dragleave', function() { clearDragStyle(dz); }, true);
+            dz.addEventListener('drop',      function() { clearDragStyle(dz); }, true);
+            var obs = new MutationObserver(function() {
+                if (dz.getAttribute('style')) applyDragStyle(dz);
+            });
+            obs.observe(dz, { attributes: true, attributeFilter: ['style', 'class'] });
+            return true;
+        }
+
+        var interval = setInterval(function() {
+            if (patchDropzone()) clearInterval(interval);
+        }, 150);
+    })();
+    </script>
+    """
+    st.iframe(
+        src="data:text/html;charset=utf-8," + urllib.parse.quote(_js),
+        height=1
+    )
+
 def render_landing_page():
     # Render clean background grid and orbs
     st.html('<div class="welcome-bg welcome-grid-bg"><div class="welcome-orb welcome-orb-1"></div><div class="welcome-orb welcome-orb-2"></div><div class="welcome-orb welcome-orb-3"></div></div>')
@@ -57,6 +110,7 @@ def render_landing_page():
                     unsafe_allow_html=True
                 )
                 
+                st.markdown('<div class="welcome-uploader-marker"></div>', unsafe_allow_html=True)
                 resume_uploader = st.file_uploader(
                     "Drop the file here or browse",
                     type=["csv", "xlsx"],
@@ -119,6 +173,7 @@ def render_landing_page():
                     except Exception:
                         pass
                     st.rerun()
+            render_iframe_dropzone_patch()
             st.stop()
         else:
             # Clean invalid/expired sessions gracefully
@@ -251,54 +306,4 @@ def render_landing_page():
             st.rerun()
 
     # st.iframe Dropzone mutation observer patch
-    _js = """
-    <script>
-    (function() {
-        var doc = window.parent.document;
-
-        function applyDragStyle(dz) {
-            dz.style.setProperty('border-style', 'dashed', 'important');
-            dz.style.setProperty('border-width', '2px', 'important');
-            dz.style.setProperty('border-color', 'rgba(255, 75, 75, 0.85)', 'important');
-            dz.style.setProperty('background', 'rgba(255, 75, 75, 0.07)', 'important');
-            var el = dz.parentElement;
-            for (var i = 0; i < 6; i++) {
-                if (!el) break;
-                el.style.setProperty('border', 'none', 'important');
-                el.style.setProperty('outline', 'none', 'important');
-                el.style.setProperty('box-shadow', 'none', 'important');
-                el = el.parentElement;
-            }
-        }
-
-        function clearDragStyle(dz) {
-            dz.style.removeProperty('border-style');
-            dz.style.removeProperty('border-width');
-            dz.style.removeProperty('border-color');
-            dz.style.removeProperty('background');
-        }
-
-        function patchDropzone() {
-            var dz = doc.querySelector('[data-testid="stFileUploaderDropzone"]');
-            if (!dz) return false;
-            dz.addEventListener('dragenter', function() { applyDragStyle(dz); }, true);
-            dz.addEventListener('dragover',  function() { applyDragStyle(dz); }, true);
-            dz.addEventListener('dragleave', function() { clearDragStyle(dz); }, true);
-            dz.addEventListener('drop',      function() { clearDragStyle(dz); }, true);
-            var obs = new MutationObserver(function() {
-                if (dz.getAttribute('style')) applyDragStyle(dz);
-            });
-            obs.observe(dz, { attributes: true, attributeFilter: ['style', 'class'] });
-            return true;
-        }
-
-        var interval = setInterval(function() {
-            if (patchDropzone()) clearInterval(interval);
-        }, 150);
-    })();
-    </script>
-    """
-    st.iframe(
-        src="data:text/html;charset=utf-8," + urllib.parse.quote(_js),
-        height=1
-    )
+    render_iframe_dropzone_patch()
