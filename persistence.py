@@ -89,7 +89,7 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
     finally:
         conn.close()
 
-def load_session(session_id: str) -> dict:
+def load_session(session_id: str, current_user_email: str = None) -> dict:
     """Loads a session's details from the SQLite database."""
     init_db()
     conn = get_db_connection()
@@ -98,6 +98,12 @@ def load_session(session_id: str) -> dict:
         cursor.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,))
         row = cursor.fetchone()
         if row:
+            db_user_id = row["user_id"]
+            # Security: If owned by a real registered user, restrict access to owner only.
+            # Guest sessions (starting with "guest_") remain claimable during login transition.
+            if db_user_id is not None and not db_user_id.startswith("guest_"):
+                if db_user_id != current_user_email:
+                    return None
             return {
                 "session_id": row["session_id"],
                 "filename": row["filename"],

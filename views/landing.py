@@ -86,7 +86,7 @@ def render_landing_page():
     # 1. Recovery prompt page (active resume mode)
     if active_resume_id:
         from persistence import load_session
-        db_session = load_session(active_resume_id)
+        db_session = load_session(active_resume_id, get_logged_in_user())
         if db_session:
             filename = db_session.get("filename", "dataset")
             project_name = db_session.get("project_name", "Untitled Project")
@@ -190,7 +190,7 @@ def render_landing_page():
     # 2. Dismissible Session Banner (Primary Flow)
     if cookie_session_id and not st.session_state.get("cookie_session_dismissed"):
         from persistence import load_session
-        db_session = load_session(cookie_session_id)
+        db_session = load_session(cookie_session_id, get_logged_in_user())
         if db_session:
             filename = db_session.get("filename", "dataset")
             step_count = db_session.get("step_count", 0)

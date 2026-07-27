@@ -52,7 +52,7 @@ if user_email:
     session_id = st.session_state.get("session_id")
     if session_id:
         from persistence import load_session, reconcile_session
-        db_session = load_session(session_id)
+        db_session = load_session(session_id, user_email)
         if db_session and db_session.get("user_id") != user_email:
             reconcile_session(session_id, user_email)
             st.toast("Workspace saved to your account!")

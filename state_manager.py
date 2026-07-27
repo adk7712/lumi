@@ -378,7 +378,8 @@ def save_db_session():
 def load_db_session(session_id: str, file_buffer) -> bool:
     """Loads and restores the cleaning recipe and rules from the SQLite database."""
     from persistence import load_session
-    db_session = load_session(session_id)
+    from ui_utils import get_logged_in_user
+    db_session = load_session(session_id, get_logged_in_user())
     if not db_session:
         return False
         

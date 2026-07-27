@@ -56,7 +56,7 @@ class TestPersistence(unittest.TestCase):
         project_name = "Test Project"
 
         save_session(session_id, filename, recipe, rules, scanned_cols, user_id, project_name)
-        loaded = load_session(session_id)
+        loaded = load_session(session_id, user_id)
         
         self.assertIsNotNone(loaded)
         self.assertEqual(loaded["session_id"], session_id)
@@ -80,7 +80,7 @@ class TestPersistence(unittest.TestCase):
         save_session(session_id_b, "data_b.csv", recipe_b, [], ["Salary"], "userB@example.com", "Project B")
         
         # Assert Session A is untouched by Session B
-        loaded_a = load_session(session_id_a)
+        loaded_a = load_session(session_id_a, "userA@example.com")
         self.assertIsNotNone(loaded_a)
         self.assertEqual(loaded_a["cleaning_recipe"], recipe_a)
         self.assertEqual(loaded_a["filename"], "data_a.csv")
@@ -88,7 +88,7 @@ class TestPersistence(unittest.TestCase):
         self.assertEqual(loaded_a["project_name"], "Project A")
         
         # Assert Session B is untouched by Session A
-        loaded_b = load_session(session_id_b)
+        loaded_b = load_session(session_id_b, "userB@example.com")
         self.assertIsNotNone(loaded_b)
         self.assertEqual(loaded_b["cleaning_recipe"], recipe_b)
         self.assertEqual(loaded_b["filename"], "data_b.csv")
@@ -133,7 +133,7 @@ class TestPersistence(unittest.TestCase):
         reconcile_session(session_id, "logged_in_user@example.com")
         
         # Load and verify it belongs to the user
-        loaded_post = load_session(session_id)
+        loaded_post = load_session(session_id, "logged_in_user@example.com")
         self.assertEqual(loaded_post["user_id"], "logged_in_user@example.com")
         self.assertEqual(loaded_post["project_name"], "Anon Inventory")
         
@@ -141,6 +141,25 @@ class TestPersistence(unittest.TestCase):
         user_projects = get_user_projects("logged_in_user@example.com")
         self.assertEqual(len(user_projects), 1)
         self.assertEqual(user_projects[0]["session_id"], session_id)
+
+    def test_session_security_checks(self):
+        # 1. Guest session: should be accessible by anyone
+        save_session("session-guest-999", "file.csv", [], [], set(), user_id="guest_xyz@lumi.ai", project_name="Guest Project")
+        loaded_by_none = load_session("session-guest-999", None)
+        loaded_by_other = load_session("session-guest-999", "other@example.com")
+        
+        self.assertIsNotNone(loaded_by_none)
+        self.assertIsNotNone(loaded_by_other)
+        
+        # 2. Registered user session: should restrict access
+        save_session("session-user-888", "file.csv", [], [], set(), user_id="owner@example.com", project_name="Owner Project")
+        loaded_by_owner = load_session("session-user-888", "owner@example.com")
+        loaded_by_intruder = load_session("session-user-888", "intruder@example.com")
+        loaded_by_guest = load_session("session-user-888", None)
+        
+        self.assertIsNotNone(loaded_by_owner)
+        self.assertIsNone(loaded_by_intruder)
+        self.assertIsNone(loaded_by_guest)
 
 
 class TestCookiesAndPersistence(unittest.TestCase):
