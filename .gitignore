@@ -30,3 +30,6 @@ image*.png
 # SQLite Databases
 *.db
 lumi.db
+
+# Streamlit secrets
+.streamlit/secrets.toml

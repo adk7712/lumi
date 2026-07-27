@@ -17,9 +17,8 @@ def is_auth_configured() -> bool:
     try:
         if "auth" in st.secrets:
             auth_sec = st.secrets["auth"]
-            for key in auth_sec.keys():
-                if key in ["google", "microsoft"] or isinstance(auth_sec[key], dict):
-                    return True
+            if "google" in auth_sec:
+                return True
     except Exception:
         pass
     return False
@@ -58,44 +57,17 @@ def show_auth_dialog():
             st.rerun()
         except Exception:
             st.warning("Google OAuth provider credentials are not set up in `.streamlit/secrets.toml`. See setup guide below.")
-
-    # Microsoft Login Button
-    if st.button("Sign In with Microsoft", key="btn_login_microsoft_auth", use_container_width=True):
-        try:
-            st.login(provider="microsoft")
-            st.rerun()
-        except Exception:
-            st.warning("Microsoft OAuth provider credentials are not set up in `.streamlit/secrets.toml`. See setup guide below.")
             
     st.markdown('<div style="text-align: center; margin: 1rem 0; color: #555;">— OR —</div>', unsafe_allow_html=True)
     
     # Guest / Dev Login
-    st.markdown("##### Guest / Developer Mode")
-    mock_email = st.text_input("Enter your email:", value="user@lumi.ai", key="auth_mock_email")
+    st.markdown('<p style="color: #a3a3a3; font-size: 0.9rem; text-align: center;">Or try the app anonymously with a temporary guest session.</p>', unsafe_allow_html=True)
     if st.button("Continue as Guest", key="auth_dev_login_btn", use_container_width=True, type="primary"):
-        st.session_state.dev_user_email = mock_email
-        st.toast(f"Logged in locally as {mock_email}")
+        import uuid
+        guest_id = f"guest_{uuid.uuid4().hex[:8]}@lumi.ai"
+        st.session_state.dev_user_email = guest_id
+        st.toast("Started temporary guest session")
         st.rerun()
-        
-    st.write("---")
-    with st.expander("Setup Guide: How to connect Google / Microsoft"):
-        st.markdown("""
-        To enable Google or Microsoft OAuth logins on your local machine:
-        
-        1. Create a file named `.streamlit/secrets.toml` at the root of the project.
-        2. Insert the following configuration keys:
-        ```toml
-        [auth]
-        redirect_uri = "http://localhost:8501/oauth2callback"
-        cookie_secret = "your_strong_random_cookie_secret_key"
-
-        [auth.google]
-        client_id = "your-google-client-id.apps.googleusercontent.com"
-        client_secret = "your-google-client-secret"
-        server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
-        ```
-        3. Save the file and restart the Streamlit server.
-        """)
 
 def downsample_for_plot(df_or_series, sample_size: int = PLOT_SAMPLE_SIZE):
     """Downsamples a DataFrame or Series if it exceeds sample_size, returning the sample and an is_sampled bool."""
