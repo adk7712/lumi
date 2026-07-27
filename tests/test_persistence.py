@@ -48,32 +48,52 @@ class TestPersistence(unittest.TestCase):
 
     def test_save_and_load_session(self):
         session_id = "test-session-123"
-        filename = "sales_data.csv"
-        recipe = [{"action": "strip_whitespace", "column": "client_name"}]
-        rules = [{"type": "Null Check", "col": "total_cost", "enabled": True}]
-        scanned_columns = {"client_name", "total_cost"}
-        
-        # Save session
-        save_session(
-            session_id=session_id,
-            filename=filename,
-            recipe=recipe,
-            rules=rules,
-            scanned_columns=scanned_columns,
-            user_id="user@example.com",
-            project_name="Custom Sales Clean"
-        )
-        
-        # Load session
+        filename = "test_data.csv"
+        recipe = [{"action": "Drop Column", "col": "A"}]
+        rules = [{"type": "Range Check", "col": "B", "min": 0, "max": 100}]
+        scanned_cols = ["A", "B", "C"]
+        user_id = "tester@example.com"
+        project_name = "Test Project"
+
+        save_session(session_id, filename, recipe, rules, scanned_cols, user_id, project_name)
         loaded = load_session(session_id)
+        
         self.assertIsNotNone(loaded)
+        self.assertEqual(loaded["session_id"], session_id)
         self.assertEqual(loaded["filename"], filename)
-        self.assertEqual(loaded["project_name"], "Custom Sales Clean")
-        self.assertEqual(loaded["user_id"], "user@example.com")
         self.assertEqual(loaded["cleaning_recipe"], recipe)
-        self.assertEqual(loaded["rules"], rules)
-        self.assertEqual(loaded["scanned_columns"], scanned_columns)
         self.assertEqual(loaded["step_count"], 1)
+        self.assertEqual(loaded["rules"], rules)
+        self.assertEqual(loaded["scanned_columns"], set(scanned_cols))
+        self.assertEqual(loaded["user_id"], user_id)
+        self.assertEqual(loaded["project_name"], project_name)
+
+    def test_session_isolation_cross_contamination(self):
+        # Create Session A
+        session_id_a = "session-A-111"
+        recipe_a = [{"action": "Fill Nulls", "col": "Age", "value": 0}]
+        save_session(session_id_a, "data_a.csv", recipe_a, [], ["Age"], "userA@example.com", "Project A")
+        
+        # Create Session B
+        session_id_b = "session-B-222"
+        recipe_b = [{"action": "Drop Column", "col": "Salary"}]
+        save_session(session_id_b, "data_b.csv", recipe_b, [], ["Salary"], "userB@example.com", "Project B")
+        
+        # Assert Session A is untouched by Session B
+        loaded_a = load_session(session_id_a)
+        self.assertIsNotNone(loaded_a)
+        self.assertEqual(loaded_a["cleaning_recipe"], recipe_a)
+        self.assertEqual(loaded_a["filename"], "data_a.csv")
+        self.assertEqual(loaded_a["user_id"], "userA@example.com")
+        self.assertEqual(loaded_a["project_name"], "Project A")
+        
+        # Assert Session B is untouched by Session A
+        loaded_b = load_session(session_id_b)
+        self.assertIsNotNone(loaded_b)
+        self.assertEqual(loaded_b["cleaning_recipe"], recipe_b)
+        self.assertEqual(loaded_b["filename"], "data_b.csv")
+        self.assertEqual(loaded_b["user_id"], "userB@example.com")
+        self.assertEqual(loaded_b["project_name"], "Project B")
 
     def test_get_user_projects(self):
         user_id = "user_b@example.com"

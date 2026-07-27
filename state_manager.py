@@ -63,7 +63,7 @@ def load_data(file_path_or_buffer, nrows=None):
 
 def add_rule(rule_dict: dict, at_end: bool = False):
     """Applies color/enabled status to a rule and adds it to st.session_state.rules."""
-    from ui_utils import get_safe_hue
+    from ui_utils import get_safe_hue, queue_event
     rule = rule_dict.copy()
     if 'enabled' not in rule:
         rule['enabled'] = True
@@ -75,6 +75,7 @@ def add_rule(rule_dict: dict, at_end: bool = False):
         st.session_state.rules.append(rule)
     else:
         st.session_state.rules.insert(0, rule)
+    queue_event("issue_flagged", {"type": rule.get("type"), "col": rule.get("col")})
     save_session_state()
     save_db_session()
 
@@ -162,6 +163,9 @@ def add_step(step):
     step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
     st.session_state.intermediate_states.append((step_desc, th, len(new_df)))
     st.session_state.current_df = new_df
+    
+    from ui_utils import queue_event
+    queue_event("cleaning_step_added", {"action": step.get("action"), "column": step.get("column")})
 
     st.toast(f"Step Added: {step['action']}")
     save_session_state()
@@ -271,6 +275,8 @@ def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str =
 
     st.session_state.last_file_hash = file_hash
     st.session_state.filename = file_buffer.name
+    from ui_utils import queue_event
+    queue_event("file_uploaded", {"filename": file_buffer.name, "size": file_buffer.size})
     
     if restore_session_id:
         session_id = restore_session_id
@@ -349,8 +355,8 @@ def save_db_session():
         
     user_id = None
     try:
-        if st.experimental_user and st.experimental_user.get("email"):
-            user_id = st.experimental_user.get("email")
+        if st.user and st.user.get("email"):
+            user_id = st.user.get("email")
     except Exception:
         pass
         

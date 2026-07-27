@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog
+from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog, flush_pending_events
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state
 from views import (
     render_overview_tab,
@@ -38,6 +38,7 @@ inject_custom_css(st)
 
 # Inject PostHog Analytics
 inject_posthog(st)
+flush_pending_events()
 
 # Initialize Session State
 initialize_state()

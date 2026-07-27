@@ -10,7 +10,8 @@ from ui_utils import (
     plot_missingness_map,
     plot_outlier_distribution,
     plot_correlation_matrix,
-    get_heatmap_styles
+    get_heatmap_styles,
+    get_logged_in_user
 )
 
 def test_get_safe_hue():
@@ -179,10 +180,40 @@ def test_get_heatmap_styles():
     
     print("test_get_heatmap_styles passed.")
 
+def test_get_logged_in_user():
+    print("Running test_get_logged_in_user...")
+    import streamlit as st
+    
+    # Clear existing state
+    if "dev_user_email" in st.session_state:
+        del st.session_state["dev_user_email"]
+    
+    # 1. Test when dev_user_email is set
+    st.session_state["dev_user_email"] = "dev@example.com"
+    assert get_logged_in_user() == "dev@example.com"
+    del st.session_state["dev_user_email"]
+    
+    # 2. Test when st.user is set
+    # Mock st.user
+    class MockUser(dict):
+        pass
+    st.user = MockUser({"email": "test@user.com"})
+    assert get_logged_in_user() == "test@user.com"
+    
+    # 3. Test when st.user is not set or empty
+    st.user = None
+    assert get_logged_in_user() is None
+    
+    st.user = MockUser()
+    assert get_logged_in_user() is None
+    
+    print("test_get_logged_in_user passed.")
+
 if __name__ == "__main__":
     test_get_safe_hue()
     test_plot_missingness_map()
     test_plot_outlier_distribution()
     test_plot_correlation_matrix()
     test_get_heatmap_styles()
+    test_get_logged_in_user()
     print("test_ui_utils_coverage.py completed successfully.")

@@ -31,8 +31,8 @@ def get_logged_in_user() -> str:
         return dev_email
         
     try:
-        if st.experimental_user and st.experimental_user.get("email"):
-            return st.experimental_user.get("email")
+        if st.user and st.user.get("email"):
+            return st.user.get("email")
     except Exception:
         pass
     return None
@@ -330,3 +330,21 @@ def inject_posthog(st_object):
         </script>
         """
         st_object.html(posthog_js)
+
+def queue_event(event_name: str, properties: dict = None):
+    """Queues a PostHog event to be captured on the next render pass."""
+    if "pending_posthog_events" not in st.session_state:
+        st.session_state.pending_posthog_events = []
+    st.session_state.pending_posthog_events.append((event_name, properties or {}))
+
+def flush_pending_events():
+    """Renders any queued PostHog events via JS and clears the queue."""
+    if "pending_posthog_events" in st.session_state and st.session_state.pending_posthog_events:
+        import json
+        js_lines = []
+        for event_name, properties in st.session_state.pending_posthog_events:
+            props_str = json.dumps(properties)
+            js_lines.append(f"if(window.parent && window.parent.posthog) {{ window.parent.posthog.capture('{event_name}', {props_str}); }} else if(window.posthog) {{ window.posthog.capture('{event_name}', {props_str}); }}")
+        js = "<script>\n" + "\n".join(js_lines) + "\n</script>"
+        st.html(js)
+        st.session_state.pending_posthog_events = []
