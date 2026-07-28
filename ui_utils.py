@@ -46,17 +46,27 @@ def handle_signout():
         pass
     st.rerun()
 
+@st.dialog("Sign Out")
+def show_signout_dialog():
+    st.write("Are you sure you want to sign out?")
+    col1, col2 = st.columns(2)
+    if col1.button("Yes, Sign Out", type="primary", use_container_width=True, key="confirm_signout_btn"):
+        handle_signout()
+    if col2.button("Cancel", use_container_width=True, key="cancel_signout_btn"):
+        st.rerun()
+
 @st.dialog("Lumi Authentication")
 def show_auth_dialog():
     st.markdown('<p style="color: #a3a3a3; font-size: 0.95rem; text-align: center; margin-bottom: 1.5rem;">Select your provider to log in and sync your cleaning workspaces.</p>', unsafe_allow_html=True)
     
     # Google Login Button
-    if st.button("Sign In with Google", key="btn_login_google_auth", use_container_width=True):
-        try:
-            st.login(provider="google")
-            st.rerun()
-        except Exception:
-            st.warning("Google OAuth provider credentials are not set up in `.streamlit/secrets.toml`. See setup guide below.")
+    st.button(
+        "Sign In with Google", 
+        key="btn_login_google_auth", 
+        use_container_width=True, 
+        on_click=st.login, 
+        kwargs={"provider": "google"}
+    )
             
     st.markdown('<div style="text-align: center; margin: 1rem 0; color: #555;">— OR —</div>', unsafe_allow_html=True)
     

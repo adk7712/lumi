@@ -1,4 +1,3 @@
-import sqlite3
 import json
 from pathlib import Path
 from datetime import datetime
@@ -6,10 +5,40 @@ from datetime import datetime
 DB_PATH = Path(__file__).parent / "lumi.db"
 
 def get_db_connection():
-    """Establishes and returns a connection to the SQLite database."""
+    """Establishes and returns a connection to the database.
+    
+    If DB_URL is present in st.secrets, it connects to PostgreSQL using psycopg2.
+    Otherwise, it falls back to a local SQLite database.
+    """
+    import streamlit as st
+    db_url = None
+    try:
+        if "DB_URL" in st.secrets:
+            db_url = st.secrets["DB_URL"]
+    except Exception:
+        pass
+
+    if db_url:
+        try:
+            import psycopg2
+            from psycopg2.extras import RealDictCursor
+            conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+            return conn
+        except Exception as e:
+            print(f"Warning: Failed to connect to PostgreSQL (DB_URL configured). Falling back to SQLite. Error: {e}")
+    
+    # Fallback to local SQLite database
+    import sqlite3
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
+
+def _execute(conn, cursor, sql: str, params: tuple = ()):
+    """Helper to execute SQL queries using correct placeholders based on database engine."""
+    if "sqlite" not in type(conn).__module__:
+        # PostgreSQL uses %s instead of ?
+        sql = sql.replace("?", "%s")
+    cursor.execute(sql, params)
 
 def init_db():
     """Initializes the SQLite database schema if it does not exist."""
@@ -50,7 +79,7 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
         step_count = len(recipe)
         
         # Check if session exists to preserve project_name/user_id/created_at
-        cursor.execute("SELECT project_name, user_id FROM sessions WHERE session_id = ?", (session_id,))
+        _execute(conn, cursor, "SELECT project_name, user_id FROM sessions WHERE session_id = ?", (session_id,))
         row = cursor.fetchone()
         
         if row:
@@ -69,7 +98,7 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
         final_user_id = user_id or db_user_id
         now = datetime.now().isoformat()
         
-        cursor.execute("""
+        _execute(conn, cursor, """
             INSERT INTO sessions (session_id, filename, cleaning_recipe, step_count, rules, scanned_columns, user_id, project_name, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
@@ -95,7 +124,7 @@ def load_session(session_id: str, current_user_email: str = None) -> dict:
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM sessions WHERE session_id = ?", (session_id,))
+        _execute(conn, cursor, "SELECT * FROM sessions WHERE session_id = ?", (session_id,))
         row = cursor.fetchone()
         if row:
             db_user_id = row["user_id"]
@@ -128,7 +157,7 @@ def get_user_projects(user_id: str) -> list:
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM sessions WHERE user_id = ? ORDER BY updated_at DESC", (user_id,))
+        _execute(conn, cursor, "SELECT * FROM sessions WHERE user_id = ? ORDER BY updated_at DESC", (user_id,))
         rows = cursor.fetchall()
         projects = []
         for row in rows:
@@ -153,7 +182,7 @@ def reconcile_session(session_id: str, user_id: str):
     try:
         cursor = conn.cursor()
         now = datetime.now().isoformat()
-        cursor.execute("""
+        _execute(conn, cursor, """
             UPDATE sessions 
             SET user_id = ?, updated_at = ?
             WHERE session_id = ?

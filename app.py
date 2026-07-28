@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog, flush_pending_events
+from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog, show_signout_dialog, flush_pending_events
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state
 from views import (
     render_overview_tab,
@@ -90,16 +90,18 @@ with h_col3:
     if user_email:
         st.markdown(f'<div style="font-size: 0.75rem; color: #a3a3a3; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 2px;">{user_email}</div>', unsafe_allow_html=True)
         if st.button("Sign Out", key="header_signout_btn", use_container_width=True):
-            handle_signout()
+            show_signout_dialog()
     else:
-        if st.button("Sign In", key="header_signin_btn", use_container_width=True):
-            if is_auth_configured():
-                try:
-                    st.login()
-                    st.rerun()
-                except Exception:
-                    show_auth_dialog()
-            else:
+        if is_auth_configured():
+            st.button(
+                "Sign In", 
+                key="header_signin_btn", 
+                use_container_width=True, 
+                on_click=st.login, 
+                kwargs={"provider": "google"}
+            )
+        else:
+            if st.button("Sign In", key="header_signin_btn", use_container_width=True):
                 show_auth_dialog()
 
 st.divider()

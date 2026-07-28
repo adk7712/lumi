@@ -9,7 +9,7 @@ from state_manager import (
     load_db_session,
     LARGE_FILE_THRESHOLD_BYTES
 )
-from ui_utils import is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog
+from ui_utils import is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog, show_signout_dialog
 
 def render_iframe_dropzone_patch():
     _js = """
@@ -278,16 +278,18 @@ def render_landing_page():
         if user_email:
             st.markdown(f'<div style="text-align: center; margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 0.9rem; color: #a3a3a3;">Logged in as <strong>{user_email}</strong></div>', unsafe_allow_html=True)
             if st.button("Sign Out", key="landing_signout_btn", use_container_width=True):
-                handle_signout()
+                show_signout_dialog()
         else:
-            if st.button("Sign In to Sync Projects", key="landing_signin_btn", use_container_width=True):
-                if is_auth_configured():
-                    try:
-                        st.login()
-                        st.rerun()
-                    except Exception:
-                        show_auth_dialog()
-                else:
+            if is_auth_configured():
+                st.button(
+                    "Sign In to Sync Projects", 
+                    key="landing_signin_btn", 
+                    use_container_width=True, 
+                    on_click=st.login, 
+                    kwargs={"provider": "google"}
+                )
+            else:
+                if st.button("Sign In to Sync Projects", key="landing_signin_btn", use_container_width=True):
                     show_auth_dialog()
 
 

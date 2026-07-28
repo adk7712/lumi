@@ -8,5 +8,7 @@ python-Levenshtein
 streamlit-sortables
 streamlit-cookies-controller
 Authlib>=1.3.2
+psycopg2-binary
+
 
 
