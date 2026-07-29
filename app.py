@@ -141,16 +141,15 @@ with tab_audit:
 with tab_pipeline:
     render_pipeline_preview_tab(df)
 
-# --- Persist active tab across reruns via JS click ---
-# Inject JS to auto-click the correct tab button based on the ?tab= query param.
-# This runs on every page load/rerun to restore the user's last-visited tab.
+# st.markdown injects into the main page frame (not a sandboxed iframe),
+# so document.querySelectorAll works without triggering a SecurityError.
 if _active_tab_idx > 0:
-    st.html(
+    st.markdown(
         f"""
         <script>
         (function() {{
             function clickTab() {{
-                var btns = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+                var btns = document.querySelectorAll('[data-baseweb="tab"]');
                 if (btns.length > {_active_tab_idx}) {{
                     btns[{_active_tab_idx}].click();
                 }} else {{
@@ -160,30 +159,32 @@ if _active_tab_idx > 0:
             setTimeout(clickTab, 80);
         }})();
         </script>
-        """
+        """,
+        unsafe_allow_html=True
     )
 
 # Update ?tab= param when user clicks each tab
-st.html(
+st.markdown(
     f"""
     <script>
     (function() {{
         var tabNames = {TAB_NAMES};
         function setupTabListeners() {{
-            var btns = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+            var btns = document.querySelectorAll('[data-baseweb="tab"]');
             if (!btns.length) {{ setTimeout(setupTabListeners, 100); return; }}
             btns.forEach(function(btn, idx) {{
                 btn.addEventListener('click', function() {{
-                    var url = new URL(window.parent.location.href);
+                    var url = new URL(window.location.href);
                     url.searchParams.set('tab', tabNames[idx]);
-                    window.parent.history.replaceState(null, '', url.toString());
+                    window.history.replaceState(null, '', url.toString());
                 }});
             }});
         }}
         setTimeout(setupTabListeners, 200);
     }})();
     </script>
-    """
+    """,
+    unsafe_allow_html=True
 )
 
 # Bottom violation browser

@@ -131,7 +131,7 @@ def initialize_state(from_reset=False):
         'strip_target_col': "All",
         'rule_target_col': first_col,
         'rule_type_select': "Null Check",
-        'trans_type_select': "Find and Replace",
+        'trans_type_select': "Cast Data Type",
         'rel_feature_a': first_col,
         'rel_feature_b': first_col,
         'rel_op': ">",

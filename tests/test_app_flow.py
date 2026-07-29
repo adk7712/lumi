@@ -215,17 +215,16 @@ def test_audit_log_remove_step():
     at = setup_app_test()
     
     # 1. Add three distinct transformations to the recipe
-    trans_select = at.selectbox(key="trans_type_select")
-    trans_select.select("Strip Whitespace").run()
+    at.selectbox(key="trans_type_select").select("Strip Whitespace").run()
     at.button(key="btn_strip").click().run()
-    
-    trans_select.select("Cast Data Type").run()
+
+    at.selectbox(key="trans_type_select").select("Cast Data Type").run()
     sb = at.selectbox(key="cast_target_col")
     sb.select("Id").run()
     at.selectbox(key="cast_dtype_select").select("string").run()
     at.button(key="btn_cast").click().run()
-    
-    trans_select.select("Drop Column").run()
+
+    at.selectbox(key="trans_type_select").select("Drop Column").run()
     at.selectbox(key="drop_target_col").select("Alley").run()
     at.button(key="btn_drop").click().run()
     
