@@ -33,20 +33,24 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
             # To correctly handle NaNs as violations, we first evaluate the valid condition
             # and then invert the result. Comparisons with NaN always return False.
             # Thus, ~False will correctly flag NaNs as True (violations).
-            if op == ">": valid = (a > b)
-            elif op == "<": valid = (a < b)
-            elif op == "==": valid = (a == b)
-            elif op == "!=": valid = (a != b)
-            elif op == ">=": valid = (a >= b)
-            elif op == "<=": valid = (a <= b)
-            else: valid = pd.Series(False, index=df.index)
+            try:
+                if op == ">": valid = (a > b)
+                elif op == "<": valid = (a < b)
+                elif op == "==": valid = (a == b)
+                elif op == "!=": valid = (a != b)
+                elif op == ">=": valid = (a >= b)
+                elif op == "<=": valid = (a <= b)
+                else: valid = pd.Series(False, index=df.index)
+            except TypeError:
+                # Incompatible comparison types (e.g. string vs int) mean no row is valid (all violate)
+                valid = pd.Series(False, index=df.index)
             
             mask = ~valid
         elif rule_type == "Custom Expression":
-            # df.query() returns rows that satisfy the condition (non-violators).
-            # We need to find the violators.
-            valid_indices = df.query(rule['query']).index
-            mask = ~df.index.isin(valid_indices)
+            # The query describes the VIOLATION condition — rows that match are flagged.
+            # e.g., query = "age > 100 or age < 0" flags those exact rows as violations.
+            violated_indices = df.query(rule['query']).index
+            mask = df.index.isin(violated_indices)
         elif rule_type == "Informational":
             # Informational rules don't have "violations", so we return an all-False mask.
             mask = pd.Series(False, index=df.index)

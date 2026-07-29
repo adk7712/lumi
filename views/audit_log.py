@@ -51,8 +51,10 @@ def render_audit_log_tab():
                     remaining_recipe = st.session_state.cleaning_recipe[i-1:]
                     st.session_state.cleaning_recipe = st.session_state.cleaning_recipe[:i-1]
                     st.session_state.intermediate_states = st.session_state.intermediate_states[:i]
+                    # Reset current_df to the correct pre-removal state before replaying
+                    # downstream steps, so add_step records accurate row counts.
+                    st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
                     for r_step in remaining_recipe:
                         add_step(r_step)
-                    st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
                     save_session_state()
                     st.rerun()

@@ -7,28 +7,29 @@ def _codegen_drop_column(step: dict) -> list[str]:
     col = step.get('column')
     return [
         f"    # Remove the specified column from the DataFrame.",
-        f"    df = df.drop(columns=['{col}'])"
+        f"    df = df.drop(columns=[{repr(col)}])"
     ]
 
 def _codegen_drop_nulls(step: dict) -> list[str]:
     col = step.get('column')
     return [
         f"    # Remove rows where the specified column has null values.",
-        f"    df = df.dropna(subset=['{col}'])"
+        f"    df = df.dropna(subset=[{repr(col)}])"
     ]
 
 def _codegen_fill_null(step: dict) -> list[str]:
     col = step.get('column')
     v = step['value']
+    c_repr = repr(col)
     code = []
     if v in ["mean", "median", "mode"]:
         code.append(f"    # Fill null values with mean, median, or mode.")
         if v == "mode":
             # Safely handle empty modes in generated code to avoid IndexError
-            code.append(f"    mode_val = df['{col}'].mode()")
-            code.append(f"    df['{col}'] = df['{col}'].fillna(mode_val[0] if not mode_val.empty else np.nan)")
+            code.append(f"    mode_val = df[{c_repr}].mode()")
+            code.append(f"    df[{c_repr}] = df[{c_repr}].fillna(mode_val[0] if not mode_val.empty else np.nan)")
         else:
-            code.append(f"    df['{col}'] = df['{col}'].fillna(df['{col}'].{v}())")
+            code.append(f"    df[{c_repr}] = df[{c_repr}].fillna(df[{c_repr}].{v}())")
     elif v in ["knn", "iterative"]:
         code.append(f"    # Advanced Imputation using scikit-learn.")
         if v == "knn":
@@ -41,26 +42,28 @@ def _codegen_fill_null(step: dict) -> list[str]:
         
         code.append(f"    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()")
         code.append(f"    df_imputed = pd.DataFrame(imputer.fit_transform(df[numeric_cols]), columns=numeric_cols, index=df.index)")
-        code.append(f"    df['{col}'] = df_imputed['{col}']")
+        code.append(f"    df[{c_repr}] = df_imputed[{c_repr}]")
     else:
         code.append(f"    # Fill null values with a custom constant.")
-        code.append(f"    df['{col}'] = df['{col}'].fillna({repr(v)})")
+        code.append(f"    df[{c_repr}] = df[{c_repr}].fillna({repr(v)})")
     return code
 
 def _codegen_cap_range(step: dict) -> list[str]:
     col = step.get('column')
+    c_repr = repr(col)
     return [
         f"    # Cap values in the specified column to be within the defined min and max bounds.",
-        f"    df.loc[df['{col}'] < {step['min']}, '{col}'] = {step['min']}",
-        f"    df.loc[df['{col}'] > {step['max']}, '{col}'] = {step['max']}"
+        f"    df.loc[df[{c_repr}] < {step['min']}, {c_repr}] = {step['min']}",
+        f"    df.loc[df[{c_repr}] > {step['max']}, {c_repr}] = {step['max']}"
     ]
 
 def _codegen_cast_type(step: dict) -> list[str]:
     col = step.get('column')
+    c_repr = repr(col)
     if step['dtype'] == "datetime64[ns]":
         return [
             f"    # Convert column to datetime, coercing errors to NaT.",
-            f"    df['{col}'] = pd.to_datetime(df['{col}'], errors='coerce')"
+            f"    df[{c_repr}] = pd.to_datetime(df[{c_repr}], errors='coerce')"
         ]
     else:
         target_dtype = step['dtype']
@@ -70,12 +73,12 @@ def _codegen_cast_type(step: dict) -> list[str]:
         if target_dtype in ['string', 'object']:
             return [
                 f"    # Convert column to target string/object type.",
-                f"    df['{col}'] = df['{col}'].astype('{target_dtype}')"
+                f"    df[{c_repr}] = df[{c_repr}].astype('{target_dtype}')"
             ]
         else:
             return [
                 f"    # Convert column to target numeric type, coercing errors to NaN.",
-                f"    df['{col}'] = pd.to_numeric(df['{col}'], errors='coerce').astype('{target_dtype}')"
+                f"    df[{c_repr}] = pd.to_numeric(df[{c_repr}], errors='coerce').astype('{target_dtype}')"
             ]
 
 def _codegen_drop_violated(step: dict) -> list[str]:
@@ -85,14 +88,18 @@ def _codegen_drop_violated(step: dict) -> list[str]:
     
     code = [f"    # Drop rows violating rule: {r.get('desc', 'N/A')}"]
     if r['type'] == "Null Check":
-        code.append(f"    df = df.dropna(subset=['{r['col']}'])")
+        code.append(f"    df = df.dropna(subset=[{repr(r['col'])}])")
     elif r['type'] == "Range Check":
-        code.append(f"    df = df[(df['{r['col']}'] >= {r['min']}) & (df['{r['col']}'] <= {r['max']})]")
+        # Coerce to numeric first to match live-app behaviour on mixed-type columns.
+        code.append(f"    _col_num = pd.to_numeric(df[{repr(r['col'])}], errors='coerce')")
+        code.append(f"    df = df[(_col_num >= {r['min']}) & (_col_num <= {r['max']})]")
     elif r['type'] == "Relational Check":
-        val = f"df['{r['col_b']}']" if r.get('target_type') == 'Feature' else repr(r['value'])
-        code.append(f"    df = df[df['{r['col_a']}'] {r['op']} {val}]")
+        val = f"df[{repr(r['col_b'])}]" if r.get('target_type') == 'Feature' else repr(r['value'])
+        code.append(f"    df = df[df[{repr(r['col_a'])}] {r['op']} {val}]")
     elif r['type'] == "Custom Expression":
-        code.append(f"    df = df.query({repr(r['query'])})")
+        # Query describes the VIOLATION condition — drop rows that match.
+        code.append(f"    _violated_idx = df.query({repr(r['query'])}).index")
+        code.append(f"    df = df[~df.index.isin(_violated_idx)]")
     return code
 
 def _codegen_replace(step: dict) -> list[str]:
@@ -106,9 +113,10 @@ def _codegen_replace(step: dict) -> list[str]:
             f"        df[c] = df[c].replace({f_repr}, {r_repr}{regex_param})"
         ]
     else:
+        c_repr = repr(col)
         return [
             f"    # Replace in the specified column.",
-            f"    df['{col}'] = df['{col}'].replace({f_repr}, {r_repr}{regex_param})"
+            f"    df[{c_repr}] = df[{c_repr}].replace({f_repr}, {r_repr}{regex_param})"
         ]
 
 def _codegen_strip_whitespace(step: dict) -> list[str]:
@@ -121,10 +129,11 @@ def _codegen_strip_whitespace(step: dict) -> list[str]:
             f"        df.loc[mask, c] = df.loc[mask, c].astype(str).str.strip()"
         ]
     else:
+        c_repr = repr(col)
         return [
             f"    # Strip whitespace from the specified column, preserving NaNs.",
-            f"    mask = df['{col}'].notnull()",
-            f"    df.loc[mask, '{col}'] = df.loc[mask, '{col}'].astype(str).str.strip()"
+            f"    mask = df[{c_repr}].notnull()",
+            f"    df.loc[mask, {c_repr}] = df.loc[mask, {c_repr}].astype(str).str.strip()"
         ]
 
 def _codegen_normalize_text(step: dict) -> list[str]:
@@ -162,9 +171,10 @@ def _codegen_normalize_text(step: dict) -> list[str]:
 
 def _codegen_log_transform(step: dict) -> list[str]:
     col = step.get('column')
+    c_repr = repr(col)
     return [
         f"    # Apply log(1+x) transformation to handle outliers.",
-        f"    df['{col}'] = np.log1p(df['{col}'].clip(lower=0))"
+        f"    df[{c_repr}] = np.log1p(df[{c_repr}].clip(lower=0))"
     ]
 
 def _codegen_rename_column(step: dict) -> list[str]:
@@ -172,24 +182,26 @@ def _codegen_rename_column(step: dict) -> list[str]:
     new_name = step['value']
     return [
         f"    # Rename column '{col}' to '{new_name}'.",
-        f"    df = df.rename(columns={{'{col}': '{new_name}'}})"
+        f"    df = df.rename(columns={{{repr(col)}: {repr(new_name)}}})"
     ]
 
 def _codegen_reorder_columns(step: dict) -> list[str]:
-    new_order = step['value']
+    new_order = step.get('value', [])
     return [
-        f"    # Reorder columns to the specified layout.",
-        f"    df = df[{repr(new_order)}]"
+        f"    # Reorder columns to specified layout, preserving any remaining columns.",
+        f"    _cols = [c for c in {repr(new_order)} if c in df.columns]",
+        f"    _rem = [c for c in df.columns if c not in _cols]",
+        f"    df = df[_cols + _rem]"
     ]
 
 def _codegen_extract_datetime(step: dict) -> list[str]:
     col = step.get('column')
-    new_col = step['new_column']
-    component = step['component']
+    component = step.get('value', step.get('component', 'year'))
+    new_col = step.get('new_column', f"{col}_{component}")
     accessor = f"dt.{component}" if component != "day_of_week" else "dt.day_name()"
     return [
         f"    # Extract {component} component from '{col}' into '{new_col}'.",
-        f"    df['{new_col}'] = pd.to_datetime(df['{col}']).{accessor}"
+        f"    df[{repr(new_col)}] = pd.to_datetime(df[{repr(col)}], errors='coerce').{accessor}"
     ]
 
 def _codegen_drop_duplicates(step: dict) -> list[str]:
@@ -282,17 +294,18 @@ def _generate_validate_data_lines(rules: list) -> list[str]:
             code.append(f"    # Description: {desc}")
             code.append("    try:")
             if r['type'] == "Null Check":
-                code.append(f"        mask = df['{r['col']}'].isnull()")
+                code.append(f"        mask = df[{repr(r['col'])}].isnull()")
             elif r['type'] == "Range Check":
-                code.append(f"        col_numeric = pd.to_numeric(df['{r['col']}'], errors='coerce')")
+                code.append(f"        col_numeric = pd.to_numeric(df[{repr(r['col'])}], errors='coerce')")
                 code.append(f"        mask = (col_numeric < {r['min']}) | (col_numeric > {r['max']}) | col_numeric.isnull()")
             elif r['type'] == "Relational Check":
-                val = f"df['{r['col_b']}']" if r.get('target_type') == 'Feature' else repr(r['value'])
-                code.append(f"        valid = (df['{r['col_a']}'] {r['op']} {val})")
+                val = f"df[{repr(r['col_b'])}]" if r.get('target_type') == 'Feature' else repr(r['value'])
+                code.append(f"        valid = (df[{repr(r['col_a'])}] {r['op']} {val})")
                 code.append(f"        mask = ~valid")
             elif r['type'] == "Custom Expression":
-                code.append(f"        valid_indices = df.query({repr(r['query'])}).index")
-                code.append(f"        mask = ~df.index.isin(valid_indices)")
+                # Query describes the VIOLATION condition — rows that match are violations.
+                code.append(f"        violated_indices = df.query({repr(r['query'])}).index")
+                code.append(f"        mask = df.index.isin(violated_indices)")
             else:
                 code.append("        mask = pd.Series(False, index=df.index)")
 
@@ -310,7 +323,18 @@ def generate_pipeline_code(recipe: list, rules: list = None) -> str:
     """
     Generates standalone Python code for a given cleaning recipe and optional validation rules.
     """
-    code = ["import pandas as pd\nimport numpy as np\n", "def clean_data(df):"]
+    # Downcast helper mirrors the live-app's memory optimisation so exported dtypes match the preview.
+    downcast_helper = (
+        "def _downcast_dtypes(df):\n"
+        "    \"\"\"Downcast numeric dtypes to match the in-app preview (int8/float32).\"\"\"\n"
+        "    import pandas as pd\n"
+        "    for col in df.select_dtypes(include=['integer']).columns:\n"
+        "        df[col] = pd.to_numeric(df[col], downcast='integer')\n"
+        "    for col in df.select_dtypes(include=['float']).columns:\n"
+        "        df[col] = pd.to_numeric(df[col], downcast='float')\n"
+        "    return df\n"
+    )
+    code = ["import pandas as pd\nimport numpy as np\n", downcast_helper, "def clean_data(df):"]
     code.extend(_generate_clean_data_lines(recipe))
     code.append("\n\ndef validate_data(df):")
     code.extend(_generate_validate_data_lines(rules))

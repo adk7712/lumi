@@ -112,8 +112,9 @@ def test_rule_violations():
     mask_rel = evaluate_rule(df, rule_rel)
     assert list(mask_rel) == [False, False, True, True] # Row 2 violates (20 > 30 is False), Row 3 violates (nan comparison)
     
-    # 4. Custom Expression
-    rule_custom = {'type': 'Custom Expression', 'query': "city == 'NYC'"}
+    # 4. Custom Expression — query now describes VIOLATIONS (rows to flag directly).
+    # "city != 'NYC'" flags London and Paris as violations. Expected: [False, True, True, False]
+    rule_custom = {'type': 'Custom Expression', 'query': "city != 'NYC'"}
     mask_custom = evaluate_rule(df, rule_custom)
     assert list(mask_custom) == [False, True, True, False] # Non-NYC rows violate
     
@@ -149,7 +150,7 @@ def test_rename_and_reorder():
     
     # Verify reorder code gen
     code_reorder = generate_pipeline_code(recipe_reorder)
-    assert "df = df[['C', 'B', 'Alpha']]" in code_reorder
+    assert "_cols = [c for c in ['C', 'B', 'Alpha'] if c in df.columns]" in code_reorder
     
     # Run generated code on df
     recipe_combined = recipe_rename + recipe_reorder

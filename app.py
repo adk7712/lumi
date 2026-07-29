@@ -110,9 +110,15 @@ st.divider()
 df = st.session_state.current_df
 
 # --- TABS ---
-tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs([
-    "Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"
-])
+TAB_NAMES = ["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"]
+
+# Persist and restore active tab via query params
+_active_tab = st.query_params.get("tab", "Overview")
+if _active_tab not in TAB_NAMES:
+    _active_tab = "Overview"
+_active_tab_idx = TAB_NAMES.index(_active_tab)
+
+tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs(TAB_NAMES)
 
 with tab_overview:
     render_overview_tab(df)
@@ -134,6 +140,51 @@ with tab_audit:
 
 with tab_pipeline:
     render_pipeline_preview_tab(df)
+
+# --- Persist active tab across reruns via JS click ---
+# Inject JS to auto-click the correct tab button based on the ?tab= query param.
+# This runs on every page load/rerun to restore the user's last-visited tab.
+if _active_tab_idx > 0:
+    st.html(
+        f"""
+        <script>
+        (function() {{
+            function clickTab() {{
+                var btns = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+                if (btns.length > {_active_tab_idx}) {{
+                    btns[{_active_tab_idx}].click();
+                }} else {{
+                    setTimeout(clickTab, 100);
+                }}
+            }}
+            setTimeout(clickTab, 80);
+        }})();
+        </script>
+        """
+    )
+
+# Update ?tab= param when user clicks each tab
+st.html(
+    f"""
+    <script>
+    (function() {{
+        var tabNames = {TAB_NAMES};
+        function setupTabListeners() {{
+            var btns = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+            if (!btns.length) {{ setTimeout(setupTabListeners, 100); return; }}
+            btns.forEach(function(btn, idx) {{
+                btn.addEventListener('click', function() {{
+                    var url = new URL(window.parent.location.href);
+                    url.searchParams.set('tab', tabNames[idx]);
+                    window.parent.history.replaceState(null, '', url.toString());
+                }});
+            }});
+        }}
+        setTimeout(setupTabListeners, 200);
+    }})();
+    </script>
+    """
+)
 
 # Bottom violation browser
 render_violation_browser(df)

@@ -49,7 +49,8 @@ def render_rulebook_tab(df):
                 st.rerun()
         elif rtype == "Custom Expression":
             with st.form(key="custom_expr_form", clear_on_submit=True):
-                q_str = st.text_input("Pandas Query String", placeholder="Age > 30 & Sex == 'male'", key="custom_query_input")
+                st.caption("Write a Pandas query that **flags bad rows** (violations). Matching rows will be treated as violations.")
+                q_str = st.text_input("Pandas Query String", placeholder="age > 100 or age < 0", key="custom_query_input")
                 submit_btn = st.form_submit_button("Add Rule")
 
             if submit_btn and q_str:
@@ -57,9 +58,11 @@ def render_rulebook_tab(df):
                     test_result = df.query(q_str)
 
                     if len(df) > 0 and len(test_result) == 0:
-                        st.error("This query returned no matches on the dataset. Please check for typos or type mismatches (e.g., comparing a number to a string). Rule not added.")
+                        st.warning("This query matches no rows on the current dataset — the rule will be added but show 0 violations. Check for typos or type mismatches.")
+                        add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Violates: {q_str}"})
+                        st.rerun()
                     else:
-                        add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Matches: {q_str}"})
+                        add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Violates: {q_str}"})
                         st.rerun()
                 except Exception as e:
                     err_msg = str(e)
@@ -166,19 +169,37 @@ def render_rulebook_tab(df):
                             res = res_cols[0].selectbox("Resolution", ["Select resolution method...", "Drop Rows", "Fill with Mean", "Fill with Median", "KNN Imputer", "Iterative Imputer"], key=f"res_{idx}", label_visibility="collapsed")
                             if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_res_{idx}", width="stretch"):
                                 add_step(create_resolution_step(rule, res))
-                                st.session_state.rules[idx]['resolved'] = True
+                                # Only mark resolved if violations are actually gone after applying the step.
+                                try:
+                                    remaining = evaluate_rule(st.session_state.current_df, rule).sum()
+                                    if remaining == 0:
+                                        st.session_state.rules[idx]['resolved'] = True
+                                except Exception:
+                                    pass
                                 st.rerun()
                         elif rule['type'] == "Range Check":
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Res", ["Select resolution method...", "Drop Rows", "Cap at Bounds", "Log Transform"], key=f"range_res_{idx}", label_visibility="collapsed")
                             if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_range_res_{idx}", width="stretch"):
                                 add_step(create_resolution_step(rule, res))
-                                st.session_state.rules[idx]['resolved'] = True
+                                # Only mark resolved if violations are actually gone after applying the step.
+                                try:
+                                    remaining = evaluate_rule(st.session_state.current_df, rule).sum()
+                                    if remaining == 0:
+                                        st.session_state.rules[idx]['resolved'] = True
+                                except Exception:
+                                    pass
                                 st.rerun()
                         else:
                             if st.button("Drop Violated Rows", key=f"gen_res_{idx}", width="stretch"):
                                 add_step(create_resolution_step(rule, "Drop Violated Rows"))
-                                st.session_state.rules[idx]['resolved'] = True
+                                # Only mark resolved if violations are actually gone after applying the step.
+                                try:
+                                    remaining = evaluate_rule(st.session_state.current_df, rule).sum()
+                                    if remaining == 0:
+                                        st.session_state.rules[idx]['resolved'] = True
+                                except Exception:
+                                    pass
                                 st.rerun()
 
                     btn_c1, btn_c2 = st.columns(2)

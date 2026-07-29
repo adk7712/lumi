@@ -61,7 +61,7 @@ def load_data(file_path_or_buffer, nrows=None):
         st.error(f"An unexpected error occurred: {type(e).__name__} - {e}")
         return pd.DataFrame()
 
-def add_rule(rule_dict: dict, at_end: bool = False):
+def add_rule(rule_dict: dict, at_end: bool = True):
     """Applies color/enabled status to a rule and adds it to st.session_state.rules."""
     from ui_utils import get_safe_hue, queue_event
     rule = rule_dict.copy()
@@ -206,6 +206,13 @@ def sync_column_rename(target: str, new_name: str):
         if rule.get('col_b') == target:
             rule['col_b'] = new_name
             rule['desc'] = rule['desc'].replace(target, new_name)
+        if rule.get('type') == "Custom Expression":
+            import re
+            pattern = r'\b' + re.escape(target) + r'\b'
+            if 'query' in rule and re.search(pattern, rule['query']):
+                rule['query'] = re.sub(pattern, new_name, rule['query'])
+            if 'desc' in rule and re.search(pattern, rule['desc']):
+                rule['desc'] = re.sub(pattern, new_name, rule['desc'])
             
     # Sync active features in diagnostics tab
     if target in st.session_state.active_features:
@@ -216,21 +223,27 @@ def sync_column_rename(target: str, new_name: str):
 CACHE_DIR = Path(".lumi_cache")
 
 def calculate_file_hash(file_buffer) -> str:
-    """Generates a unique hash for a file using its name, size, and first 8KB of content."""
+    """Generates a unique hash for a file by reading its full content.
+    
+    Previously only hashed the first 8KB, which caused hash collisions between
+    files that share the same name, size, and header but differ in later rows.
+    """
     hasher = hashlib.md5()
     name = getattr(file_buffer, 'name', '')
-    size = getattr(file_buffer, 'size', 0)
     hasher.update(name.encode('utf-8'))
-    hasher.update(str(size).encode('utf-8'))
     
     try:
         pos = file_buffer.tell()
         file_buffer.seek(0)
-        chunk = file_buffer.read(8192)
-        if isinstance(chunk, str):
-            hasher.update(chunk.encode('utf-8'))
-        else:
-            hasher.update(chunk)
+        # Read in chunks to avoid loading huge files into memory at once.
+        while True:
+            chunk = file_buffer.read(65536)
+            if not chunk:
+                break
+            if isinstance(chunk, str):
+                hasher.update(chunk.encode('utf-8'))
+            else:
+                hasher.update(chunk)
         file_buffer.seek(pos)
     except Exception:
         pass

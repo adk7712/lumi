@@ -155,8 +155,16 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
         if col in scanned_columns: 
             continue
         
-        proposals.extend(_check_null_values(df, col))
-        proposals.extend(_check_constant_column(df, col))
+        null_proposals = _check_null_values(df, col)
+        proposals.extend(null_proposals)
+
+        # If a column was already flagged as Redundant (near-complete nullity → drop),
+        # skip _check_constant_column to prevent a duplicate drop_column proposal.
+        # A 100% null column trivially has nunique() == 0 which also triggers Constant Value.
+        already_redundant = any(p['type'] == 'Redundant Column' for p in null_proposals)
+        if not already_redundant:
+            proposals.extend(_check_constant_column(df, col))
+
         proposals.extend(_check_numeric_diagnostics(df, col))
         proposals.extend(_check_string_diagnostics(df, col))
                     

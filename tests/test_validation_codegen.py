@@ -35,7 +35,9 @@ def test_active_rules_validation_behavior():
         {'type': 'Null Check', 'col': 'age', 'desc': 'age is NOT NULL', 'enabled': True},
         {'type': 'Range Check', 'col': 'score', 'min': 0.0, 'max': 100.0, 'desc': 'score in [0.0, 100.0]', 'enabled': True},
         {'type': 'Relational Check', 'col_a': 'parent_age', 'op': '>', 'col_b': 'age', 'target_type': 'Feature', 'desc': 'parent_age > age', 'enabled': True},
-        {'type': 'Custom Expression', 'query': "city == 'NYC'", 'desc': "Matches: city == 'NYC'", 'enabled': True},
+        # Custom Expression: query now describes VIOLATIONS (rows to flag).
+        # "city != 'NYC'" flags rows where city is not NYC (i.e., 'London' row).
+        {'type': 'Custom Expression', 'query': "city != 'NYC'", 'desc': "Violates: city != 'NYC'", 'enabled': True},
         # This informational rule should be ignored in validation checks
         {'type': 'Informational', 'desc': 'Check city names', 'enabled': True},
         # This rule is disabled, so it should be ignored in validation checks
@@ -74,8 +76,8 @@ def test_active_rules_validation_behavior():
     # Row 1: parent_age 40, age is NaN -> comparison fails/violates. Row 2: 20 > 30 is False -> violates. Total 2.
     assert violations_dirty['parent_age > age'] == 2
     
-    assert "Matches: city == 'NYC'" in violations_dirty
-    assert violations_dirty["Matches: city == 'NYC'"] == 1 # 'London' violates
+    assert "Violates: city != 'NYC'" in violations_dirty
+    assert violations_dirty["Violates: city != 'NYC'"] == 1 # 'London' is the violator
     
     # Ensure disabled or informational rules are not present in violations
     assert 'Check city names' not in violations_dirty
@@ -85,15 +87,15 @@ def test_active_rules_validation_behavior():
     df_clean = clean_func(df_dirty.copy())
     violations_clean = validate_func(df_clean)
     
-    # The Custom Expression city == 'NYC' is still violated on remaining rows if they have London.
+    # The Custom Expression city != 'NYC' is still violated on remaining rows if they have London.
     # Let's filter df_clean to see what rows are left.
     # Row 0: age=25, score=85, parent_age=50, city=NYC. (Clean)
     # Row 1: age=NaN -> dropped by drop_nulls
     # Row 2: age=30, score=100 (capped from 150), parent_age=20 -> dropped by relational drop_violated (parent_age > age)
-    # Row 3: age=40, score=50, parent_age=60, city=London -> kept, but city is London, so custom query rule fails.
-    # Let's verify city == 'NYC' violation count is 1 in the cleaned data since Row 3 is kept.
-    assert "Matches: city == 'NYC'" in violations_clean
-    assert violations_clean["Matches: city == 'NYC'"] == 1
+    # Row 3: age=40, score=50, parent_age=60, city=London -> kept, but city is London, so custom query rule flags it.
+    # Let's verify city != 'NYC' violation count is 1 in the cleaned data since Row 3 is kept.
+    assert "Violates: city != 'NYC'" in violations_clean
+    assert violations_clean["Violates: city != 'NYC'"] == 1
     
     # But other violations should be resolved (0 counts, so absent from dictionary)
     assert 'age is NOT NULL' not in violations_clean

@@ -80,10 +80,14 @@ def _handle_fill_null(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
     
     val = step.get('value')
     fill_value = None
-    if val == "mean":
-        fill_value = df[col].mean()
-    elif val == "median":
-        fill_value = df[col].median()
+    if val in ["mean", "median"]:
+        try:
+            num_s = pd.to_numeric(df[col], errors='coerce')
+            if num_s.isnull().all():
+                return df, [f"Warning: Cannot calculate {val} for non-numeric column '{col}'."]
+            fill_value = num_s.mean() if val == "mean" else num_s.median()
+        except Exception as e:
+            return df, [f"Warning: Cannot calculate {val} for column '{col}': {e}"]
     elif val == "mode":
         mode_result = df[col].mode()
         if not mode_result.empty:

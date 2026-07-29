@@ -30,6 +30,9 @@ def render_violation_browser(df):
         if violation_df.empty:
             st.success("No violations found in the current dataset.")
         else:
-            st.warning(f"Found {len(violation_df):,} rows with violations. Showing top {VIOLATION_PREVIEW_LIMIT}.")
+            if len(violation_df) > VIOLATION_PREVIEW_LIMIT:
+                st.warning(f"Found {len(violation_df):,} rows with violations. Showing top {VIOLATION_PREVIEW_LIMIT}.")
+            else:
+                st.warning(f"Found {len(violation_df):,} row(s) with violations.")
             heatmap_sdf, _ = get_heatmap_styles(violation_df, active_rules_for_heatmap)
             st.dataframe(violation_df.head(VIOLATION_PREVIEW_LIMIT).style.apply(lambda _: heatmap_sdf.head(VIOLATION_PREVIEW_LIMIT), axis=None), width="stretch")
