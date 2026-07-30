@@ -56,5 +56,7 @@ def render_audit_log_tab():
                     st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
                     for r_step in remaining_recipe:
                         add_step(r_step)
+                        st.session_state._needs_rerun = True
                     save_session_state()
+                    st.session_state._needs_rerun = True
                     st.session_state._needs_rerun = True
