@@ -33,7 +33,7 @@ def render_transformations_tab(df):
         use_regex = st.toggle("Use Regular Expressions", key="replace_use_regex")
         if st.button("Execute Replacement", key="btn_fr"):
             add_step({"action": "replace", "column": target, "find": sf, "replace": sr, "regex": use_regex})
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Normalize Text":
         c1, c2 = st.columns(2)
         norm_methods = {
@@ -47,13 +47,13 @@ def render_transformations_tab(df):
         selected_method_display = c2.selectbox("Method", list(norm_methods.keys()), key="norm_method_select")
         if st.button("Execute Text Normalization", key="btn_norm"):
             add_step({"action": "normalize_text", "column": target, "value": norm_methods[selected_method_display]})
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Cast Data Type":
         c1, c2 = st.columns(2)
         target, dtype_t = c1.selectbox("Column", all_cols, key="cast_target_col"), c2.selectbox("Cast To", ["string", "float64", "int64", "datetime64[ns]"], key="cast_dtype_select")
         if st.button("Execute Type Cast", key="btn_cast"):
             add_step({"action": "cast_type", "column": target, "dtype": dtype_t})
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Drop Column":
         target = st.selectbox("Target Column", all_cols, key="drop_target_col")
 
@@ -64,12 +64,12 @@ def render_transformations_tab(df):
 
         if st.button("Execute Column Drop", key="btn_drop"):
             add_step({"action": "drop_column", "column": target})
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Strip Whitespace":
         target = st.selectbox("Columns", ["All"] + all_cols, key="strip_target_col")
         if st.button("Execute Whitespace Strip", key="btn_strip"):
             add_step({"action": "strip_whitespace", "column": target})
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Rename Column":
         target = st.selectbox("Target Column", all_cols, key="rename_target_col")
         new_name = st.text_input("New Column Name", key="rename_new_name_input")
@@ -81,7 +81,7 @@ def render_transformations_tab(df):
             else:
                 add_step({"action": "rename_column", "column": target, "value": new_name})
                 sync_column_rename(target, new_name)
-                st.rerun()
+                st.session_state._needs_rerun = True
     elif t_type == "Reorder Columns":
         if 'temp_col_order' not in st.session_state or set(st.session_state.temp_col_order) != set(all_cols):
             st.session_state.temp_col_order = list(all_cols)
@@ -100,13 +100,13 @@ def render_transformations_tab(df):
 
         if sorted_cols != temp_cols:
             st.session_state.temp_col_order = sorted_cols
-            st.rerun()
+            st.session_state._needs_rerun = True
 
         btn_placeholder = st.empty()
         if btn_placeholder.button("Apply Column Order", key="btn_apply_reorder"):
             add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
             st.session_state.show_reorder_success = True
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Extract Datetime":
         datetime_cols = [c for c in all_cols if pd.api.types.is_datetime64_any_dtype(df[c])]
         
@@ -136,22 +136,22 @@ def render_transformations_tab(df):
                     "new_column": new_name,
                     "component": component
                 })
-                st.rerun()
+                st.session_state._needs_rerun = True
     elif t_type == "Remove Duplicate Rows":
         st.info("This will remove all exact duplicate rows from the active dataset.")
         if st.button("Execute Duplicate Removal", key="btn_remove_dups"):
             add_step({"action": "drop_duplicates"})
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Drop Empty Columns":
         st.info("This will drop any columns that contain 100% missing (null) values.")
         if st.button("Execute Empty Column Drop", key="btn_drop_empty_cols"):
             add_step({"action": "drop_empty_columns"})
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Drop Empty Rows":
         st.info("This will remove any rows where all values are completely missing (null).")
         if st.button("Execute Empty Row Drop", key="btn_drop_empty_rows"):
             add_step({"action": "drop_empty_rows"})
-            st.rerun()
+            st.session_state._needs_rerun = True
     elif t_type == "Normalize Column Names":
         st.info("This will rename column headers to follow a standardized naming convention (e.g., removing spaces and special characters).")
         method_options = {
@@ -168,4 +168,4 @@ def render_transformations_tab(df):
             add_step({"action": "normalize_column_names", "value": method})
             for orig, val in new_names.items():
                 sync_column_rename(orig, val)
-            st.rerun()
+            st.session_state._needs_rerun = True

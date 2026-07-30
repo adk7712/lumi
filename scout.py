@@ -151,7 +151,7 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
         df = df.sample(n=10000, random_state=42).reset_index(drop=True)
 
     for col in df.columns:
-        # Skip columns that have already been processed or whose proposals have been handled.
+        # Skip columns that have already been completely processed (backward compatibility).
         if col in scanned_columns: 
             continue
         
@@ -168,4 +168,12 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
         proposals.extend(_check_numeric_diagnostics(df, col))
         proposals.extend(_check_string_diagnostics(df, col))
                     
-    return proposals
+    # Filter out individual proposals that have been accepted or dismissed.
+    # The format in scanned_columns is "column:proposal_type".
+    filtered_proposals = []
+    for p in proposals:
+        key = f"{p['column']}:{p['type']}"
+        if key not in scanned_columns:
+            filtered_proposals.append(p)
+            
+    return filtered_proposals

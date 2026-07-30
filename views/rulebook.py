@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from state_manager import add_step, add_rule, save_session_state
+from state_manager import add_step, add_rule, save_session_state, save_db_session
 from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
 
 def render_rulebook_tab(df):
@@ -9,14 +9,14 @@ def render_rulebook_tab(df):
         with st.expander(f"Recommended Rules ({len(st.session_state.proposals)})", expanded=False):
             if st.button("Accept All Recommendations", key="accept_all_proposals", width="stretch"):
                 for p in st.session_state.proposals:
-                    st.session_state.scanned_columns.add(p['column'])
+                    st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
                     if 'action' in p['rule_data']:
                         add_step(p['rule_data'])
                     else:
                         add_rule(p['rule_data'], at_end=True)
                 st.session_state.proposals = []
                 st.toast("All recommendations accepted")
-                st.rerun()
+                
 
             p_cols = st.columns(2)
             for p_idx, p in enumerate(st.session_state.proposals):
@@ -24,18 +24,19 @@ def render_rulebook_tab(df):
                     st.markdown(f'<div class="proposal-box"><strong>{p["type"]} on {p["column"]}</strong><br/><small>{p["reason"]}</small></div>', unsafe_allow_html=True)
                     acc, dis = st.columns(2)
                     if acc.button("Accept", key=f"p_acc_{p_idx}", width="stretch"):
-                        st.session_state.scanned_columns.add(p['column'])
+                        st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
                         if 'action' in p['rule_data']:
                             add_step(p['rule_data'])
                         else:
                             add_rule(p['rule_data'], at_end=False)
                         st.session_state.proposals.pop(p_idx)
-                        st.rerun()
+                        
                     if dis.button("Dismiss", key=f"p_dis_{p_idx}", width="stretch"):
-                        st.session_state.scanned_columns.add(p['column'])
+                        st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
                         st.session_state.proposals.pop(p_idx)
                         save_session_state()
-                        st.rerun()
+                        save_db_session()
+                        
         st.divider()
 
     r1, r2 = st.columns([1, 1])
@@ -46,7 +47,7 @@ def render_rulebook_tab(df):
             note = st.text_area("Note/Warning", placeholder="e.g., This column contains high cardinality data.", key="info_note_input")
             if st.button("Add Rule", key="btn_add_info"):
                 add_rule({"type": "Informational", "desc": note})
-                st.rerun()
+                
         elif rtype == "Custom Expression":
             with st.form(key="custom_expr_form", clear_on_submit=True):
                 st.caption("Write a Pandas query that **flags bad rows** (violations). Matching rows will be treated as violations.")
@@ -60,10 +61,10 @@ def render_rulebook_tab(df):
                     if len(df) > 0 and len(test_result) == 0:
                         st.warning("This query matches no rows on the current dataset — the rule will be added but show 0 violations. Check for typos or type mismatches.")
                         add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Violates: {q_str}"})
-                        st.rerun()
+                        
                     else:
                         add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Violates: {q_str}"})
-                        st.rerun()
+                        
                 except Exception as e:
                     err_msg = str(e)
                     if "invalid syntax" in err_msg.lower():
@@ -82,14 +83,14 @@ def render_rulebook_tab(df):
                 col_b = st.selectbox("Feature B", all_cols, key="rel_feature_b")
                 if st.button("Add Rule", key="btn_add_rel_feat"):
                     add_rule({"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}"})
-                    st.rerun()
+                    
             else:
                 val = st.text_input("Constant Value", key="rel_val_input")
                 if st.button("Add Rule", key="btn_add_rel_val"):
                     try: final_val = float(val)
                     except (ValueError, TypeError): final_val = val
                     add_rule({"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}"})
-                    st.rerun()
+                    
         else:
             tcol = st.selectbox("Target Column", all_cols, key="rule_target_col")
             if rtype == "Range Check":
@@ -98,13 +99,13 @@ def render_rulebook_tab(df):
                     v_min, v_max = num_col1.number_input("Min", value=float(df[tcol].min()), key="range_min_input"), num_col2.number_input("Max", value=float(df[tcol].max()), key="range_max_input")
                     if st.button("Add Rule", key="btn_add_range"):
                         add_rule({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]"})
-                        st.rerun()
+                        
                 else:
                     st.warning(f"Range Checks are only applicable to numeric columns. '{tcol}' is {df[tcol].dtype}.")
             elif rtype == "Null Check":
                 if st.button("Add Rule", key="btn_add_null"):
                     add_rule({"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL"})
-                    st.rerun()
+                    
     with r2:
         st.subheader("Active Rules")
         if st.session_state.rules:
@@ -131,7 +132,7 @@ def render_rulebook_tab(df):
             if btn_col2.button("Clear All", use_container_width=True, key="clear_all_rules_btn"):
                 st.session_state.rules, st.session_state.cleaning_recipe = [], []
                 save_session_state()
-                st.rerun()
+                
 
         if not st.session_state.rules:
             st.info("Add a rule from the left panel")
@@ -176,7 +177,7 @@ def render_rulebook_tab(df):
                                         st.session_state.rules[idx]['resolved'] = True
                                 except Exception:
                                     pass
-                                st.rerun()
+                                
                         elif rule['type'] == "Range Check":
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Res", ["Select resolution method...", "Drop Rows", "Cap at Bounds", "Log Transform"], key=f"range_res_{idx}", label_visibility="collapsed")
@@ -189,7 +190,7 @@ def render_rulebook_tab(df):
                                         st.session_state.rules[idx]['resolved'] = True
                                 except Exception:
                                     pass
-                                st.rerun()
+                                
                         else:
                             if st.button("Drop Violated Rows", key=f"gen_res_{idx}", width="stretch"):
                                 add_step(create_resolution_step(rule, "Drop Violated Rows"))
@@ -200,14 +201,14 @@ def render_rulebook_tab(df):
                                         st.session_state.rules[idx]['resolved'] = True
                                 except Exception:
                                     pass
-                                st.rerun()
+                                
 
                     btn_c1, btn_c2 = st.columns(2)
                     if btn_c1.button("Ignore" if rule['enabled'] else "Enable", key=f"tg_{idx}", width="stretch"):
                         st.session_state.rules[idx]['enabled'] = not rule['enabled']
                         save_session_state()
-                        st.rerun()
+                        
                     if btn_c2.button("Remove", key=f"del_{idx}", width="stretch"):
                         st.session_state.rules.pop(idx)
                         save_session_state()
-                        st.rerun()
+                        

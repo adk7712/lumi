@@ -18,12 +18,24 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
         if rule_type == "Null Check":
             mask = df[rule['col']].isnull()
         elif rule_type == "Range Check":
-            # Coerce to numeric to avoid errors with mixed types before comparison
-            col_numeric = pd.to_numeric(df[rule['col']], errors='coerce')
-            # Flag values outside the range OR values that could not be coerced (are NaN)
-            out_of_range_mask = (col_numeric < rule['min']) | (col_numeric > rule['max'])
-            nan_mask = col_numeric.isnull()
-            mask = out_of_range_mask | nan_mask
+            col_name = rule['col']  # KeyError if missing — intentional for malformed rules
+            rule_min = rule.get('min')
+            rule_max = rule.get('max')
+            # Guard against NaN/None/inf in bounds (can happen from corrupted JSON)
+            import math
+            if rule_min is None or rule_max is None:
+                mask = pd.Series(False, index=df.index)
+            elif isinstance(rule_min, float) and (math.isnan(rule_min) or math.isinf(rule_min)):
+                mask = pd.Series(False, index=df.index)
+            elif isinstance(rule_max, float) and (math.isnan(rule_max) or math.isinf(rule_max)):
+                mask = pd.Series(False, index=df.index)
+            else:
+                # Coerce to numeric to avoid errors with mixed types before comparison
+                col_numeric = pd.to_numeric(df[col_name], errors='coerce')
+                # Flag values outside the range OR values that could not be coerced (are NaN)
+                out_of_range_mask = (col_numeric < rule_min) | (col_numeric > rule_max)
+                nan_mask = col_numeric.isnull()
+                mask = out_of_range_mask | nan_mask
         elif rule_type == "Relational Check":
             a = df[rule['col_a']]
             b = df[rule['col_b']] if rule.get('target_type') == 'Feature' else rule['value']

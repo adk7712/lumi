@@ -57,4 +57,4 @@ def render_audit_log_tab():
                     for r_step in remaining_recipe:
                         add_step(r_step)
                     save_session_state()
-                    st.rerun()
+                    st.session_state._needs_rerun = True

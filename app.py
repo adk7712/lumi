@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import streamlit.components.v1 as components
 from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog, show_signout_dialog, flush_pending_events
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state
 from views import (
@@ -64,7 +65,6 @@ if st.session_state.raw_data is None:
     st.stop()
 
 
-
 # --- HEADER (only shown after a dataset is loaded) ---
 h_col1, h_col2, h_col3 = st.columns([7, 3, 2])
 with h_col1:
@@ -112,13 +112,13 @@ df = st.session_state.current_df
 # --- TABS ---
 TAB_NAMES = ["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"]
 
-# Persist and restore active tab via query params
-_active_tab = st.query_params.get("tab", "Overview")
-if _active_tab not in TAB_NAMES:
-    _active_tab = "Overview"
-_active_tab_idx = TAB_NAMES.index(_active_tab)
+if "main_tabs" not in st.session_state:
+    _query_tab = st.query_params.get("tab", "Overview")
+    st.session_state["main_tabs"] = _query_tab if _query_tab in TAB_NAMES else "Overview"
 
-tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs(TAB_NAMES)
+tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs(
+    TAB_NAMES
+)
 
 with tab_overview:
     render_overview_tab(df)
@@ -141,50 +141,33 @@ with tab_audit:
 with tab_pipeline:
     render_pipeline_preview_tab(df)
 
-# st.markdown injects into the main page frame (not a sandboxed iframe),
-# so document.querySelectorAll works without triggering a SecurityError.
-if _active_tab_idx > 0:
-    st.markdown(
-        f"""
-        <script>
-        (function() {{
-            function clickTab() {{
-                var btns = document.querySelectorAll('[data-baseweb="tab"]');
-                if (btns.length > {_active_tab_idx}) {{
-                    btns[{_active_tab_idx}].click();
-                }} else {{
-                    setTimeout(clickTab, 100);
-                }}
-            }}
-            setTimeout(clickTab, 80);
-        }})();
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
-
-# Update ?tab= param when user clicks each tab
-st.markdown(
+# Update ?tab= param when user clicks each tab using lightweight st.html
+# This avoids the iframe overhead of components.html which can cause DOM duplication issues
+_tab_names_js = str(TAB_NAMES)
+st.html(
     f"""
     <script>
     (function() {{
-        var tabNames = {TAB_NAMES};
-        function setupTabListeners() {{
-            var btns = document.querySelectorAll('[data-baseweb="tab"]');
-            if (!btns.length) {{ setTimeout(setupTabListeners, 100); return; }}
-            btns.forEach(function(btn, idx) {{
-                btn.addEventListener('click', function() {{
-                    var url = new URL(window.location.href);
-                    url.searchParams.set('tab', tabNames[idx]);
-                    window.history.replaceState(null, '', url.toString());
-                }});
-            }});
-        }}
-        setTimeout(setupTabListeners, 200);
+        if (window.lumiTabListenerAttached) return;
+        window.lumiTabListenerAttached = true;
+        
+        var tabNames = {_tab_names_js};
+        document.addEventListener('click', function(e) {{
+            if (!e.isTrusted) return;
+            var tab = e.target.closest('[data-baseweb="tab"]');
+            if (!tab) return;
+            
+            var btns = Array.from(document.querySelectorAll('[data-baseweb="tab"]'));
+            var idx = btns.indexOf(tab);
+            if (idx >= 0 && idx < tabNames.length) {{
+                var url = new URL(window.location.href);
+                url.searchParams.set('tab', tabNames[idx]);
+                window.history.replaceState(null, '', url.toString());
+            }}
+        }}, true);
     }})();
     </script>
-    """,
-    unsafe_allow_html=True
+    """
 )
 
 # Bottom violation browser

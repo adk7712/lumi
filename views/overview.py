@@ -72,7 +72,7 @@ def render_overview_tab(df):
                         help=f"Removes the {duplicates_count} rows that contain identical values across all features."
                     ):
                         add_step({"action": "drop_duplicates"})
-                        st.rerun()
+                        st.session_state._needs_rerun = True
                 if empty_cols_count > 0:
                     cols_preview = ", ".join(empty_cols[:3]) + ("..." if len(empty_cols) > 3 else "")
                     if st.button(
@@ -82,7 +82,7 @@ def render_overview_tab(df):
                         help=f"Drops columns containing 100% missing values: {cols_preview}"
                     ):
                         add_step({"action": "drop_empty_columns"})
-                        st.rerun()
+                        st.session_state._needs_rerun = True
                 if empty_rows_count > 0:
                     if st.button(
                         f"Remove {empty_rows_count} Empty Rows",
@@ -91,7 +91,7 @@ def render_overview_tab(df):
                         help=f"Removes the {empty_rows_count} rows that are entirely empty."
                     ):
                         add_step({"action": "drop_empty_rows"})
-                        st.rerun()
+                        st.session_state._needs_rerun = True
                 if whitespace_cols:
                     cols_preview = ", ".join(whitespace_cols[:3]) + ("..." if len(whitespace_cols) > 3 else "")
                     if st.button(
@@ -101,7 +101,7 @@ def render_overview_tab(df):
                         help=f"Strips leading/trailing whitespaces from text columns: {cols_preview}"
                     ):
                         add_step({"action": "strip_whitespace", "column": "All"})
-                        st.rerun()
+                        st.session_state._needs_rerun = True
                 if unnormalized_cols:
                     cols_preview = ", ".join(f"'{c}'" for c in unnormalized_cols[:3]) + ("..." if len(unnormalized_cols) > 3 else "")
                     if st.button(
@@ -115,7 +115,7 @@ def render_overview_tab(df):
                         add_step({"action": "normalize_column_names", "value": "snake_case"})
                         for orig, val in new_names.items():
                             sync_column_rename(orig, val)
-                        st.rerun()
+                        st.session_state._needs_rerun = True
         else:
             st.markdown("*Your dataset looks clean! No quick actions recommended.*")
 

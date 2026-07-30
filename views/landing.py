@@ -59,10 +59,8 @@ def render_iframe_dropzone_patch():
     })();
     </script>
     """
-    st.iframe(
-        src="data:text/html;charset=utf-8," + urllib.parse.quote(_js),
-        height=1
-    )
+    import streamlit.components.v1 as components
+    components.html(_js, height=0)
 
 def render_landing_page():
     # Render clean background grid and orbs
@@ -91,6 +89,12 @@ def render_landing_page():
             filename = db_session.get("filename", "dataset")
             project_name = db_session.get("project_name", "Untitled Project")
             expected_columns = db_session.get("scanned_columns", set())
+            expected_cols = set()
+            for item in expected_columns:
+                if ":" in item:
+                    expected_cols.add(item.split(":")[0])
+                else:
+                    expected_cols.add(item)
             
             st.markdown(
                 f'<div style="text-align: center; margin-top: 6rem; margin-bottom: 2.5rem; position: relative; z-index: 1;">'
@@ -129,13 +133,13 @@ def render_landing_page():
                         uploaded_columns = set(df_header.columns)
                     except Exception:
                         uploaded_columns = set()
-
+ 
                     mismatch = False
                     reasons = []
                     if uploaded_filename != filename:
                         mismatch = True
                         reasons.append(f"Filename mismatch: expected '{filename}', got '{uploaded_filename}'")
-                    if expected_columns and not expected_columns.issubset(uploaded_columns):
+                    if expected_cols and not expected_cols.issubset(uploaded_columns):
                         mismatch = True
                         reasons.append("Column headers mismatch (some expected columns are missing in the uploaded file)")
 
@@ -146,6 +150,7 @@ def render_landing_page():
                         
                         w_c1, w_c2 = st.columns(2)
                         if w_c1.button("Proceed anyway", key="proceed_anyway_btn", use_container_width=True):
+                            resume_uploader.seek(0)
                             success = load_db_session(active_resume_id, resume_uploader)
                             if success:
                                 st.session_state.pop("resume_session_id", None)
@@ -155,6 +160,7 @@ def render_landing_page():
                         if w_c2.button("Cancel upload", key="cancel_upload_btn", use_container_width=True):
                             st.rerun()
                     else:
+                        resume_uploader.seek(0)
                         success = load_db_session(active_resume_id, resume_uploader)
                         if success:
                             st.session_state.pop("resume_session_id", None)

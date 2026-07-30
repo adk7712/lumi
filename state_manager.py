@@ -32,9 +32,10 @@ def load_data(file_path_or_buffer, nrows=None):
         # Streamlit's UploadedFile object has a 'type' attribute
         if hasattr(file_path_or_buffer, 'type'):
             file_type = file_path_or_buffer.type
-            if file_type == "text/csv":
+            name = getattr(file_path_or_buffer, 'name', '').lower()
+            if file_type == "text/csv" or name.endswith('.csv'):
                 df = pd.read_csv(file_path_or_buffer, nrows=nrows)
-            elif file_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            elif file_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" or name.endswith('.xlsx'):
                 df = pd.read_excel(file_path_or_buffer, nrows=nrows)
             else:
                 df = pd.DataFrame()
@@ -274,8 +275,18 @@ def save_session_state():
     except Exception:
         pass
 
-def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str = None):
-    """Processes a newly uploaded file and initializes the session state."""
+def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str = None, _skip_db_save: bool = False):
+    """Processes a newly uploaded file and initializes the session state.
+    
+    Args:
+        _skip_db_save: When True, suppresses the automatic save_db_session() call.
+            Used during session restoration to avoid overwriting the DB with empty state
+            before the caller has a chance to restore rules/recipe/scanned_columns.
+    """
+    # Ensure file cursor is at the start before reading
+    if hasattr(file_buffer, 'seek'):
+        file_buffer.seek(0)
+    
     is_large = file_buffer.size > LARGE_FILE_THRESHOLD_BYTES
     if is_large:
         st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.")
@@ -318,15 +329,17 @@ def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str =
     st.session_state.current_df = base_df.copy()
     st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
     
-    save_db_session()
+    if not _skip_db_save:
+        save_db_session()
     st.toast("Dataset Analyzed")
 
 def load_session_state(file_hash: str, file_buffer):
     """Loads and restores the cleaning recipe and rules from the local cache."""
-    process_uploaded_file(file_buffer, file_hash)
+    process_uploaded_file(file_buffer, file_hash, _skip_db_save=True)
     
     cache_path = CACHE_DIR / f"{file_hash}.json"
     if not cache_path.exists():
+        save_db_session()
         return
         
     try:
@@ -355,6 +368,9 @@ def load_session_state(file_hash: str, file_buffer):
         
         # Re-generate proposals based on scanned columns
         st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+        
+        # Persist the restored state to the DB so it survives page reloads
+        save_db_session()
         
         st.toast("Session Restored successfully")
     except Exception as e:
@@ -395,9 +411,15 @@ def load_db_session(session_id: str, file_buffer) -> bool:
     db_session = load_session(session_id, get_logged_in_user())
     if not db_session:
         return False
-        
-    # Process the file buffer to load data, using the retrieved session_id
-    process_uploaded_file(file_buffer, session_id, restore_session_id=session_id)
+    
+    # Ensure file cursor is at the start before reading
+    if hasattr(file_buffer, 'seek'):
+        file_buffer.seek(0)
+    
+    # Process the file buffer to load data, using the retrieved session_id.
+    # _skip_db_save=True prevents overwriting the DB with empty state before
+    # we have a chance to restore the actual recipe/rules/scanned_columns.
+    process_uploaded_file(file_buffer, session_id, restore_session_id=session_id, _skip_db_save=True)
     
     # Restore metadata from DB
     st.session_state.cleaning_recipe = db_session.get('cleaning_recipe', [])
@@ -424,6 +446,9 @@ def load_db_session(session_id: str, file_buffer) -> bool:
     
     # Re-generate proposals based on scanned columns
     st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+    
+    # Persist the fully restored state to the DB so it survives subsequent reloads
+    save_db_session()
     
     st.toast("Session Restored successfully")
     return True
