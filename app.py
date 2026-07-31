@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import streamlit.components.v1 as components
 from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog, show_signout_dialog, flush_pending_events
-from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state
+from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state, regenerate_proposals
 from views import (
     render_overview_tab,
     render_diagnostics_tab,
@@ -78,6 +78,7 @@ def handle_undo():
             st.session_state.scanned_columns.discard(f"{popped_step['_source_proposal_col']}:{popped_step['_source_proposal_type']}")
         st.session_state.intermediate_states.pop()
         st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
+        regenerate_proposals()
         save_session_state()
 
 def render_header():

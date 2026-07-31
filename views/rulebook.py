@@ -1,57 +1,79 @@
 import streamlit as st
 import pandas as pd
-from state_manager import add_step, add_rule, save_session_state, save_db_session
+from state_manager import add_step, add_rule, save_session_state, save_db_session, regenerate_proposals
 from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
+
+def handle_accept_all():
+    for p in st.session_state.proposals:
+        st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
+        if 'action' in p['rule_data']:
+            s_data = p['rule_data'].copy()
+            s_data['_source_proposal_type'] = p['type']
+            s_data['_source_proposal_col'] = p['column']
+            add_step(s_data)
+        else:
+            r_data = p['rule_data'].copy()
+            r_data['_source_proposal_type'] = p['type']
+            r_data['_source_proposal_col'] = p['column']
+            add_rule(r_data, at_end=True)
+    st.session_state.proposals = []
+    st.toast("All recommendations accepted")
+
+def handle_accept_proposal(p_idx, p):
+    st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
+    if 'action' in p['rule_data']:
+        s_data = p['rule_data'].copy()
+        s_data['_source_proposal_type'] = p['type']
+        s_data['_source_proposal_col'] = p['column']
+        add_step(s_data)
+    else:
+        r_data = p['rule_data'].copy()
+        r_data['_source_proposal_type'] = p['type']
+        r_data['_source_proposal_col'] = p['column']
+        add_rule(r_data, at_end=False)
+    st.session_state.proposals.pop(p_idx)
+
+def handle_dismiss_proposal(p_idx, p):
+    st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
+    st.session_state.proposals.pop(p_idx)
+    save_session_state()
+    save_db_session()
+
+def handle_clear_all():
+    for r in st.session_state.rules:
+        if '_source_proposal_type' in r and '_source_proposal_col' in r:
+            st.session_state.scanned_columns.discard(f"{r['_source_proposal_col']}:{r['_source_proposal_type']}")
+    for s in st.session_state.cleaning_recipe:
+        if '_source_proposal_type' in s and '_source_proposal_col' in s:
+            st.session_state.scanned_columns.discard(f"{s['_source_proposal_col']}:{s['_source_proposal_type']}")
+    st.session_state.rules, st.session_state.cleaning_recipe = [], []
+    st.session_state.intermediate_states = []
+    if st.session_state.raw_data is not None:
+        st.session_state.current_df = st.session_state.raw_data.copy()
+    regenerate_proposals()
+    save_session_state()
+    
+def handle_remove_rule(idx):
+    r = st.session_state.rules[idx]
+    if '_source_proposal_type' in r and '_source_proposal_col' in r:
+        st.session_state.scanned_columns.discard(f"{r['_source_proposal_col']}:{r['_source_proposal_type']}")
+    st.session_state.rules.pop(idx)
+    regenerate_proposals()
+    save_session_state()
 
 def render_rulebook_tab(df):
     all_cols = df.columns.tolist()
     if st.session_state.proposals:
         with st.expander(f"Recommended Rules ({len(st.session_state.proposals)})", expanded=False):
-            if st.button("Accept All Recommendations", key="accept_all_proposals", width="stretch"):
-                for p in st.session_state.proposals:
-                    st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
-                    if 'action' in p['rule_data']:
-                        s_data = p['rule_data'].copy()
-                        s_data['_source_proposal_type'] = p['type']
-                        s_data['_source_proposal_col'] = p['column']
-                        add_step(s_data)
-                        st.session_state._needs_rerun = True
-                    else:
-                        r_data = p['rule_data'].copy()
-                        r_data['_source_proposal_type'] = p['type']
-                        add_rule(r_data, at_end=True)
-                        st.session_state._needs_rerun = True
-                st.session_state.proposals = []
-                st.toast("All recommendations accepted")
-                
+            st.button("Accept All Recommendations", key="accept_all_proposals", width="stretch", on_click=handle_accept_all)
 
             p_cols = st.columns(2)
             for p_idx, p in enumerate(st.session_state.proposals):
                 with p_cols[p_idx % 2]:
                     st.markdown(f'<div class="proposal-box"><strong>{p["type"]} on {p["column"]}</strong><br/><small>{p["reason"]}</small></div>', unsafe_allow_html=True)
                     acc, dis = st.columns(2)
-                    if acc.button("Accept", key=f"p_acc_{p_idx}", width="stretch"):
-                        st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
-                        if 'action' in p['rule_data']:
-                            s_data = p['rule_data'].copy()
-                            s_data['_source_proposal_type'] = p['type']
-                            s_data['_source_proposal_col'] = p['column']
-                            add_step(s_data)
-                            st.session_state._needs_rerun = True
-                        else:
-                            # Tag the rule with its source proposal so it can be restored if removed
-                            r_data = p['rule_data'].copy()
-                            r_data['_source_proposal_type'] = p['type']
-                            add_rule(r_data, at_end=False)
-                            st.session_state._needs_rerun = True
-                        st.session_state.proposals.pop(p_idx)
-                        
-                    if dis.button("Dismiss", key=f"p_dis_{p_idx}", width="stretch"):
-                        st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
-                        st.session_state.proposals.pop(p_idx)
-                        save_session_state()
-                        st.session_state._needs_rerun = True
-                        save_db_session()
+                    acc.button("Accept", key=f"p_acc_{p['column']}_{p['type']}_{p_idx}", width="stretch", on_click=handle_accept_proposal, args=(p_idx, p))
+                    dis.button("Dismiss", key=f"p_dis_{p['column']}_{p['type']}_{p_idx}", width="stretch", on_click=handle_dismiss_proposal, args=(p_idx, p))
                         
         st.divider()
 
@@ -152,16 +174,7 @@ def render_rulebook_tab(df):
                 use_container_width=True,
                 key="download_evidence_report_btn"
             )
-            if btn_col2.button("Clear All", use_container_width=True, key="clear_all_rules_btn"):
-                for r in st.session_state.rules:
-                    if '_source_proposal_type' in r:
-                        col = r.get('col') or r.get('col_a')
-                        if col:
-                            st.session_state.scanned_columns.discard(f"{col}:{r['_source_proposal_type']}")
-                st.session_state.rules, st.session_state.cleaning_recipe = [], []
-                save_session_state()
-                st.session_state._needs_rerun = True
-                
+            btn_col2.button("Clear All", use_container_width=True, key="clear_all_rules_btn", on_click=handle_clear_all)
 
         if not st.session_state.rules:
             st.info("Add a rule from the left panel")
@@ -241,12 +254,5 @@ def render_rulebook_tab(df):
                         save_session_state()
                         st.session_state._needs_rerun = True
                         
-                    if btn_c2.button("Remove", key=f"del_{idx}", width="stretch"):
-                        removed_rule = st.session_state.rules.pop(idx)
-                        if '_source_proposal_type' in removed_rule:
-                            col = removed_rule.get('col') or removed_rule.get('col_a')
-                            if col:
-                                st.session_state.scanned_columns.discard(f"{col}:{removed_rule['_source_proposal_type']}")
-                        save_session_state()
-                        st.session_state._needs_rerun = True
+                    btn_c2.button("Remove", key=f"del_{idx}", width="stretch", on_click=handle_remove_rule, args=(idx,))
                         

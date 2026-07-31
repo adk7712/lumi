@@ -450,5 +450,10 @@ def load_db_session(session_id: str, file_buffer) -> bool:
     # Persist the fully restored state to the DB so it survives subsequent reloads
     save_db_session()
     
+def regenerate_proposals():
+    """Helper to recalculate proposals when active rules/steps are removed."""
+    if 'raw_data' in st.session_state and st.session_state.raw_data is not None:
+        st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+    
     st.toast("Session Restored successfully")
     return True
