@@ -8,6 +8,9 @@ import io
 import streamlit as st
 import sqlite3
 
+import persistence
+persistence.DB_PATH = Path("test_lumi.db")
+
 from persistence import (
     init_db,
     save_session,
@@ -16,8 +19,7 @@ from persistence import (
     count_user_sessions,
     delete_session,
     rename_session,
-    toggle_pin_session,
-    DB_PATH
+    toggle_pin_session
 )
 
 from state_manager import (
@@ -33,15 +35,15 @@ from ui_utils import is_authenticated_user
 class TestMultiWorkspace(unittest.TestCase):
 
     def setUp(self):
-        if DB_PATH.exists():
-            try: DB_PATH.unlink()
+        if persistence.DB_PATH.exists():
+            try: persistence.DB_PATH.unlink()
             except Exception: pass
         init_db()
         initialize_state(from_reset=True)
 
     def tearDown(self):
-        if DB_PATH.exists():
-            try: DB_PATH.unlink()
+        if persistence.DB_PATH.exists():
+            try: persistence.DB_PATH.unlink()
             except Exception: pass
 
     def test_cached_file_wrapper(self):

@@ -8,24 +8,64 @@ from engine_ops import predict_column_renames
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
-    health = calculate_health(df)
-    active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
+    
+    # Memoize metrics per DataFrame shape & recipe length
+    recipe_len = len(st.session_state.cleaning_recipe)
+    rules_len = len(st.session_state.rules)
+    cache_key = f"_overview_metrics_{id(df)}_{recipe_len}_{rules_len}"
+    
+    if cache_key in st.session_state:
+        metrics = st.session_state[cache_key]
+    else:
+        health = calculate_health(df)
+        active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
+        total_violations = 0
+        for rule in active_rules_list:
+            if rule.get('type') == "Informational":
+                continue
+            try:
+                total_violations += evaluate_rule(df, rule).sum()
+            except (ValueError, KeyError, TypeError):
+                pass
+        
+        dup_count = int(df.duplicated().sum())
+        mem_mb = df.memory_usage(deep=True).sum() / (1024**2)
+        empty_cols = [c for c in df.columns if df[c].isnull().all()]
+        empty_rows_count = int(df.isnull().all(axis=1).sum())
+        
+        whitespace_cols = []
+        for c in df.select_dtypes(include=['object', 'string']).columns:
+            s = df[c].dropna().astype(str)
+            if (s.str.strip() != s).any():
+                whitespace_cols.append(c)
 
-    total_violations = 0
-    for rule in active_rules_list:
-        if rule.get('type') == "Informational":
-            continue
-        try:
-            total_violations += evaluate_rule(df, rule).sum()
-        except (ValueError, KeyError, TypeError) as e:
-            st.toast(f"Overview Rule Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}")
+        metrics = {
+            "health": health,
+            "active_rules_list": active_rules_list,
+            "total_violations": total_violations,
+            "dup_count": dup_count,
+            "mem_mb": mem_mb,
+            "empty_cols": empty_cols,
+            "empty_rows_count": empty_rows_count,
+            "whitespace_cols": whitespace_cols
+        }
+        st.session_state[cache_key] = metrics
+
+    health = metrics["health"]
+    active_rules_list = metrics["active_rules_list"]
+    total_violations = metrics["total_violations"]
+    duplicates_count = metrics["dup_count"]
+    empty_cols = metrics["empty_cols"]
+    empty_cols_count = len(empty_cols)
+    empty_rows_count = metrics["empty_rows_count"]
+    whitespace_cols = metrics["whitespace_cols"]
 
     m_col1.metric("Health", f"{health}%")
     m_col2.metric("Rows", f"{len(df):,}")
     m_col3.metric("Columns", f"{len(df.columns)}")
-    m_col4.metric("Duplicates", f"{df.duplicated().sum():,}")
+    m_col4.metric("Duplicates", f"{duplicates_count:,}")
     m_col5.metric("Violations", f"{total_violations:,}")
-    m_col6.metric("Memory", f"{df.memory_usage(deep=True).sum() / 1024**2:.1f}MB")
+    m_col6.metric("Memory", f"{metrics['mem_mb']:.1f}MB")
     st.divider()
 
     o_col1, o_col2 = st.columns(2)
@@ -41,13 +81,6 @@ def render_overview_tab(df):
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
         st.subheader("Quick Actions")
-        duplicates_count = int(df.duplicated().sum())
-        empty_cols = [c for c in df.columns if df[c].isnull().all()]
-        empty_cols_count = len(empty_cols)
-        empty_rows_count = int(df.isnull().all(axis=1).sum())
-
-        # Scan for columns with leading/trailing whitespaces
-        whitespace_cols = []
         for c in df.columns:
             if df[c].dtype == 'object' or pd.api.types.is_string_dtype(df[c]):
                 non_null_strings = df[c].dropna().astype(str)

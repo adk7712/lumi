@@ -35,6 +35,51 @@ header [data-testid="collapsedControl"],
     display: none !important;
 }
 
+/* --- Circular Profile Icon Popover Button --- */
+.profile-popover-container [data-testid="stPopover"],
+.profile-popover-container [data-testid="stPopover"] > div {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.profile-popover-container [data-testid="stPopover"] button,
+.profile-popover-container [data-testid="stPopover"] button:hover,
+.profile-popover-container [data-testid="stPopover"] button:focus,
+.profile-popover-container [data-testid="stPopover"] button:active {
+    border-radius: 50% !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+    overflow: hidden !important;
+}
+
+.profile-popover-container [data-testid="stPopover"] button * {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+}
+
+.profile-popover-container [data-testid="stPopover"] button:hover {
+    background-color: rgba(255, 255, 255, 0.16) !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    transform: scale(1.06);
+}
+
 /* Tight top padding for maximum viewport size */
 .block-container {
     padding-top: 0.5rem !important;

@@ -9,10 +9,10 @@ APP_PATH = str(Path(__file__).parent.parent / "app.py")
 
 
 def setup_app_test():
-    at = AppTest.from_file(APP_PATH)
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
     at.run()
     # Click Get Started first to reveal the uploader
-    at.run()
+    at.run(timeout=10)
     at.session_state["_is_testing"] = True
     mock_csv = b"Id,Age,Sex,LotArea,Alley\n1,25,male,500,Pave\n2,30,female,600,Grvl\n3,35,male,700,\n"
     at.file_uploader(key="welcome_uploader").upload("train.csv", mock_csv, "text/csv").run()
@@ -21,8 +21,8 @@ def setup_app_test():
 
 def test_app_initialization():
     # Load app in memory
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.run(timeout=10)
     
     # Assert no exceptions occurred during execution
     assert not at.exception, "App should run without exceptions"

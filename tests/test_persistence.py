@@ -14,31 +14,33 @@ from unittest import mock
 import sqlite3
 
 # Import under test
-from persistence import init_db, save_session, load_session, get_user_projects, reconcile_session, DB_PATH
+import persistence
+persistence.DB_PATH = Path("test_lumi.db")
+from persistence import init_db, save_session, load_session, get_user_projects, reconcile_session
 from state_manager import process_uploaded_file, add_step, load_db_session, initialize_state, save_db_session
 
 class TestPersistence(unittest.TestCase):
     
     def setUp(self):
-        # Ensure we use a clean test database file
-        if DB_PATH.exists():
+        # Ensure we use an isolated test database file
+        if persistence.DB_PATH.exists():
             try:
-                DB_PATH.unlink()
+                persistence.DB_PATH.unlink()
             except Exception:
                 pass
         init_db()
 
     def tearDown(self):
         # Cleanup test database file
-        if DB_PATH.exists():
+        if persistence.DB_PATH.exists():
             try:
-                DB_PATH.unlink()
+                persistence.DB_PATH.unlink()
             except Exception:
                 pass
 
     def test_init_db(self):
         # Test table structure is correct
-        conn = sqlite3.connect(str(DB_PATH))
+        conn = sqlite3.connect(str(persistence.DB_PATH))
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
         table = cursor.fetchone()
@@ -165,8 +167,8 @@ class TestPersistence(unittest.TestCase):
 class TestCookiesAndPersistence(unittest.TestCase):
     
     def setUp(self):
-        if DB_PATH.exists():
-            try: DB_PATH.unlink()
+        if persistence.DB_PATH.exists():
+            try: persistence.DB_PATH.unlink()
             except Exception: pass
         init_db()
         
@@ -187,8 +189,8 @@ class TestCookiesAndPersistence(unittest.TestCase):
     def tearDown(self):
         st.query_params.clear()
         st.session_state.clear()
-        if DB_PATH.exists():
-            try: DB_PATH.unlink()
+        if persistence.DB_PATH.exists():
+            try: persistence.DB_PATH.unlink()
             except Exception: pass
 
     @mock.patch("streamlit.runtime.exists", return_value=True)

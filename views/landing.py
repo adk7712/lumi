@@ -16,7 +16,7 @@ def render_iframe_dropzone_patch():
     _js = """
     <script>
     (function() {
-        var doc = window.parent.document;
+        var doc = (window.parent && window.parent.document) ? window.parent.document : document;
 
         function applyDragStyle(dz) {
             dz.style.setProperty('border-style', 'dashed', 'important');
@@ -60,8 +60,7 @@ def render_iframe_dropzone_patch():
     })();
     </script>
     """
-    import streamlit.components.v1 as components
-    components.html(_js, height=0)
+    st.html(_js)
 
 def render_landing_page():
     # Render clean background grid and orbs
@@ -270,14 +269,15 @@ def render_landing_page():
     with c_hdr_r:
         if is_authenticated_user():
             u_email = get_logged_in_user()
-            current_ws = st.session_state.get("project_name") or st.session_state.get("filename") or "No active workspace"
-            with st.popover("👤 Profile", use_container_width=True):
-                st.markdown('<div style="font-weight: 600; font-size: 0.85rem; color: #a3a3a3;">ACCOUNT</div>', unsafe_allow_html=True)
-                st.markdown(f'<div style="font-size: 0.95rem; font-weight: 500; color: #ffffff; margin-bottom: 0.5rem; word-break: break-all;">{u_email}</div>', unsafe_allow_html=True)
-                st.caption(f"Active: {current_ws}")
+            u_email_safe = u_email.replace("@", "&#64;") if u_email else ""
+            st.markdown('<div class="profile-popover-container">', unsafe_allow_html=True)
+            with st.popover("", icon=":material/person:", help="Account Settings"):
+                st.markdown('<div style="font-weight: 600; font-size: 0.8rem; color: #a3a3a3; letter-spacing: 0.05em; margin-bottom: 0.2rem;">ACCOUNT</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size: 0.95rem; font-weight: 500; color: #ffffff; margin-bottom: 0.5rem; word-break: break-all; pointer-events: none;">{u_email_safe}</div>', unsafe_allow_html=True)
                 st.divider()
                 if st.button("Sign Out", key="landing_popover_signout_btn", use_container_width=True):
                     show_signout_dialog()
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
             if is_auth_configured():
                 st.button(

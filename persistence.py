@@ -7,18 +7,62 @@ DB_PATH = Path(__file__).parent / "lumi.db"
 def get_db_connection():
     """Establishes and returns a connection to the database.
     
-    If DB_URL is present in st.secrets, it connects to PostgreSQL using psycopg2.
-    Otherwise, it falls back to a local SQLite database.
+    If DB_URL is present in st.secrets or .streamlit/secrets.toml (and not in testing mode),
+    it connects to PostgreSQL using psycopg2. Otherwise, it falls back to a local SQLite database.
     """
     import streamlit as st
-    db_url = None
+    import os
+    
+    is_testing = os.getenv("LUMI_TESTING") == "1"
     try:
-        if "DB_URL" in st.secrets:
-            db_url = st.secrets["DB_URL"]
+        if hasattr(st, "session_state") and st.session_state.get("_is_testing", False):
+            is_testing = True
     except Exception:
         pass
 
-    if db_url:
+    db_url = None
+
+    def _find_url(sec):
+        if not isinstance(sec, (dict, st.secrets.__class__)):
+            return None
+        if "DB_URL" in sec:
+            return sec["DB_URL"]
+        if "DATABASE_URL" in sec:
+            return sec["DATABASE_URL"]
+        for k in sec:
+            try:
+                val = sec[k]
+                if isinstance(val, (dict, st.secrets.__class__)):
+                    res = _find_url(val)
+                    if res:
+                        return res
+            except Exception:
+                pass
+        return None
+
+    if not is_testing:
+        db_url = os.getenv("DB_URL") or os.getenv("DATABASE_URL")
+        if not db_url:
+            try:
+                if hasattr(st, "secrets"):
+                    db_url = _find_url(st.secrets)
+            except Exception:
+                pass
+        if not db_url:
+            try:
+                secrets_path = Path(__file__).parent / ".streamlit" / "secrets.toml"
+                if secrets_path.exists():
+                    try:
+                        import tomllib
+                    except ImportError:
+                        import tomli as tomllib
+                    with open(secrets_path, "rb") as f:
+                        sec = tomllib.load(f)
+                        db_url = _find_url(sec)
+            except Exception:
+                pass
+
+    if db_url and not is_testing:
         try:
             import psycopg2
             from psycopg2.extras import RealDictCursor
@@ -58,33 +102,69 @@ def migrate_db():
     finally:
         conn.close()
 
+_DB_INITIALIZED = False
+
+def clear_user_projects_cache(user_id: str = None):
+    """Helper to clear per-rerun user projects cache upon workspace mutations."""
+    import streamlit as st
+    if hasattr(st, "session_state"):
+        if user_id:
+            st.session_state.pop(f"_cache_user_projects_{user_id}", None)
+        else:
+            keys_to_del = [k for k in st.session_state.keys() if str(k).startswith("_cache_user_projects_")]
+            for k in keys_to_del:
+                st.session_state.pop(k, None)
+
 def init_db():
-    """Initializes the SQLite database schema if it does not exist."""
+    """Initializes the database schema if tables do not exist."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS sessions (
-                session_id TEXT PRIMARY KEY,
-                filename TEXT,
-                cleaning_recipe TEXT,
-                step_count INTEGER,
-                rules TEXT,
-                scanned_columns TEXT,
-                user_id TEXT,
-                project_name TEXT,
-                pinned INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        if "sqlite" in type(conn).__module__:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+            if cursor.fetchone():
+                return
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    filename TEXT,
+                    cleaning_recipe TEXT,
+                    step_count INTEGER,
+                    rules TEXT,
+                    scanned_columns TEXT,
+                    user_id TEXT,
+                    project_name TEXT,
+                    pinned INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("PRAGMA table_info(sessions)")
+            cols = [row[1] for row in cursor.fetchall()]
+            if "pinned" not in cols:
+                cursor.execute("ALTER TABLE sessions ADD COLUMN pinned INTEGER DEFAULT 0")
+        else:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    filename TEXT,
+                    cleaning_recipe TEXT,
+                    step_count INTEGER,
+                    rules TEXT,
+                    scanned_columns TEXT,
+                    user_id TEXT,
+                    project_name TEXT,
+                    pinned INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pinned INTEGER DEFAULT 0")
         conn.commit()
     except Exception as e:
         print(f"Database initialization error: {e}")
     finally:
         conn.close()
-    
-    migrate_db()
 
 def save_session(session_id: str, filename: str, recipe: list, rules: list, scanned_columns: list, user_id: str = None, project_name: str = None):
     """Saves or updates the session details in the database."""
@@ -130,6 +210,7 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
         """, (session_id, filename, recipe_json, step_count, rules_json, scanned_columns_json, final_user_id, final_project_name, now))
         
         conn.commit()
+        clear_user_projects_cache(final_user_id)
     except Exception as e:
         print(f"Error saving session {session_id}: {e}")
     finally:
@@ -173,6 +254,12 @@ def get_user_projects(user_id: str) -> list:
     """Retrieves all sessions/projects belonging to a specific user ordered by pinned status and last update."""
     if not user_id or user_id.startswith("guest_"):
         return []
+        
+    import streamlit as st
+    cache_key = f"_cache_user_projects_{user_id}"
+    if hasattr(st, "session_state") and cache_key in st.session_state:
+        return st.session_state[cache_key]
+
     init_db()
     conn = get_db_connection()
     try:
@@ -189,6 +276,8 @@ def get_user_projects(user_id: str) -> list:
                 "step_count": row["step_count"],
                 "pinned": row["pinned"] if "pinned" in row.keys() else 0
             })
+        if hasattr(st, "session_state"):
+            st.session_state[cache_key] = projects
         return projects
     except Exception as e:
         print(f"Error getting user projects for {user_id}: {e}")
@@ -200,18 +289,7 @@ def count_user_sessions(user_id: str) -> int:
     """Returns the total number of workspaces owned by a user."""
     if not user_id or user_id.startswith("guest_"):
         return 0
-    init_db()
-    conn = get_db_connection()
-    try:
-        cursor = conn.cursor()
-        _execute(conn, cursor, "SELECT COUNT(*) as cnt FROM sessions WHERE user_id = ?", (user_id,))
-        row = cursor.fetchone()
-        return row["cnt"] if row else 0
-    except Exception as e:
-        print(f"Error counting sessions for {user_id}: {e}")
-        return 0
-    finally:
-        conn.close()
+    return len(get_user_projects(user_id))
 
 def delete_session(session_id: str, user_id: str) -> bool:
     """Deletes a workspace session if owned by user_id."""
@@ -223,6 +301,7 @@ def delete_session(session_id: str, user_id: str) -> bool:
         cursor = conn.cursor()
         _execute(conn, cursor, "DELETE FROM sessions WHERE session_id = ? AND user_id = ?", (session_id, user_id))
         conn.commit()
+        clear_user_projects_cache(user_id)
         return True
     except Exception as e:
         print(f"Error deleting session {session_id}: {e}")
@@ -241,6 +320,7 @@ def rename_session(session_id: str, new_name: str, user_id: str) -> bool:
         now = datetime.now().isoformat()
         _execute(conn, cursor, "UPDATE sessions SET project_name = ?, updated_at = ? WHERE session_id = ? AND user_id = ?", (new_name, now, session_id, user_id))
         conn.commit()
+        clear_user_projects_cache(user_id)
         return True
     except Exception as e:
         print(f"Error renaming session {session_id}: {e}")
@@ -249,18 +329,26 @@ def rename_session(session_id: str, new_name: str, user_id: str) -> bool:
         conn.close()
 
 def toggle_pin_session(session_id: str, user_id: str) -> bool:
-    """Toggles the pinned status (0/1) of a workspace session."""
+    """Toggles the pinned status of a workspace session if owned by user_id."""
     if not session_id or not user_id or user_id.startswith("guest_"):
         return False
     init_db()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        _execute(conn, cursor, "UPDATE sessions SET pinned = CASE WHEN pinned = 1 THEN 0 ELSE 1 END WHERE session_id = ? AND user_id = ?", (session_id, user_id))
-        conn.commit()
-        return True
+        _execute(conn, cursor, "SELECT pinned FROM sessions WHERE session_id = ? AND user_id = ?", (session_id, user_id))
+        row = cursor.fetchone()
+        if row:
+            curr_pinned = row["pinned"] if "pinned" in row.keys() else 0
+            new_pinned = 0 if curr_pinned else 1
+            now = datetime.now().isoformat()
+            _execute(conn, cursor, "UPDATE sessions SET pinned = ?, updated_at = ? WHERE session_id = ? AND user_id = ?", (new_pinned, now, session_id, user_id))
+            conn.commit()
+            clear_user_projects_cache(user_id)
+            return True
+        return False
     except Exception as e:
-        print(f"Error toggling pin for session {session_id}: {e}")
+        print(f"Error toggling pin status for session {session_id}: {e}")
         return False
     finally:
         conn.close()

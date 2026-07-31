@@ -51,15 +51,16 @@ render_workspace_sidebar()
 # Resolve current user (used in header sign-out button)
 user_email = get_logged_in_user()
 
-# Reconciliation flow for signed-in users
+# Reconciliation flow for signed-in users (evaluated only once per session)
 if user_email:
     session_id = st.session_state.get("session_id")
-    if session_id:
+    if session_id and st.session_state.get("_reconciled_session") != session_id:
         from persistence import load_session, reconcile_session
         db_session = load_session(session_id, user_email)
         if db_session and db_session.get("user_id") != user_email:
             reconcile_session(session_id, user_email)
             st.toast("Workspace saved to your account!")
+        st.session_state["_reconciled_session"] = session_id
 
 # Landing page (no dataset loaded yet)
 if st.session_state.raw_data is None:
@@ -99,13 +100,17 @@ def render_header():
         with h_col3:
             if is_authenticated_user():
                 u_email = get_logged_in_user()
+                u_email_safe = u_email.replace("@", "&#64;") if u_email else ""
                 current_ws = st.session_state.get("project_name") or st.session_state.get("filename") or "Untitled Workspace"
-                with st.popover("👤 Profile", use_container_width=True):
-                    st.markdown(f"Logged in as:<br><strong>{u_email}</strong>", unsafe_allow_html=True)
+                st.markdown('<div class="profile-popover-container">', unsafe_allow_html=True)
+                with st.popover("", icon=":material/person:", help="Account Settings"):
+                    st.markdown('<div style="font-weight: 600; font-size: 0.8rem; color: #a3a3a3; letter-spacing: 0.05em; margin-bottom: 0.2rem;">ACCOUNT</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="font-size: 0.95rem; font-weight: 500; color: #ffffff; margin-bottom: 0.5rem; word-break: break-all; pointer-events: none;">{u_email_safe}</div>', unsafe_allow_html=True)
                     st.caption(f"Active Workspace:\n{current_ws}")
                     st.divider()
                     if st.button("Sign Out", key="header_popover_signout_btn", use_container_width=True):
                         show_signout_dialog()
+                st.markdown('</div>', unsafe_allow_html=True)
             else:
                 if is_auth_configured():
                     st.button(
