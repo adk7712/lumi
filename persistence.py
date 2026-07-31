@@ -4,12 +4,7 @@ from datetime import datetime
 
 DB_PATH = Path(__file__).parent / "lumi.db"
 
-def get_db_connection():
-    """Establishes and returns a connection to the database.
-    
-    If DB_URL is present in st.secrets or .streamlit/secrets.toml (and not in testing mode),
-    it connects to PostgreSQL using psycopg2. Otherwise, it falls back to a local SQLite database.
-    """
+def _get_db_url():
     import streamlit as st
     import os
     
@@ -20,7 +15,10 @@ def get_db_connection():
     except Exception:
         pass
 
-    db_url = None
+    if is_testing:
+        return None
+
+    db_url = os.getenv("DB_URL") or os.getenv("DATABASE_URL")
 
     def _find_url(sec):
         if not isinstance(sec, (dict, st.secrets.__class__)):
@@ -40,42 +38,81 @@ def get_db_connection():
                 pass
         return None
 
-    if not is_testing:
-        db_url = os.getenv("DB_URL") or os.getenv("DATABASE_URL")
-        if not db_url:
-            try:
-                if hasattr(st, "secrets"):
-                    db_url = _find_url(st.secrets)
-            except Exception:
-                pass
-        if not db_url:
-            try:
-                secrets_path = Path(__file__).parent / ".streamlit" / "secrets.toml"
-                if secrets_path.exists():
-                    try:
-                        import tomllib
-                    except ImportError:
-                        import tomli as tomllib
-                    with open(secrets_path, "rb") as f:
-                        sec = tomllib.load(f)
-                        db_url = _find_url(sec)
-            except Exception:
-                pass
-
-    if db_url and not is_testing:
+    if not db_url:
         try:
-            import psycopg2
-            from psycopg2.extras import RealDictCursor
-            conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
-            return conn
+            if hasattr(st, "secrets"):
+                db_url = _find_url(st.secrets)
+        except Exception:
+            pass
+
+    if not db_url:
+        try:
+            secrets_path = Path(__file__).parent / ".streamlit" / "secrets.toml"
+            if secrets_path.exists():
+                try:
+                    import tomllib
+                except ImportError:
+                    import tomli as tomllib
+                with open(secrets_path, "rb") as f:
+                    sec = tomllib.load(f)
+                    db_url = _find_url(sec)
+        except Exception:
+            pass
+
+    return db_url
+
+import streamlit as st
+
+@st.cache_resource
+def _get_pg_pool(db_url):
+    import psycopg2.pool
+    from psycopg2.extras import RealDictCursor
+    return psycopg2.pool.ThreadedConnectionPool(minconn=1, maxconn=10, dsn=db_url, cursor_factory=RealDictCursor)
+
+def get_db_connection():
+    """Establishes and returns a connection to the database.
+    
+    If DB_URL is present in st.secrets or .streamlit/secrets.toml (and not in testing mode),
+    it borrows a connection from the PostgreSQL connection pool. Otherwise, it falls back to SQLite.
+    """
+    db_url = _get_db_url()
+    if db_url:
+        try:
+            pool = _get_pg_pool(db_url)
+            return pool.getconn()
         except Exception as e:
-            print(f"Warning: Failed to connect to PostgreSQL (DB_URL configured). Falling back to SQLite. Error: {e}")
+            print(f"Warning: Failed to get connection from PostgreSQL pool. Falling back to SQLite. Error: {e}")
     
     # Fallback to local SQLite database
     import sqlite3
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
+
+def release_db_connection(conn):
+    """Releases a connection back to the pool or closes it depending on the driver."""
+    if conn is None:
+        return
+    import sqlite3
+    if isinstance(conn, sqlite3.Connection):
+        conn.close()
+    else:
+        db_url = _get_db_url()
+        if db_url:
+            try:
+                pool = _get_pg_pool(db_url)
+                pool.putconn(conn)
+            except Exception as e:
+                print(f"Warning: Failed to release connection back to pool. Closing connection. Error: {e}")
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        else:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 def _execute(conn, cursor, sql: str, params: tuple = ()):
     """Helper to execute SQL queries using correct placeholders based on database engine."""
@@ -100,7 +137,7 @@ def migrate_db():
     except Exception as e:
         print(f"Migration error: {e}")
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 _DB_INITIALIZED = False
 
@@ -117,12 +154,16 @@ def clear_user_projects_cache(user_id: str = None):
 
 def init_db():
     """Initializes the database schema if tables do not exist."""
+    global _DB_INITIALIZED
+    if _DB_INITIALIZED:
+        return
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
         if "sqlite" in type(conn).__module__:
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
             if cursor.fetchone():
+                _DB_INITIALIZED = True
                 return
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -161,14 +202,14 @@ def init_db():
             """)
             cursor.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pinned INTEGER DEFAULT 0")
         conn.commit()
+        _DB_INITIALIZED = True
     except Exception as e:
         print(f"Database initialization error: {e}")
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def save_session(session_id: str, filename: str, recipe: list, rules: list, scanned_columns: list, user_id: str = None, project_name: str = None):
     """Saves or updates the session details in the database."""
-    init_db()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -214,11 +255,10 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
     except Exception as e:
         print(f"Error saving session {session_id}: {e}")
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def load_session(session_id: str, current_user_email: str = None) -> dict:
     """Loads a session's details from the database."""
-    init_db()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -248,7 +288,7 @@ def load_session(session_id: str, current_user_email: str = None) -> dict:
         print(f"Error loading session {session_id}: {e}")
         return None
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def get_user_projects(user_id: str) -> list:
     """Retrieves all sessions/projects belonging to a specific user ordered by pinned status and last update."""
@@ -260,7 +300,6 @@ def get_user_projects(user_id: str) -> list:
     if hasattr(st, "session_state") and cache_key in st.session_state:
         return st.session_state[cache_key]
 
-    init_db()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -283,7 +322,7 @@ def get_user_projects(user_id: str) -> list:
         print(f"Error getting user projects for {user_id}: {e}")
         return []
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def count_user_sessions(user_id: str) -> int:
     """Returns the total number of workspaces owned by a user."""
@@ -295,7 +334,6 @@ def delete_session(session_id: str, user_id: str) -> bool:
     """Deletes a workspace session if owned by user_id."""
     if not session_id or not user_id or user_id.startswith("guest_"):
         return False
-    init_db()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -307,13 +345,12 @@ def delete_session(session_id: str, user_id: str) -> bool:
         print(f"Error deleting session {session_id}: {e}")
         return False
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def rename_session(session_id: str, new_name: str, user_id: str) -> bool:
     """Renames a workspace session if owned by user_id."""
     if not session_id or not new_name or not user_id or user_id.startswith("guest_"):
         return False
-    init_db()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -326,13 +363,12 @@ def rename_session(session_id: str, new_name: str, user_id: str) -> bool:
         print(f"Error renaming session {session_id}: {e}")
         return False
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def toggle_pin_session(session_id: str, user_id: str) -> bool:
     """Toggles the pinned status of a workspace session if owned by user_id."""
     if not session_id or not user_id or user_id.startswith("guest_"):
         return False
-    init_db()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -351,11 +387,10 @@ def toggle_pin_session(session_id: str, user_id: str) -> bool:
         print(f"Error toggling pin status for session {session_id}: {e}")
         return False
     finally:
-        conn.close()
+        release_db_connection(conn)
 
 def reconcile_session(session_id: str, user_id: str):
     """Reconciles an anonymous session by assigning it to a logged-in user."""
-    init_db()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -369,4 +404,4 @@ def reconcile_session(session_id: str, user_id: str):
     except Exception as e:
         print(f"Error reconciling session {session_id} to user {user_id}: {e}")
     finally:
-        conn.close()
+        release_db_connection(conn)

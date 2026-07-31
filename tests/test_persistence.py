@@ -23,6 +23,7 @@ class TestPersistence(unittest.TestCase):
     
     def setUp(self):
         # Ensure we use an isolated test database file
+        persistence._DB_INITIALIZED = False
         if persistence.DB_PATH.exists():
             try:
                 persistence.DB_PATH.unlink()
@@ -163,10 +164,41 @@ class TestPersistence(unittest.TestCase):
         self.assertIsNone(loaded_by_intruder)
         self.assertIsNone(loaded_by_guest)
 
+    @mock.patch("psycopg2.pool.ThreadedConnectionPool")
+    def test_pg_pool_is_cached_and_initialized_once(self, mock_pool):
+        from unittest.mock import MagicMock
+        mock_pool_instance = MagicMock()
+        mock_pool.return_value = mock_pool_instance
+        
+        # Clear Streamlit's cache_resource for _get_pg_pool
+        persistence._get_pg_pool.clear()
+        
+        db_url = "postgresql://postgres:password@localhost:5432/postgres"
+        pool1 = persistence._get_pg_pool(db_url)
+        pool2 = persistence._get_pg_pool(db_url)
+        
+        self.assertEqual(pool1, pool2)
+        mock_pool.assert_called_once_with(minconn=1, maxconn=10, dsn=db_url, cursor_factory=mock.ANY)
+
+    @mock.patch("persistence.get_db_connection")
+    def test_init_db_only_runs_once(self, mock_get_conn):
+        from unittest.mock import MagicMock
+        mock_conn = MagicMock()
+        mock_get_conn.return_value = mock_conn
+        
+        persistence._DB_INITIALIZED = False
+        
+        persistence.init_db()
+        persistence.init_db()
+        persistence.init_db()
+        
+        mock_get_conn.assert_called_once()
+
 
 class TestCookiesAndPersistence(unittest.TestCase):
     
     def setUp(self):
+        persistence._DB_INITIALIZED = False
         if persistence.DB_PATH.exists():
             try: persistence.DB_PATH.unlink()
             except Exception: pass

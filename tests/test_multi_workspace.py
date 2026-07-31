@@ -35,6 +35,7 @@ from ui_utils import is_authenticated_user
 class TestMultiWorkspace(unittest.TestCase):
 
     def setUp(self):
+        persistence._DB_INITIALIZED = False
         if persistence.DB_PATH.exists():
             try: persistence.DB_PATH.unlink()
             except Exception: pass

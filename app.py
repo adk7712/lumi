@@ -45,6 +45,10 @@ flush_pending_events()
 # Initialize Session State
 initialize_state()
 
+# Ensure database schema is initialized once at app startup
+from persistence import init_db
+init_db()
+
 # Render Workspace Sidebar (for authenticated users)
 render_workspace_sidebar()
 
