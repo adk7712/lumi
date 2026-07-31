@@ -185,6 +185,7 @@ def test_get_logged_in_user():
     import streamlit as st
     
     # Clear existing state
+    st.session_state["_is_testing"] = True
     if "dev_user_email" in st.session_state:
         del st.session_state["dev_user_email"]
     

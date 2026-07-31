@@ -9,7 +9,8 @@ from state_manager import (
     load_db_session,
     LARGE_FILE_THRESHOLD_BYTES
 )
-from ui_utils import is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog, show_signout_dialog
+from ui_utils import is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, format_timestamp
+from persistence import count_user_sessions, get_user_projects
 
 def render_iframe_dropzone_patch():
     _js = """
@@ -79,7 +80,11 @@ def render_landing_page():
     fallback_session_id = st.query_params.get("session")
     
     # Check if we should resume
-    active_resume_id = st.session_state.get("resume_session_id") or fallback_session_id
+    is_testing = st.session_state.get("_is_testing", False)
+    if is_testing or is_authenticated_user():
+        active_resume_id = st.session_state.get("resume_session_id")
+    else:
+        active_resume_id = st.session_state.get("resume_session_id") or fallback_session_id
 
     # 1. Recovery prompt page (active resume mode)
     if active_resume_id:
@@ -193,8 +198,9 @@ def render_landing_page():
                 pass
             st.rerun()
 
-    # 2. Dismissible Session Banner (Primary Flow)
-    if cookie_session_id and not st.session_state.get("cookie_session_dismissed"):
+    # 2. Dismissible Session Banner (Primary Flow for anonymous guests only)
+    is_testing = st.session_state.get("_is_testing", False)
+    if cookie_session_id and not is_authenticated_user() and not is_testing and not st.session_state.get("cookie_session_dismissed"):
         from persistence import load_session
         db_session = load_session(cookie_session_id, get_logged_in_user())
         if db_session:
@@ -259,53 +265,103 @@ def render_landing_page():
                 st.rerun()
         st.stop()
 
-    # Render centered uploader title & description
-    st.markdown(
-        '<div style="text-align: center; margin-top: 6rem; margin-bottom: 2.5rem; position: relative; z-index: 1;">'
-        '<h1 style="font-weight: 800; font-size: 2.8rem; letter-spacing: 0.05em; color: #ffffff; margin-bottom: 0.5rem;">LUMI</h1>'
-        '<p style="color: #a3a3a3; font-size: 1.05rem;">Upload your CSV or Excel dataset to start cleaning and validation</p>'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    cta_spacer_l, cta_col, cta_spacer_r = st.columns([1, 2, 1])
-    with cta_col:
-        st.markdown('<div class="welcome-uploader-marker"></div>', unsafe_allow_html=True)
-        welcome_uploader = st.file_uploader(
-            "Drop your dataset here or click Browse",
-            type=["csv", "xlsx"],
-            key="welcome_uploader"
-        )
-    st.markdown('<p class="cta-helper" style="position: relative; z-index: 1;">Free · No sign-up · Works with CSV &amp; XLSX</p>', unsafe_allow_html=True)
-
-    c_login_l, c_login, c_login_r = st.columns([1.5, 1, 1.5])
-    with c_login:
-        user_email = get_logged_in_user()
-        if user_email:
-            st.markdown(f'<div style="text-align: center; margin-top: 0.5rem; margin-bottom: 0.5rem; font-size: 0.9rem; color: #a3a3a3;">Logged in as <strong>{user_email}</strong></div>', unsafe_allow_html=True)
-            if st.button("Sign Out", key="landing_signout_btn", use_container_width=True):
-                show_signout_dialog()
+    # Top right header with Profile / Sign In
+    c_hdr_l, c_hdr_r = st.columns([4, 1.2])
+    with c_hdr_r:
+        if is_authenticated_user():
+            u_email = get_logged_in_user()
+            current_ws = st.session_state.get("project_name") or st.session_state.get("filename") or "No active workspace"
+            with st.popover("👤 Profile", use_container_width=True):
+                st.markdown('<div style="font-weight: 600; font-size: 0.85rem; color: #a3a3a3;">ACCOUNT</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size: 0.95rem; font-weight: 500; color: #ffffff; margin-bottom: 0.5rem; word-break: break-all;">{u_email}</div>', unsafe_allow_html=True)
+                st.caption(f"Active: {current_ws}")
+                st.divider()
+                if st.button("Sign Out", key="landing_popover_signout_btn", use_container_width=True):
+                    show_signout_dialog()
         else:
             if is_auth_configured():
                 st.button(
-                    "Sign In to Sync Projects", 
-                    key="landing_signin_btn", 
+                    "Sign In", 
+                    key="landing_header_signin_btn", 
                     use_container_width=True, 
                     on_click=st.login, 
                     kwargs={"provider": "google"}
                 )
             else:
-                if st.button("Sign In to Sync Projects", key="landing_signin_btn", use_container_width=True):
+                if st.button("Sign In", key="landing_header_signin_btn", use_container_width=True):
                     show_auth_dialog()
+
+    # Render centered uploader title & description
+    st.markdown(
+        '<div style="text-align: center; margin-top: 2rem; margin-bottom: 2rem; position: relative; z-index: 1;">'
+        '<h1 style="font-weight: 800; font-size: 2.8rem; letter-spacing: 0.05em; color: #ffffff; margin-bottom: 0.5rem;">LUMI</h1>'
+        '<p style="color: #a3a3a3; font-size: 1.05rem;">Interactive dataset cleaning &amp; validation workflow generator</p>'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    # For authenticated users, show their active workspaces directly on the landing page
+    if is_authenticated_user():
+        user_email = get_logged_in_user()
+        projects = get_user_projects(user_email)
+        if projects:
+            st.markdown(
+                '<div style="max-width: 650px; margin: 0 auto 1rem auto; text-align: center;">'
+                '<h3 style="font-weight: 700; color: #ffffff; margin-bottom: 0.25rem;">Your Workspaces</h3>'
+                '<p style="color: #a3a3a3; font-size: 0.9rem;">Select a workspace to resume or upload a new dataset below</p>'
+                '</div>',
+                unsafe_allow_html=True
+            )
+            
+            c_l, c_main, c_r = st.columns([1, 2.5, 1])
+            with c_main:
+                for p in projects:
+                    p_id = p["session_id"]
+                    p_name = p["project_name"] or p["filename"] or "Untitled Workspace"
+                    is_pinned = bool(p.get("pinned", 0))
+                    pin_icon = "📌 " if is_pinned else ""
+                    step_text = f"{p.get('step_count', 0)} steps"
+                    fn_text = p.get('filename', '')
+                    ts_str = format_timestamp(p.get("updated_at"))
+                    caption_parts = [part for part in [fn_text, step_text, ts_str] if part]
+
+                    with st.container(border=True):
+                        col1, col2 = st.columns([4, 1.2])
+                        with col1:
+                            st.markdown(f"**{pin_icon}{p_name}**")
+                            st.caption(" · ".join(caption_parts))
+                        with col2:
+                            if st.button("Open", key=f"landing_open_ws_{p_id}", type="primary", use_container_width=True):
+                                from state_manager import switch_workspace
+                                switch_workspace(p_id)
+            st.markdown("<div style='margin-bottom: 2rem;'></div>", unsafe_allow_html=True)
+            st.divider()
+
+    cta_spacer_l, cta_col, cta_spacer_r = st.columns([1, 2, 1])
+    with cta_col:
+        st.markdown('<div class="welcome-uploader-marker"></div>', unsafe_allow_html=True)
+        welcome_uploader = st.file_uploader(
+            "Drop a new dataset here or click Browse",
+            type=["csv", "xlsx"],
+            key="welcome_uploader"
+        )
+    st.markdown('<p class="cta-helper" style="position: relative; z-index: 1;">Free · No sign-up · Works with CSV &amp; XLSX</p>', unsafe_allow_html=True)
 
 
     if welcome_uploader:
+        u_email = get_logged_in_user()
+        is_auth = is_authenticated_user()
+        cnt = count_user_sessions(u_email) if u_email else 0
+        if not is_testing and is_auth and cnt >= 5:
+            st.error("Workspace limit reached (5/5). Please delete an existing workspace from the sidebar before creating a new one.")
+            st.stop()
+            
         file_hash = calculate_file_hash(welcome_uploader)
         cache_file = Path(".lumi_cache") / f"{file_hash}.json"
         
         is_testing = st.session_state.get("_is_testing", False)
         
-        if cache_file.exists() and not is_testing and st.session_state.get("pending_restore_hash") != file_hash:
+        if cache_file.exists() and not is_testing and not is_authenticated_user() and st.session_state.get("pending_restore_hash") != file_hash:
             st.session_state.pending_restore_hash = file_hash
             st.session_state.temp_uploader_file = welcome_uploader
             st.rerun()

@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import streamlit.components.v1 as components
-from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, handle_signout, show_auth_dialog, show_signout_dialog, flush_pending_events
+from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, flush_pending_events
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state, regenerate_proposals
 from views import (
     render_overview_tab,
@@ -12,7 +12,8 @@ from views import (
     render_audit_log_tab,
     render_pipeline_preview_tab,
     render_violation_browser,
-    render_landing_page
+    render_landing_page,
+    render_workspace_sidebar
 )
 from scout import generate_proposals
 
@@ -44,6 +45,8 @@ flush_pending_events()
 # Initialize Session State
 initialize_state()
 
+# Render Workspace Sidebar (for authenticated users)
+render_workspace_sidebar()
 
 # Resolve current user (used in header sign-out button)
 user_email = get_logged_in_user()
@@ -94,11 +97,15 @@ def render_header():
                 st.toast("Last step undone")
             u_c2.button("Reset", key="reset_all", width="stretch", on_click=handle_reset)
         with h_col3:
-            user_email = get_logged_in_user()
-            if user_email:
-                st.markdown(f'<div style="font-size: 0.75rem; color: #a3a3a3; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 2px;">{user_email}</div>', unsafe_allow_html=True)
-                if st.button("Sign Out", key="header_signout_btn", use_container_width=True):
-                    show_signout_dialog()
+            if is_authenticated_user():
+                u_email = get_logged_in_user()
+                current_ws = st.session_state.get("project_name") or st.session_state.get("filename") or "Untitled Workspace"
+                with st.popover("👤 Profile", use_container_width=True):
+                    st.markdown(f"Logged in as:<br><strong>{u_email}</strong>", unsafe_allow_html=True)
+                    st.caption(f"Active Workspace:\n{current_ws}")
+                    st.divider()
+                    if st.button("Sign Out", key="header_popover_signout_btn", use_container_width=True):
+                        show_signout_dialog()
             else:
                 if is_auth_configured():
                     st.button(

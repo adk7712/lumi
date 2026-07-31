@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 import json
 import hashlib
+import io
 from engine import apply_recipe
 from scout import generate_proposals
 
@@ -25,7 +26,34 @@ def downcast_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@st.cache_data
+class CachedFileWrapper:
+    """Emulates Streamlit's UploadedFile interface for cached dataset bytes."""
+    def __init__(self, raw_bytes: bytes, filename: str):
+        from io import BytesIO
+        self._bio = BytesIO(raw_bytes)
+        self.name = filename
+        self.size = len(raw_bytes)
+        self.type = "text/csv" if filename.lower().endswith(".csv") else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    def read(self, *args, **kwargs):
+        return self._bio.read(*args, **kwargs)
+
+    def seek(self, *args, **kwargs):
+        return self._bio.seek(*args, **kwargs)
+
+    def tell(self):
+        return self._bio.tell()
+
+def _hash_file_or_buffer(obj):
+    if isinstance(obj, str):
+        return obj
+    return f"{getattr(obj, 'name', '')}_{id(obj)}"
+
+@st.cache_data(hash_funcs={
+    CachedFileWrapper: _hash_file_or_buffer,
+    io.BytesIO: _hash_file_or_buffer,
+    io.StringIO: _hash_file_or_buffer,
+})
 def load_data(file_path_or_buffer, nrows=None):
     """Loads data from a file path or buffer, supporting CSV and Excel."""
     try:
@@ -144,6 +172,8 @@ def initialize_state(from_reset=False):
         'datetime_component_select': "year",
         'datetime_new_col_name': "",
         'show_uploader': False,
+        '_pending_workspace_name': None,
+        'project_name': None,
     }
 
     # Force reset or initialize for the first time
@@ -275,6 +305,40 @@ def save_session_state():
     except Exception:
         pass
 
+
+def cache_uploaded_file(session_id: str, file_buffer):
+    """Saves raw uploaded file to .lumi_cache/{session_id}.dat for logged-in users."""
+    from ui_utils import is_authenticated_user
+    if not is_authenticated_user() or st.session_state.get("_is_testing", False) or not session_id:
+        return  # Skip guests and test suite to prevent disk leaks
+        
+    CACHE_DIR.mkdir(exist_ok=True)
+    cache_path = CACHE_DIR / f"{session_id}.dat"
+    try:
+        pos = file_buffer.tell() if hasattr(file_buffer, 'tell') else 0
+        file_buffer.seek(0)
+        cache_path.write_bytes(file_buffer.read())
+        file_buffer.seek(pos)
+    except Exception as e:
+        print(f"Error caching raw file for session {session_id}: {e}")
+
+def load_cached_file(session_id: str, filename: str):
+    """Loads raw file buffer wrapped as CachedFileWrapper."""
+    cache_path = CACHE_DIR / f"{session_id}.dat"
+    if not cache_path.exists():
+        return None
+    try:
+        return CachedFileWrapper(cache_path.read_bytes(), filename)
+    except Exception:
+        return None
+
+def delete_cached_file(session_id: str):
+    """Deletes cached .dat file for a session."""
+    cache_path = CACHE_DIR / f"{session_id}.dat"
+    if cache_path.exists():
+        try: cache_path.unlink()
+        except Exception: pass
+
 def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str = None, _skip_db_save: bool = False):
     """Processes a newly uploaded file and initializes the session state.
     
@@ -287,7 +351,8 @@ def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str =
     if hasattr(file_buffer, 'seek'):
         file_buffer.seek(0)
     
-    is_large = file_buffer.size > LARGE_FILE_THRESHOLD_BYTES
+    file_size = getattr(file_buffer, 'size', 0)
+    is_large = file_size > LARGE_FILE_THRESHOLD_BYTES
     if is_large:
         st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.")
     raw_df = load_data(file_buffer, nrows=MAX_SAMPLE_ROWS if is_large else None)
@@ -298,9 +363,9 @@ def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str =
         st.session_state.raw_data = raw_df
 
     st.session_state.last_file_hash = file_hash
-    st.session_state.filename = file_buffer.name
+    st.session_state.filename = getattr(file_buffer, 'name', 'dataset.csv')
     from ui_utils import queue_event
-    queue_event("file_uploaded", {"filename": file_buffer.name, "size": file_buffer.size})
+    queue_event("file_uploaded", {"filename": getattr(file_buffer, 'name', 'dataset.csv'), "size": file_size})
     
     if restore_session_id:
         session_id = restore_session_id
@@ -331,6 +396,8 @@ def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str =
     
     if not _skip_db_save:
         save_db_session()
+        
+    cache_uploaded_file(session_id, file_buffer)
     st.toast("Dataset Analyzed")
 
 def load_session_state(file_hash: str, file_buffer):
@@ -377,15 +444,15 @@ def load_session_state(file_hash: str, file_buffer):
         st.error(f"Error restoring session: {str(e)}")
 
 def save_db_session():
-    """Saves the current session state to the SQLite database."""
+    """Saves the current session state to the database."""
     session_id = st.session_state.get("session_id")
     if not session_id:
         return
         
     user_id = None
     try:
-        if st.user and st.user.get("email"):
-            user_id = st.user.get("email")
+        from ui_utils import get_logged_in_user
+        user_id = get_logged_in_user()
     except Exception:
         pass
         
@@ -393,6 +460,7 @@ def save_db_session():
     recipe = st.session_state.get("cleaning_recipe", [])
     rules = st.session_state.get("rules", [])
     scanned_columns = st.session_state.get("scanned_columns", set())
+    project_name = st.session_state.get("project_name") or st.session_state.get("_pending_workspace_name")
     
     from persistence import save_session
     save_session(
@@ -401,8 +469,12 @@ def save_db_session():
         recipe=recipe,
         rules=rules,
         scanned_columns=scanned_columns,
-        user_id=user_id
+        user_id=user_id,
+        project_name=project_name
     )
+    if st.session_state.get("_pending_workspace_name"):
+        st.session_state.project_name = st.session_state._pending_workspace_name
+        st.session_state._pending_workspace_name = None
 
 def load_db_session(session_id: str, file_buffer) -> bool:
     """Loads and restores the cleaning recipe and rules from the SQLite database."""
@@ -457,3 +529,42 @@ def regenerate_proposals():
     """Helper to recalculate proposals when active rules/steps are removed."""
     if 'raw_data' in st.session_state and st.session_state.raw_data is not None:
         st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+
+def switch_workspace(target_session_id: str) -> bool:
+    """Switches the active workspace to target_session_id for an authenticated user."""
+    from ui_utils import get_logged_in_user, is_authenticated_user
+    if not is_authenticated_user():
+        return False
+        
+    user_email = get_logged_in_user()
+    
+    # 1. Auto-save active workspace before switching
+    save_session_state()
+    save_db_session()
+    
+    # 2. Verify target workspace ownership
+    from persistence import load_session
+    db_session = load_session(target_session_id, user_email)
+    if not db_session:
+        st.error("Workspace not found or access denied.")
+        return False
+        
+    filename = db_session.get("filename", "dataset.csv")
+    buf = load_cached_file(target_session_id, filename)
+    
+    if buf is None:
+        # Fallback: Cache missing on disk -> clear state & redirect to landing resume prompt
+        initialize_state(from_reset=True)
+        st.session_state.resume_session_id = target_session_id
+        st.rerun()
+        return False
+        
+    # 3. Clean state reset
+    initialize_state(from_reset=True)
+    
+    # 4. Delegate to existing load_db_session (handles recipe, rules, proposals & state sync)
+    success = load_db_session(target_session_id, buf)
+    if success:
+        st.session_state.project_name = db_session.get("project_name")
+        st.rerun()
+    return success

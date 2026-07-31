@@ -119,6 +119,7 @@ def test_uploader_large_file_capping():
     
     
     # Upload via AppTest uploader
+    at.session_state["_is_testing"] = True
     uploader = at.file_uploader(key="welcome_uploader")
     assert uploader is not None
     uploader.upload("large_file.csv", large_csv_bytes, "text/csv").run()

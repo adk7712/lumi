@@ -24,26 +24,63 @@ def is_auth_configured() -> bool:
     return False
 
 def get_logged_in_user() -> str:
-    """Get the active user's email, supporting either local dev-mode mock or Streamlit OIDC user info."""
+    """Get the active user's email, supporting local dev mock, browser cookie, or Streamlit OIDC user info."""
     dev_email = st.session_state.get("dev_user_email")
     if dev_email:
         return dev_email
         
     try:
-        if st.user and st.user.get("email"):
+        if hasattr(st, "user") and st.user and st.user.get("email"):
             return st.user.get("email")
     except Exception:
         pass
+
+    if not st.session_state.get("_is_testing", False):
+        try:
+            from streamlit_cookies_controller import CookieController
+            controller = CookieController()
+            cookie_email = controller.get("lumi_user_email")
+            if cookie_email and isinstance(cookie_email, str):
+                st.session_state.dev_user_email = cookie_email
+                return cookie_email
+        except Exception:
+            pass
+
     return None
 
+def is_authenticated_user() -> bool:
+    """Check if the user is signed in with a real account (not an anonymous guest)."""
+    user_email = get_logged_in_user()
+    if not user_email or user_email.startswith("guest_"):
+        return False
+    return True
+
+def format_timestamp(iso_str: str) -> str:
+    """Formats an ISO timestamp into a readable date/time string like 'Jul 31, 20:15'."""
+    if not iso_str:
+        return ""
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(iso_str)
+        return dt.strftime("%b %d, %H:%M")
+    except Exception:
+        return str(iso_str)[:16]
+
 def handle_signout():
-    """Sign out the user, clearing local dev mock email and calling st.logout() if needed."""
+    """Sign out the user, clearing local dev mock email, removing cookies, resetting state, and redirecting to landing page."""
     if "dev_user_email" in st.session_state:
         st.session_state.pop("dev_user_email", None)
+    try:
+        from streamlit_cookies_controller import CookieController
+        CookieController().remove("lumi_user_email")
+    except Exception:
+        pass
     try:
         st.logout()
     except Exception:
         pass
+    from state_manager import initialize_state
+    initialize_state(from_reset=True)
     st.rerun()
 
 @st.dialog("Sign Out")
@@ -57,22 +94,40 @@ def show_signout_dialog():
 
 @st.dialog("Lumi Authentication")
 def show_auth_dialog():
-    st.markdown('<p style="color: #a3a3a3; font-size: 0.95rem; text-align: center; margin-bottom: 1.5rem;">Select your provider to log in and sync your cleaning workspaces.</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: #a3a3a3; font-size: 0.95rem; text-align: center; margin-bottom: 1.5rem;">Sign in to sync and manage your cleaning workspaces.</p>', unsafe_allow_html=True)
     
-    # Google Login Button
-    st.button(
-        "Sign In with Google", 
-        key="btn_login_google_auth", 
-        use_container_width=True, 
-        on_click=st.login, 
-        kwargs={"provider": "google"}
-    )
-            
+    # 1. Dev / Local Email Login
+    st.markdown("**Sign In with Email**")
+    user_email_input = st.text_input("Email address", value="user@example.com", key="auth_dev_email_input")
+    if st.button("Sign In", key="auth_dev_email_login_btn", use_container_width=True, type="primary"):
+        if user_email_input and "@" in user_email_input:
+            email_clean = user_email_input.strip()
+            st.session_state.dev_user_email = email_clean
+            try:
+                from streamlit_cookies_controller import CookieController
+                CookieController().set("lumi_user_email", email_clean)
+            except Exception:
+                pass
+            st.toast(f"Signed in as {email_clean}")
+            st.rerun()
+        else:
+            st.error("Please enter a valid email address.")
+
     st.markdown('<div style="text-align: center; margin: 1rem 0; color: #555;">— OR —</div>', unsafe_allow_html=True)
-    
-    # Guest / Dev Login
-    st.markdown('<p style="color: #a3a3a3; font-size: 0.9rem; text-align: center;">Or try the app anonymously with a temporary guest session.</p>', unsafe_allow_html=True)
-    if st.button("Continue as Guest", key="auth_dev_login_btn", use_container_width=True, type="primary"):
+
+    # 2. Google Login Button (if configured)
+    if is_auth_configured():
+        st.button(
+            "Sign In with Google", 
+            key="btn_login_google_auth", 
+            use_container_width=True, 
+            on_click=st.login, 
+            kwargs={"provider": "google"}
+        )
+        st.markdown('<div style="text-align: center; margin: 1rem 0; color: #555;">— OR —</div>', unsafe_allow_html=True)
+            
+    # 3. Guest / Dev Login
+    if st.button("Continue as Anonymous Guest", key="auth_dev_login_btn", use_container_width=True):
         import uuid
         guest_id = f"guest_{uuid.uuid4().hex[:8]}@lumi.ai"
         st.session_state.dev_user_email = guest_id

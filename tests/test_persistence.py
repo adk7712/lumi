@@ -243,7 +243,7 @@ class TestCookiesAndPersistence(unittest.TestCase):
     def test_resume_banner_appears_when_session_found(self, mock_load_session, mock_cookie_controller, mock_runtime):
         # 1. Cookie is present
         controller_instance = mock_cookie_controller.return_value
-        controller_instance.get.return_value = "session-cookie-123"
+        controller_instance.get.side_effect = lambda key: "session-cookie-123" if key == "lumi_session" else None
         
         # 2. Database matches
         mock_load_session.return_value = {
@@ -256,8 +256,10 @@ class TestCookiesAndPersistence(unittest.TestCase):
             "scanned_columns": set()
         }
         
-        # Clear dismissed flags
+        # Clear dismissed flags and testing flags for resume banner test
         initialize_state(from_reset=True)
+        st.session_state["_is_testing"] = False
+        st.session_state.dev_user_email = None
         st.session_state.pop("cookie_session_dismissed", None)
         
         # Mock Streamlit column rendering calls
