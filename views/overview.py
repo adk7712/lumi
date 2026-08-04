@@ -8,12 +8,12 @@ from engine_ops import predict_column_renames
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
-    
+
     # Memoize metrics per DataFrame shape & recipe length
     recipe_len = len(st.session_state.cleaning_recipe)
     rules_len = len(st.session_state.rules)
     cache_key = f"_overview_metrics_{id(df)}_{recipe_len}_{rules_len}"
-    
+
     if cache_key in st.session_state:
         metrics = st.session_state[cache_key]
     else:
@@ -27,12 +27,12 @@ def render_overview_tab(df):
                 total_violations += evaluate_rule(df, rule).sum()
             except (ValueError, KeyError, TypeError):
                 pass
-        
+
         dup_count = int(df.duplicated().sum())
         mem_mb = df.memory_usage(deep=True).sum() / (1024**2)
         empty_cols = [c for c in df.columns if df[c].isnull().all()]
         empty_rows_count = int(df.isnull().all(axis=1).sum())
-        
+
         whitespace_cols = []
         for c in df.select_dtypes(include=['object', 'string']).columns:
             s = df[c].dropna().astype(str)
@@ -155,7 +155,7 @@ def render_overview_tab(df):
                             sync_column_rename(orig, val)
                         st.session_state._needs_rerun = True
         else:
-            st.markdown("*Your dataset looks clean! No quick actions recommended.*")
+            st.markdown("*No quick actions recommended!*")
 
         if duplicates_count > 0:
             with st.expander(f"Preview {duplicates_count} Duplicate Rows", expanded=False):
