@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import streamlit.components.v1 as components
 from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, flush_pending_events
-from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state, regenerate_proposals
+from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state, regenerate_proposals, add_step
 from views import (
     render_overview_tab,
     render_diagnostics_tab,
@@ -86,8 +86,27 @@ def handle_undo():
             st.session_state.scanned_columns.discard(f"{popped_step['_source_proposal_col']}:{popped_step['_source_proposal_type']}")
         st.session_state.intermediate_states.pop()
         st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
+        # Push undone step onto redo stack
+        if 'redo_stack' not in st.session_state:
+            st.session_state.redo_stack = []
+        st.session_state.redo_stack.append(popped_step)
         regenerate_proposals()
         save_session_state()
+
+def handle_redo():
+    if st.session_state.get('redo_stack'):
+        step = st.session_state.redo_stack.pop()
+        add_step(step)
+
+@st.dialog("Reset Workspace")
+def show_reset_dialog():
+    st.warning("This will clear all cleaning steps, rules, and reset the dataset to its original state. This action cannot be undone.")
+    col1, col2 = st.columns(2)
+    if col1.button("Yes, Reset Everything", type="primary", use_container_width=True, key="confirm_reset_btn"):
+        handle_reset()
+        st.rerun()
+    if col2.button("Cancel", use_container_width=True, key="cancel_reset_btn"):
+        st.rerun()
 
 def render_header():
     with header_placeholder:
@@ -97,10 +116,14 @@ def render_header():
             st.button("LUMI", key="lumi_logo", on_click=handle_reset)
             st.markdown('</div>', unsafe_allow_html=True)
         with h_col2:
+            st.markdown('<div class="header-actions-row">', unsafe_allow_html=True)
             u_c1, u_c2 = st.columns(2)
             if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0, on_click=handle_undo):
                 st.toast("Last step undone")
-            u_c2.button("Reset", key="reset_all", width="stretch", on_click=handle_reset)
+            redo_disabled = not st.session_state.get('redo_stack')
+            if u_c2.button("Redo", key="redo_btn", width="stretch", disabled=redo_disabled, on_click=handle_redo):
+                st.toast("Step re-applied")
+            st.markdown('</div>', unsafe_allow_html=True)
         with h_col3:
             if is_authenticated_user():
                 u_email = get_logged_in_user()
@@ -111,6 +134,9 @@ def render_header():
                     st.markdown('<div style="font-weight: 600; font-size: 0.8rem; color: #a3a3a3; letter-spacing: 0.05em; margin-bottom: 0.2rem;">ACCOUNT</div>', unsafe_allow_html=True)
                     st.markdown(f'<div style="font-size: 0.95rem; font-weight: 500; color: #ffffff; margin-bottom: 0.5rem; word-break: break-all; pointer-events: none;">{u_email_safe}</div>', unsafe_allow_html=True)
                     st.caption(f"Active Workspace:\n{current_ws}")
+                    st.divider()
+                    if st.button("Reset Workspace", key="header_popover_reset_btn", use_container_width=True):
+                        show_reset_dialog()
                     st.divider()
                     if st.button("Sign Out", key="header_popover_signout_btn", use_container_width=True):
                         show_signout_dialog()
@@ -133,39 +159,8 @@ st.divider()
 # --- TABS ---
 TAB_NAMES = ["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"]
 
-st.markdown("""
-<script>
-    const urlParams = new URLSearchParams(window.parent.location.search);
-    const tabName = urlParams.get('tab');
-    if (tabName) {
-        const tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"] p');
-        tabs.forEach(tab => {
-            if (tab.innerText === tabName) {
-                tab.click();
-            }
-        });
-    }
-    
-    // Add click listeners to all tabs to update URL
-    const allTabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
-    allTabs.forEach(tab => {
-        tab.addEventListener('click', function() {
-            const name = this.querySelector('p').innerText;
-            const url = new URL(window.parent.location);
-            url.searchParams.set('tab', name);
-            window.parent.history.pushState({}, '', url);
-        });
-    });
-</script>
-""", unsafe_allow_html=True)
-
-_query_tab = st.query_params.get("tab", "Overview")
-if _query_tab != st.session_state.get("main_tabs", "Overview"):
-    st.session_state["main_tabs"] = _query_tab if _query_tab in TAB_NAMES else "Overview"
-
 tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs(
-    TAB_NAMES,
-    key="main_tabs"
+    TAB_NAMES
 )
 
 with tab_overview:
@@ -190,7 +185,64 @@ with tab_pipeline:
 # Bottom violation browser
 render_violation_browser(st.session_state.current_df)
 
+# --- Tab State Persistence Script ---
+import json
+_tab_names_json = json.dumps(TAB_NAMES)
+components.html(
+    f"""
+    <script>
+    (function() {{
+        const tabNames = {_tab_names_json};
+        const doc = window.parent.document;
+        
+        function restoreTab() {{
+            const urlParams = new URLSearchParams(window.parent.location.search);
+            const activeTab = urlParams.get('tab');
+            if (activeTab && tabNames.includes(activeTab)) {{
+                const tabs = doc.querySelectorAll('[data-baseweb="tab"]');
+                for (let tab of tabs) {{
+                    const p = tab.querySelector('p');
+                    if (p && p.innerText === activeTab) {{
+                        if (tab.getAttribute('aria-selected') !== 'true') {{
+                            p.click();
+                        }}
+                        return true;
+                    }}
+                }}
+            }}
+            return false;
+        }}
+
+        let attempts = 0;
+        const interval = setInterval(function() {{
+            attempts++;
+            if (restoreTab() || attempts > 20) clearInterval(interval);
+        }}, 50);
+
+        function attachListeners() {{
+            if (doc._lumiTabListenerAttached) return;
+            doc._lumiTabListenerAttached = true;
+            doc.addEventListener('click', function(e) {{
+                const tab = e.target.closest('[data-baseweb="tab"]');
+                if (!tab) return;
+                const p = tab.querySelector('p');
+                if (p && tabNames.includes(p.innerText)) {{
+                    const url = new URL(window.parent.location.href);
+                    url.searchParams.set('tab', p.innerText);
+                    window.parent.history.replaceState(null, '', url.toString());
+                }}
+            }}, true);
+        }}
+        attachListeners();
+    }})();
+    </script>
+    """,
+    height=0,
+    width=0
+)
+
 # --- FOOTER ---
 render_header()
 render_footer()
+
 

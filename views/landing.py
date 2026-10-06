@@ -87,8 +87,11 @@ def render_landing_page():
 
     # 1. Recovery prompt page (active resume mode)
     if active_resume_id:
-        from persistence import load_session
-        db_session = load_session(active_resume_id, get_logged_in_user())
+        cache_key = f"_cached_resume_{active_resume_id}"
+        if cache_key not in st.session_state:
+            from persistence import load_session
+            st.session_state[cache_key] = load_session(active_resume_id, get_logged_in_user())
+        db_session = st.session_state[cache_key]
         if db_session:
             filename = db_session.get("filename", "dataset")
             project_name = db_session.get("project_name", "Untitled Project")
@@ -155,9 +158,10 @@ def render_landing_page():
                         w_c1, w_c2 = st.columns(2)
                         if w_c1.button("Proceed anyway", key="proceed_anyway_btn", use_container_width=True):
                             resume_uploader.seek(0)
-                            success = load_db_session(active_resume_id, resume_uploader)
+                            success = load_db_session(active_resume_id, resume_uploader, preloaded_session=db_session)
                             if success:
                                 st.session_state.pop("resume_session_id", None)
+                                st.session_state.pop(cache_key, None)
                                 st.rerun()
                             else:
                                 st.error("Failed to restore session.")
@@ -165,9 +169,10 @@ def render_landing_page():
                             st.rerun()
                     else:
                         resume_uploader.seek(0)
-                        success = load_db_session(active_resume_id, resume_uploader)
+                        success = load_db_session(active_resume_id, resume_uploader, preloaded_session=db_session)
                         if success:
                             st.session_state.pop("resume_session_id", None)
+                            st.session_state.pop(cache_key, None)
                             st.rerun()
                         else:
                             st.error("Failed to restore session.")
@@ -200,8 +205,11 @@ def render_landing_page():
     # 2. Dismissible Session Banner (Primary Flow for anonymous guests only)
     is_testing = st.session_state.get("_is_testing", False)
     if cookie_session_id and not is_authenticated_user() and not is_testing and not st.session_state.get("cookie_session_dismissed"):
-        from persistence import load_session
-        db_session = load_session(cookie_session_id, get_logged_in_user())
+        cookie_cache_key = f"_cached_cookie_{cookie_session_id}"
+        if cookie_cache_key not in st.session_state:
+            from persistence import load_session
+            st.session_state[cookie_cache_key] = load_session(cookie_session_id, get_logged_in_user())
+        db_session = st.session_state[cookie_cache_key]
         if db_session:
             filename = db_session.get("filename", "dataset")
             step_count = db_session.get("step_count", 0)
@@ -212,6 +220,7 @@ def render_landing_page():
                 
                 if c_resume.button("Resume", key="cookie_resume_btn", use_container_width=True):
                     st.session_state.resume_session_id = cookie_session_id
+                    st.session_state[f"_cached_resume_{cookie_session_id}"] = db_session
                     st.rerun()
                 if c_fresh.button("Start fresh", key="cookie_fresh_btn", use_container_width=True):
                     try:
@@ -221,10 +230,12 @@ def render_landing_page():
                     except Exception:
                         pass
                     st.session_state.pop("resume_session_id", None)
+                    st.session_state.pop(cookie_cache_key, None)
                     st.query_params.pop("session", None)
                     st.rerun()
                 if c_dismiss.button("✕", key="cookie_dismiss_btn", use_container_width=True):
                     st.session_state.cookie_session_dismissed = True
+                    st.session_state.pop(cookie_cache_key, None)
                     st.rerun()
 
     # If there is a pending local cache restore dialog

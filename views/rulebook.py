@@ -52,6 +52,7 @@ def handle_clear_all():
         st.session_state.current_df = st.session_state.raw_data.copy()
     regenerate_proposals()
     save_session_state()
+    save_db_session()
     
 def handle_remove_rule(idx):
     r = st.session_state.rules[idx]
@@ -60,11 +61,13 @@ def handle_remove_rule(idx):
     st.session_state.rules.pop(idx)
     regenerate_proposals()
     save_session_state()
+    save_db_session()
 
 def render_rulebook_tab(df):
     all_cols = df.columns.tolist()
     if st.session_state.proposals:
-        with st.expander(f"Recommended Rules ({len(st.session_state.proposals)})", expanded=False):
+        is_expanded = st.session_state.get("recommendations_expanded", True)
+        with st.expander(f"Recommended Rules ({len(st.session_state.proposals)})", expanded=is_expanded):
             st.button("Accept All Recommendations", key="accept_all_proposals", width="stretch", on_click=handle_accept_all)
 
             p_cols = st.columns(2)
@@ -180,15 +183,29 @@ def render_rulebook_tab(df):
             st.info("Add a rule from the left panel")
         else:
             with st.container(height=600, border=False):
+                # Build composite cache key for rule violation counts
+                _recipe_len = len(st.session_state.get('cleaning_recipe', []))
+                _rules_sig = tuple((r.get('desc', ''), r.get('enabled', True)) for r in st.session_state.rules)
+                _violations_cache_key = f"{id(df)}_{_recipe_len}_{hash(_rules_sig)}"
+                if st.session_state.get('rule_violations_cache_key') != _violations_cache_key:
+                    # Recalculate all violation counts
+                    _new_cache = {}
+                    for _idx, _rule in enumerate(st.session_state.rules):
+                        if _rule['enabled']:
+                            try:
+                                _mask = evaluate_rule(df, _rule)
+                                _new_cache[_idx] = int(_mask.sum())
+                                _rule.pop('error', None)
+                            except (ValueError, KeyError, TypeError) as e:
+                                _new_cache[_idx] = 0
+                                _rule['error'] = str(e)
+                        else:
+                            _new_cache[_idx] = 0
+                    st.session_state.rule_violations_cache = _new_cache
+                    st.session_state.rule_violations_cache_key = _violations_cache_key
+
                 for idx, rule in enumerate(st.session_state.rules):
-                    v_count = 0
-                    if rule['enabled']:
-                        try:
-                            mask = evaluate_rule(df, rule)
-                            v_count = mask.sum()
-                            rule.pop('error', None)
-                        except (ValueError, KeyError, TypeError) as e:
-                            rule['error'] = str(e)
+                    v_count = st.session_state.rule_violations_cache.get(idx, 0)
 
                     status_color, resolved = (rule['color'] if rule['enabled'] else "rgba(100,100,100,0.2)"), rule.get('resolved', False)
                     enabled_class = "enabled" if rule['enabled'] else "disabled"
@@ -211,7 +228,8 @@ def render_rulebook_tab(df):
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Resolution", ["Select resolution method...", "Drop Rows", "Fill with Mean", "Fill with Median", "KNN Imputer", "Iterative Imputer"], key=f"res_{idx}", label_visibility="collapsed")
                             if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_res_{idx}", width="stretch"):
-                                add_step(create_resolution_step(rule, res))
+                                with st.spinner("Applying resolution..."):
+                                    add_step(create_resolution_step(rule, res))
                                 st.session_state._needs_rerun = True
                                 # Only mark resolved if violations are actually gone after applying the step.
                                 try:
@@ -225,7 +243,8 @@ def render_rulebook_tab(df):
                             res_cols = st.columns([3, 1])
                             res = res_cols[0].selectbox("Res", ["Select resolution method...", "Drop Rows", "Cap at Bounds", "Log Transform"], key=f"range_res_{idx}", label_visibility="collapsed")
                             if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_range_res_{idx}", width="stretch"):
-                                add_step(create_resolution_step(rule, res))
+                                with st.spinner("Applying resolution..."):
+                                    add_step(create_resolution_step(rule, res))
                                 st.session_state._needs_rerun = True
                                 # Only mark resolved if violations are actually gone after applying the step.
                                 try:
@@ -237,7 +256,8 @@ def render_rulebook_tab(df):
                                 
                         else:
                             if st.button("Drop Violated Rows", key=f"gen_res_{idx}", width="stretch"):
-                                add_step(create_resolution_step(rule, "Drop Violated Rows"))
+                                with st.spinner("Dropping violated rows..."):
+                                    add_step(create_resolution_step(rule, "Drop Violated Rows"))
                                 st.session_state._needs_rerun = True
                                 # Only mark resolved if violations are actually gone after applying the step.
                                 try:
@@ -252,6 +272,7 @@ def render_rulebook_tab(df):
                     if btn_c1.button("Ignore" if rule['enabled'] else "Enable", key=f"tg_{idx}", width="stretch"):
                         st.session_state.rules[idx]['enabled'] = not rule['enabled']
                         save_session_state()
+                        save_db_session()
                         st.session_state._needs_rerun = True
                         
                     btn_c2.button("Remove", key=f"del_{idx}", width="stretch", on_click=handle_remove_rule, args=(idx,))

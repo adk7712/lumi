@@ -931,3 +931,27 @@ div.stMarkdown:has(.lumi-logo-button) {
 .footer-version {
     font-variant-numeric: tabular-nums;
 }
+
+/* --- Header Actions Row Alignment --- */
+.header-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Vertically center header columns */
+[data-testid="stHorizontalBlock"]:first-child {
+    align-items: center !important;
+}
+
+/* Undo/Redo button pair consistent sizing */
+.st-key-undo_btn button,
+.st-key-redo_btn button {
+    height: 38px !important;
+    min-height: 38px !important;
+    font-size: 0.85rem !important;
+}
+
+.st-key-redo_btn button:disabled {
+    opacity: 0.35 !important;
+}

@@ -120,11 +120,18 @@ def test_undo_and_reset():
     assert len(at.session_state.cleaning_recipe) == 0
     assert len(at.session_state.intermediate_states) == 1
     
-    # Click Reset
-    reset_btn = at.button(key="reset_all")
-    reset_btn.click().run()
-    assert len(at.session_state.cleaning_recipe) == 0
-    print("Test Undo and Reset passed.")
+    # Verify redo stack has the undone step
+    assert len(at.session_state.redo_stack) == 1
+    
+    # Click Redo to re-apply the undone step
+    redo_btn = at.button(key="redo_btn")
+    assert not redo_btn.disabled
+    redo_btn.click().run()
+    
+    # Verify recipe is restored
+    assert len(at.session_state.cleaning_recipe) == 1
+    assert len(at.session_state.redo_stack) == 0
+    print("Test Undo and Redo passed.")
 
 
 def test_rename_and_reorder_ui():

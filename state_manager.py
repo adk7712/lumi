@@ -7,6 +7,10 @@ import hashlib
 import io
 from engine import apply_recipe
 from scout import generate_proposals
+from concurrent.futures import ThreadPoolExecutor
+import copy
+
+_db_executor = ThreadPoolExecutor(max_workers=4)
 
 # Define constants
 MAX_SAMPLE_ROWS = 10000
@@ -100,6 +104,10 @@ def add_rule(rule_dict: dict, at_end: bool = True):
         hue = get_safe_hue(len(st.session_state.rules))
         rule['color'] = f"hsla({hue}, 70%, 50%, 0.4)"
         
+    # Clear redo stack on new action (linear invalidation)
+    if 'redo_stack' in st.session_state:
+        st.session_state.redo_stack = []
+
     if at_end:
         st.session_state.rules.append(rule)
     else:
@@ -107,6 +115,15 @@ def add_rule(rule_dict: dict, at_end: bool = True):
     queue_event("issue_flagged", {"type": rule.get("type"), "col": rule.get("col")})
     save_session_state()
     save_db_session()
+    try:
+        from ui_utils import get_logged_in_user
+        from persistence import update_cached_project
+        user_id = get_logged_in_user()
+        session_id = st.session_state.get("session_id")
+        if user_id and session_id:
+            update_cached_project(user_id, session_id, step_count=len(st.session_state.cleaning_recipe))
+    except Exception:
+        pass
 
 def calculate_health(df: pd.DataFrame) -> int:
     """Calculates overall dataset health percentage: (1 - proportion of null cells) * 100"""
@@ -174,6 +191,10 @@ def initialize_state(from_reset=False):
         'show_uploader': False,
         '_pending_workspace_name': None,
         'project_name': None,
+        'redo_stack': [],
+        'recommendations_expanded': True,
+        'rule_violations_cache': {},
+        'rule_violations_cache_key': None,
     }
 
     # Force reset or initialize for the first time
@@ -184,6 +205,9 @@ def initialize_state(from_reset=False):
 def add_step(step):
     """Adds a cleaning step to the recipe, updates the cached state, and shows a toast."""
     st.session_state.cleaning_recipe.append(step)
+    
+    # Clear redo stack on new action (linear invalidation)
+    st.session_state.redo_stack = []
 
     # Calculate delta state from current_df and cache metadata only (no full df copy)
     new_df, messages = apply_recipe(st.session_state.current_df, [step])
@@ -201,6 +225,15 @@ def add_step(step):
     st.toast(f"Step Added: {step['action']}")
     save_session_state()
     save_db_session()
+    try:
+        from ui_utils import get_logged_in_user
+        from persistence import update_cached_project
+        user_id = get_logged_in_user()
+        session_id = st.session_state.get("session_id")
+        if user_id and session_id:
+            update_cached_project(user_id, session_id, step_count=len(st.session_state.cleaning_recipe))
+    except Exception:
+        pass
 
 
 def get_state_at_step(n: int) -> pd.DataFrame:
@@ -444,43 +477,55 @@ def load_session_state(file_hash: str, file_buffer):
         st.error(f"Error restoring session: {str(e)}")
 
 def save_db_session():
-    """Saves the current session state to the database."""
+    """Saves the current session state to the database asynchronously via background thread."""
     session_id = st.session_state.get("session_id")
     if not session_id:
         return
-        
+    
     user_id = None
     try:
         from ui_utils import get_logged_in_user
         user_id = get_logged_in_user()
     except Exception:
         pass
-        
+    
+    # Snapshot all data synchronously from session_state
     filename = st.session_state.get("filename", "untitled.csv")
-    recipe = st.session_state.get("cleaning_recipe", [])
-    rules = st.session_state.get("rules", [])
-    scanned_columns = st.session_state.get("scanned_columns", set())
+    recipe = copy.deepcopy(st.session_state.get("cleaning_recipe", []))
+    rules = copy.deepcopy(st.session_state.get("rules", []))
+    scanned_columns = set(st.session_state.get("scanned_columns", set()))
     project_name = st.session_state.get("project_name") or st.session_state.get("_pending_workspace_name")
     
-    from persistence import save_session
-    save_session(
-        session_id=session_id,
-        filename=filename,
-        recipe=recipe,
-        rules=rules,
-        scanned_columns=scanned_columns,
-        user_id=user_id,
-        project_name=project_name
-    )
+    # Handle pending workspace name synchronously
     if st.session_state.get("_pending_workspace_name"):
         st.session_state.project_name = st.session_state._pending_workspace_name
         st.session_state._pending_workspace_name = None
+    
+    def _bg_save():
+        from persistence import save_session
+        save_session(
+            session_id=session_id,
+            filename=filename,
+            recipe=recipe,
+            rules=rules,
+            scanned_columns=scanned_columns,
+            user_id=user_id,
+            project_name=project_name
+        )
+    
+    # During testing, run synchronously to avoid race conditions with assertions
+    import os
+    is_testing = os.getenv("LUMI_TESTING") == "1" or st.session_state.get("_is_testing", False)
+    if is_testing:
+        _bg_save()
+    else:
+        _db_executor.submit(_bg_save)
 
-def load_db_session(session_id: str, file_buffer) -> bool:
-    """Loads and restores the cleaning recipe and rules from the SQLite database."""
+def load_db_session(session_id: str, file_buffer, preloaded_session: dict = None) -> bool:
+    """Loads and restores the cleaning recipe and rules from the database."""
     from persistence import load_session
     from ui_utils import get_logged_in_user
-    db_session = load_session(session_id, get_logged_in_user())
+    db_session = preloaded_session or load_session(session_id, get_logged_in_user())
     if not db_session:
         return False
     
@@ -518,9 +563,6 @@ def load_db_session(session_id: str, file_buffer) -> bool:
     
     # Re-generate proposals based on scanned columns
     st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
-    
-    # Persist the fully restored state to the DB so it survives subsequent reloads
-    save_db_session()
     
     st.toast("Session Restored successfully")
     return True
@@ -562,8 +604,8 @@ def switch_workspace(target_session_id: str) -> bool:
     # 3. Clean state reset
     initialize_state(from_reset=True)
     
-    # 4. Delegate to existing load_db_session (handles recipe, rules, proposals & state sync)
-    success = load_db_session(target_session_id, buf)
+    # 4. Delegate to existing load_db_session with preloaded_session (bypasses redundant WAN roundtrip)
+    success = load_db_session(target_session_id, buf, preloaded_session=db_session)
     if success:
         st.session_state.project_name = db_session.get("project_name")
         st.rerun()

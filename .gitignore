@@ -36,3 +36,7 @@ lumi.db
 
 # mcps
 .playwright-mcp/
+
+# Tooling and reports
+graphify-out/
+reports/

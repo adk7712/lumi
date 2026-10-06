@@ -69,8 +69,9 @@ def render_transformations_tab(df):
             elif new_name in all_cols:
                 st.error(f"A column named '{new_name}' already exists.")
             else:
-                add_step({"action": "rename_column", "column": target, "value": new_name})
-                sync_column_rename(target, new_name)
+                with st.spinner("Renaming column..."):
+                    add_step({"action": "rename_column", "column": target, "value": new_name})
+                    sync_column_rename(target, new_name)
     elif t_type == "Reorder Columns":
         if 'temp_col_order' not in st.session_state or set(st.session_state.temp_col_order) != set(all_cols):
             st.session_state.temp_col_order = list(all_cols)
@@ -117,12 +118,13 @@ def render_transformations_tab(df):
             elif new_name in all_cols:
                 st.error(f"A column named '{new_name}' already exists.")
             else:
-                add_step({
-                    "action": "extract_datetime",
-                    "column": target,
-                    "new_column": new_name,
-                    "component": component
-                })
+                with st.spinner("Extracting datetime component..."):
+                    add_step({
+                        "action": "extract_datetime",
+                        "column": target,
+                        "new_column": new_name,
+                        "component": component
+                    })
     elif t_type == "Remove Duplicate Rows":
         st.info("This will remove all exact duplicate rows from the active dataset.")
         st.button("Execute Duplicate Removal", key="btn_remove_dups", on_click=add_step, args=({"action": "drop_duplicates"},))
@@ -142,9 +144,10 @@ def render_transformations_tab(df):
         }
         selected_method = st.selectbox("Naming Convention", list(method_options.keys()), key="norm_cols_method")
         if st.button("Execute Column Normalization", key="btn_norm_cols"):
-            method = method_options[selected_method]
-            new_names = predict_column_renames(df.columns.tolist(), method, only_changed=True)
-            
-            add_step({"action": "normalize_column_names", "value": method})
-            for orig, val in new_names.items():
-                sync_column_rename(orig, val)
+            with st.spinner("Normalizing column names..."):
+                method = method_options[selected_method]
+                new_names = predict_column_renames(df.columns.tolist(), method, only_changed=True)
+                
+                add_step({"action": "normalize_column_names", "value": method})
+                for orig, val in new_names.items():
+                    sync_column_rename(orig, val)

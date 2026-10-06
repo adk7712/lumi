@@ -5,6 +5,7 @@ import re
 from rule_utils import evaluate_rule
 from state_manager import add_step, sync_column_rename, calculate_health
 from engine_ops import predict_column_renames
+from ui_utils import plot_missingness_map
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
@@ -222,3 +223,22 @@ def render_overview_tab(df):
             st.dataframe(desc_df, width="stretch")
         with t_summary:
             st.dataframe(summary_df, width="stretch", hide_index=True)
+
+    # --- Missingness Pattern Map (relocated from Visual Insights) ---
+    st.divider()
+    last_file_hash = st.session_state.get("last_file_hash", "none")
+    step_count = len(st.session_state.get("cleaning_recipe", []))
+    df_state_key = f"{last_file_hash}_{step_count}"
+    with st.expander("Missingness Pattern Map", expanded=False):
+        st.markdown("Visualizes where missing values occur across the rows of the dataset.")
+        fig_null, is_null_sampled = plot_missingness_map(df, df_state_key)
+        if fig_null is not None:
+            st.plotly_chart(fig_null, width="stretch", theme="streamlit")
+            if is_null_sampled:
+                st.caption("Showing a representative sample of 1,000 rows for rendering performance.")
+        else:
+            if df.size > 0:
+                st.success("No missing values found in the dataset!")
+            else:
+                st.caption("Dataset is empty.")
+
