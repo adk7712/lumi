@@ -392,7 +392,7 @@ def test_evidence_report_generation():
     assert "# LUMI - Data Validation Evidence Report" in report_md
     assert "Total Rows Evaluated: 5" in report_md
     assert "Total Active Rules: 4" in report_md
-    assert "Total Rule Violations: 2" in report_md  # age null (1) + score nan/null (1) = 2
+    assert "Total Rule Violations: 1" in report_md  # age null (1); a null score is not a Range Check violation
     
     # Assert metrics block
     assert "## Data Cleaning Impact Metrics" in report_md
@@ -406,7 +406,7 @@ def test_evidence_report_generation():
     
     # Assert table contents
     assert "| Null Check | `age is NOT NULL` | FAILED | 1 |" in report_md
-    assert "| Range Check | `score in [0.0, 100.0]` | FAILED | 1 |" in report_md
+    assert "| Range Check | `score in [0.0, 100.0]` | PASSED | 0 |" in report_md
     assert "| Null Check | `fails check` | ERROR | 0 |" in report_md
     assert "| Informational | `informational check` | INFO | N/A |" in report_md
     

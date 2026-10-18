@@ -8,6 +8,7 @@ import pytest
 from scout import generate_proposals
 from rule_utils import evaluate_rule
 from engine import apply_recipe, generate_pipeline_code
+from state_manager import downcast_dtypes  # the app downcasts on upload; the exported script mirrors it
 
 def test_scout_heuristics():
     # Setup a mock dataframe tailored to trigger each scout heuristic
@@ -175,7 +176,7 @@ def test_comprehensive_code_generation():
     clean_func = exec_globals['clean_data']
     df_generated = clean_func(df.copy())
 
-    pd.testing.assert_frame_equal(df_clean, df_generated)
+    pd.testing.assert_frame_equal(apply_recipe(downcast_dtypes(df), recipe)[0], df_generated)
     print("Comprehensive code generation compilation and equality tests passed.")
 
 def test_rule_resolution_mapping():

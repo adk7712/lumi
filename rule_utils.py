@@ -32,10 +32,11 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
             else:
                 # Coerce to numeric to avoid errors with mixed types before comparison
                 col_numeric = pd.to_numeric(df[col_name], errors='coerce')
-                # Flag values outside the range OR values that could not be coerced (are NaN)
+                # Flag values outside the range OR non-null values that could not be coerced.
+                # Genuine nulls are NOT range violations — that is the Null Check's job.
                 out_of_range_mask = (col_numeric < rule_min) | (col_numeric > rule_max)
-                nan_mask = col_numeric.isnull()
-                mask = out_of_range_mask | nan_mask
+                unparseable_mask = col_numeric.isnull() & df[col_name].notnull()
+                mask = out_of_range_mask | unparseable_mask
         elif rule_type == "Relational Check":
             a = df[rule['col_a']]
             b = df[rule['col_b']] if rule.get('target_type') == 'Feature' else rule['value']
