@@ -33,6 +33,36 @@ _DOWNCAST_HELPER = (
     "        elif pd.api.types.is_integer_dtype(df[col]):\n"
     "            df[col] = pd.to_numeric(df[col], downcast='integer')\n"
     "    return df\n"
+    "\n\n"
+    "def _cap_series(s, lo, hi):\n"
+    "    \"\"\"Clip to [lo, hi]; integer columns stay integer when both bounds are integral.\"\"\"\n"
+    "    if pd.api.types.is_integer_dtype(s) and not pd.api.types.is_bool_dtype(s):\n"
+    "        if all(b is None or float(b) == int(b) for b in (lo, hi)):\n"
+    "            info = np.iinfo(s.dtype.numpy_dtype if hasattr(s.dtype, 'numpy_dtype') else s.dtype)\n"
+    "            lo = None if lo is None else max(int(lo), int(info.min))\n"
+    "            hi = None if hi is None else min(int(hi), int(info.max))\n"
+    "            return s.clip(lower=lo, upper=hi)\n"
+    "        s = s.astype('float64')\n"
+    "    return s.clip(lower=lo, upper=hi)\n"
+    "\n\n"
+    "def _numeric_to_datetime(s, col):\n"
+    "    \"\"\"Numeric -> datetime as years (1000-2999) or YYYYMMDD; else warn and return None.\"\"\"\n"
+    "    nn = s[s.notna()]\n"
+    "    if len(nn) == 0:\n"
+    "        return pd.to_datetime(s, errors='coerce')\n"
+    "    f = nn.astype('float64')\n"
+    "    if not (f % 1 == 0).all():\n"
+    "        warnings.warn(f\"'{col}' has non-integer numeric values; not converted to datetime. Column left unchanged.\")\n"
+    "        return None\n"
+    "    if f.between(1000, 2999).all():\n"
+    "        fmt = '%Y'\n"
+    "    elif f.between(10000101, 29991231).all():\n"
+    "        fmt = '%Y%m%d'\n"
+    "    else:\n"
+    "        warnings.warn(f\"'{col}' is numeric but not years (1000-2999) or YYYYMMDD dates; not converted to datetime. Column left unchanged.\")\n"
+    "        return None\n"
+    "    strs = s.map(lambda v: None if pd.isna(v) else str(int(v)))\n"
+    "    return pd.to_datetime(strs, format=fmt, errors='coerce')\n"
 )
 
 
@@ -130,8 +160,7 @@ def _codegen_cap_range(step: dict) -> list[str]:
     lo, hi = _lit(step['min']), _lit(step['max'])
     return [
         f"    # Cap values in the specified column to be within the defined min and max bounds.",
-        f"    df.loc[df[{c_repr}] < {lo}, {c_repr}] = {lo}",
-        f"    df.loc[df[{c_repr}] > {hi}, {c_repr}] = {hi}"
+        f"    df[{c_repr}] = _cap_series(df[{c_repr}], {lo}, {hi})"
     ]
 
 def _codegen_cast_type(step: dict) -> list[str]:
@@ -140,7 +169,13 @@ def _codegen_cast_type(step: dict) -> list[str]:
     if step['dtype'] == "datetime64[ns]":
         return [
             f"    # Convert column to datetime, coercing errors to NaT.",
-            f"    df[{c_repr}] = pd.to_datetime(df[{c_repr}], errors='coerce')"
+            f"    # Numeric columns are read as years / YYYYMMDD (never as nanoseconds); otherwise left unchanged with a warning.",
+            f"    if pd.api.types.is_numeric_dtype(df[{c_repr}]) and not pd.api.types.is_bool_dtype(df[{c_repr}]):",
+            f"        _dt = _numeric_to_datetime(df[{c_repr}], {c_repr})",
+            f"        if _dt is not None:",
+            f"            df[{c_repr}] = _dt",
+            f"    else:",
+            f"        df[{c_repr}] = pd.to_datetime(df[{c_repr}], errors='coerce')"
         ]
     target_dtype = step['dtype']
     if target_dtype in ['int64', 'int32', 'int']:
@@ -323,7 +358,12 @@ def _codegen_extract_datetime(step: dict) -> list[str]:
         return [f"    # extract_datetime on {col!r} skipped: unknown datetime component {component!r}."]
     return [
         f"    # Extract {component} component from {col!r} into {new_col!r}.",
-        f"    df[{repr(new_col)}] = pd.to_datetime(df[{repr(col)}], errors='coerce').{accessor}"
+        f"    if pd.api.types.is_numeric_dtype(df[{repr(col)}]) and not pd.api.types.is_bool_dtype(df[{repr(col)}]):",
+        f"        _dt = _numeric_to_datetime(df[{repr(col)}], {repr(col)})",
+        f"    else:",
+        f"        _dt = pd.to_datetime(df[{repr(col)}], errors='coerce')",
+        f"    if _dt is not None:",
+        f"        df[{repr(new_col)}] = _dt.{accessor}"
     ]
 
 def _codegen_drop_duplicates(step: dict) -> list[str]:

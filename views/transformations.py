@@ -47,6 +47,10 @@ def render_transformations_tab(df):
     elif t_type == "Cast Data Type":
         c1, c2 = st.columns(2)
         target, dtype_t = c1.selectbox("Column", all_cols, key="cast_target_col"), c2.selectbox("Cast To", ["string", "float64", "int64", "datetime64[ns]"], key="cast_dtype_select")
+        if dtype_t == "datetime64[ns]" and pd.api.types.is_numeric_dtype(df[target]) and not pd.api.types.is_bool_dtype(df[target]):
+            st.warning("Numeric column: values are read as years (1000-2999) or YYYYMMDD dates. "
+                       "Any other numbers are NOT converted (the column is left unchanged with a warning), "
+                       "since they would otherwise be misread as nanoseconds since 1970.")
         st.button("Execute Type Cast", key="btn_cast", on_click=add_step, args=({"action": "cast_type", "column": target, "dtype": dtype_t},))
     elif t_type == "Drop Column":
         target = st.selectbox("Target Column", all_cols, key="drop_target_col")
@@ -99,13 +103,17 @@ def render_transformations_tab(df):
         datetime_cols = [c for c in all_cols if pd.api.types.is_datetime64_any_dtype(df[c])]
         
         if not datetime_cols:
-            st.warning("No datetime columns detected in the active dataset. Convert a column using 'Cast Data Type' to 'datetime64[ns]' first, or select any column to coerce.")
+            st.warning("No datetime columns detected in the active dataset. Convert a column using 'Cast Data Type' to 'datetime64[ns]' first, or select any column to coerce (numeric columns must hold years or YYYYMMDD values).")
             target_cols = all_cols
         else:
             target_cols = datetime_cols
             
         c1, c2 = st.columns(2)
         target = c1.selectbox("Source Column", target_cols, key="datetime_extract_col")
+        if target and pd.api.types.is_numeric_dtype(df[target]) and not pd.api.types.is_bool_dtype(df[target]) \
+                and not pd.api.types.is_datetime64_any_dtype(df[target]):
+            st.warning("Numeric source: values are read as years (1000-2999) or YYYYMMDD dates. "
+                       "Other numbers are not converted and no column is created (a warning is shown).")
         component = c2.selectbox("Component to Extract", ["year", "month", "day", "day_of_week", "hour"], key="datetime_component_select")
         
         # Default name helper: {target}_{component}

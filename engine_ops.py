@@ -124,13 +124,57 @@ def _handle_fill_null(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
         return df, []
     return df, [f"Warning: Could not determine fill value for column '{col}' with strategy '{val}'."]
 
+def _cap_series(s: pd.Series, lo, hi) -> pd.Series:
+    """Clip *s* to [lo, hi] without pandas' silent int->float upcast.
+
+    dtype policy: integer column + both bounds integral -> stays integer (bounds
+    are clamped to the dtype's range so e.g. int8 is preserved). Integer column
+    with a fractional bound -> explicitly converted to float64 (never rounded).
+    Float columns stay float. Must mirror codegen._CAP_HELPER.
+    """
+    if pd.api.types.is_integer_dtype(s) and not pd.api.types.is_bool_dtype(s):
+        integral = all(b is None or float(b) == int(b) for b in (lo, hi))
+        if integral:
+            info = np.iinfo(s.dtype.numpy_dtype if hasattr(s.dtype, 'numpy_dtype') else s.dtype)
+            lo = None if lo is None else max(int(lo), int(info.min))
+            hi = None if hi is None else min(int(hi), int(info.max))
+            return s.clip(lower=lo, upper=hi)
+        s = s.astype('float64')
+    return s.clip(lower=lo, upper=hi)
+
 def _handle_cap_range(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     col = step.get('column')
     if col in df.columns:
-        df.loc[df[col] < step['min'], col] = step['min']
-        df.loc[df[col] > step['max'], col] = step['max']
+        df[col] = _cap_series(df[col], step['min'], step['max'])
         return df, []
     return df, [f"Warning: Column '{col}' not found for cap_range action."]
+
+def _numeric_to_datetime(s: pd.Series, col) -> Tuple[Optional[pd.Series], Optional[str]]:
+    """Convert a numeric series to datetime without the 'ints are nanoseconds' trap.
+
+    Returns (datetime_series, None) when all non-null values look like years
+    (1000-2999 -> '%Y') or YYYYMMDD dates (8 digits -> '%Y%m%d'); otherwise
+    (None, warning). Must mirror codegen._DT_HELPER.
+    """
+    nn = s.dropna()
+    if len(nn) == 0:
+        return pd.to_datetime(s, errors='coerce'), None
+    f = nn.astype('float64')
+    if not (f % 1 == 0).all():
+        return None, (f"Warning: '{col}' has non-integer numeric values; not converted to datetime "
+                      f"(numbers would be read as nanoseconds since 1970). Column left unchanged.")
+    if f.between(1000, 2999).all():
+        fmt = '%Y'
+    elif f.between(10000101, 29991231).all():
+        fmt = '%Y%m%d'
+    else:
+        return None, (f"Warning: '{col}' is numeric but its values are neither years (1000-2999) nor "
+                      f"YYYYMMDD dates; not converted to datetime. Column left unchanged.")
+    strs = s.map(lambda v: None if pd.isna(v) else str(int(v)))
+    return pd.to_datetime(strs, format=fmt, errors='coerce'), None
+
+def _is_plain_numeric(s: pd.Series) -> bool:
+    return pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s)
 
 def _handle_cast_type(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     col = step.get('column')
@@ -143,7 +187,13 @@ def _handle_cast_type(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
             target_dtype = "Int64"
         
         if step['dtype'] == "datetime64[ns]":
-            df[col] = pd.to_datetime(df[col], errors='coerce')
+            if _is_plain_numeric(df[col]):
+                converted, warn = _numeric_to_datetime(df[col], col)
+                if converted is None:
+                    return df, [warn]
+                df[col] = converted
+            else:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
         elif target_dtype in ['string', 'object']:
             df[col] = df[col].astype(target_dtype)
         else:
@@ -279,7 +329,11 @@ def _handle_extract_datetime(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.D
         
     try:
         # Coerce to datetime if not already datetime
-        if not pd.api.types.is_datetime64_any_dtype(df[col]):
+        if _is_plain_numeric(df[col]):
+            dt_series, warn = _numeric_to_datetime(df[col], col)
+            if dt_series is None:
+                return df, [warn]
+        elif not pd.api.types.is_datetime64_any_dtype(df[col]):
             dt_series = pd.to_datetime(df[col], errors='coerce')
         else:
             dt_series = df[col]

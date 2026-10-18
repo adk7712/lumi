@@ -107,6 +107,7 @@ STEPS = {
     'cast_int': {'action': 'cast_type', 'column': 'num_str', 'dtype': 'int'},
     'cast_string': {'action': 'cast_type', 'column': 'int_col', 'dtype': 'string'},
     'cast_object': {'action': 'cast_type', 'column': 'float_col', 'dtype': 'object'},
+    'cap_int_float_bounds': {'action': 'cap_range', 'column': 'int_col', 'min': 1.5, 'max': 10.5},
     'cast_datetime': {'action': 'cast_type', 'column': 'date_str', 'dtype': 'datetime64[ns]'},
     # drop_violated, one per rule type
     'dv_null': {'action': 'drop_violated', 'rule': {'type': 'Null Check', 'col': 'text'}},
