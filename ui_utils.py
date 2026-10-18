@@ -5,12 +5,92 @@ import plotly.graph_objects as go
 from pathlib import Path
 import streamlit as st
 from rule_utils import evaluate_rule
+import os
+import hmac as _hmac_mod
+import hashlib as _hashlib_mod
+import secrets as _secrets_mod
 
 # Constants for UI plots and displays
 PLOT_SAMPLE_SIZE = 1000
 DIAGNOSTIC_CHART_HEIGHT = 220
 MAX_CATEGORIES_DISPLAY = 10
 VIOLATION_PREVIEW_LIMIT = 100
+
+# ---------------------------------------------------------------------------
+# Auth hardening helpers (dev-auth gate + HMAC-signed cookies)
+# ---------------------------------------------------------------------------
+USER_EMAIL_COOKIE = "lumi_user_email"
+SESSION_COOKIE = "lumi_session"
+_TRUTHY = {"1", "true", "yes", "on"}
+# Per-process fallback secret: cookies signed with it stop verifying after a restart,
+# which simply degrades users to a fresh guest session.
+_PROCESS_COOKIE_SECRET = _secrets_mod.token_bytes(32)
+
+
+def _is_truthy(value) -> bool:
+    return str(value).strip().lower() in _TRUTHY
+
+
+def is_dev_auth_enabled() -> bool:
+    """Passwordless mock email login is only allowed with an explicit dev flag.
+
+    Enabled by env ``LUMI_DEV_AUTH=1``, ``st.secrets["dev_auth"] = true``, or ``LUMI_TESTING=1``.
+    """
+    if _is_truthy(os.environ.get("LUMI_DEV_AUTH", "")) or _is_truthy(os.environ.get("LUMI_TESTING", "")):
+        return True
+    try:
+        return _is_truthy(st.secrets.get("dev_auth", False))
+    except Exception:
+        return False
+
+
+def _get_cookie_secret() -> bytes:
+    """Secret for signing Lumi cookies: [auth].cookie_secret, env LUMI_COOKIE_SECRET, else per-process random."""
+    try:
+        if "auth" in st.secrets:
+            sec = st.secrets["auth"].get("cookie_secret")
+            if sec:
+                return str(sec).encode("utf-8")
+    except Exception:
+        pass
+    env_sec = os.environ.get("LUMI_COOKIE_SECRET")
+    if env_sec:
+        return env_sec.encode("utf-8")
+    return _PROCESS_COOKIE_SECRET
+
+
+def _cookie_signature(value: str, purpose: str) -> str:
+    msg = f"lumi-cookie-v1|{purpose}|{value}".encode("utf-8")
+    return _hmac_mod.new(_get_cookie_secret(), msg, _hashlib_mod.sha256).hexdigest()
+
+
+def sign_cookie_value(value: str, purpose: str) -> str:
+    """Return ``value.<hmac-sha256>`` bound to ``purpose`` (prevents cross-cookie reuse)."""
+    return f"{value}.{_cookie_signature(str(value), purpose)}"
+
+
+def verify_cookie_value(raw, purpose: str):
+    """Return the original value if ``raw`` carries a valid signature, else None (legacy/forged cookies)."""
+    if not raw or not isinstance(raw, str) or "." not in raw:
+        return None
+    value, sig = raw.rsplit(".", 1)
+    if not value or not sig:
+        return None
+    if _hmac_mod.compare_digest(sig, _cookie_signature(value, purpose)):
+        return value
+    return None
+
+
+def read_session_cookie(controller=None):
+    """Read and verify the signed ``lumi_session`` cookie; unsigned/tampered values yield None."""
+    try:
+        if controller is None:
+            from streamlit_cookies_controller import CookieController
+            controller = CookieController()
+        return verify_cookie_value(controller.get(SESSION_COOKIE), purpose="session")
+    except Exception:
+        return None
+
 
 def is_auth_configured() -> bool:
     """Check if streamlit OIDC auth credentials are set in secrets.toml."""
@@ -24,23 +104,36 @@ def is_auth_configured() -> bool:
     return False
 
 def get_logged_in_user() -> str:
-    """Get the active user's email, supporting local dev mock, browser cookie, or Streamlit OIDC user info."""
-    dev_email = st.session_state.get("dev_user_email")
-    if dev_email:
-        return dev_email
-        
+    """Get the active user's email.
+
+    Resolution order (S1/S2 hardening):
+      1. Real Streamlit OIDC identity (``st.user``) always wins.
+      2. Server-side ``dev_user_email`` in session state: anonymous ``guest_*`` ids are
+         always honoured; any other email only when dev auth is enabled.
+      3. HMAC-signed ``lumi_user_email`` cookie, only when dev auth is enabled.
+         Unsigned/forged/tampered cookies are ignored.
+    """
     try:
         if hasattr(st, "user") and st.user and st.user.get("email"):
             return st.user.get("email")
     except Exception:
         pass
 
-    if not st.session_state.get("_is_testing", False):
+    dev_enabled = is_dev_auth_enabled()
+
+    dev_email = st.session_state.get("dev_user_email")
+    if dev_email:
+        if str(dev_email).startswith("guest_") or dev_enabled:
+            return dev_email
+        # A non-guest mock email without the dev flag is never a valid identity.
+        st.session_state.pop("dev_user_email", None)
+
+    if dev_enabled and not st.session_state.get("_is_testing", False):
         try:
             from streamlit_cookies_controller import CookieController
             controller = CookieController()
-            cookie_email = controller.get("lumi_user_email")
-            if cookie_email and isinstance(cookie_email, str):
+            cookie_email = verify_cookie_value(controller.get(USER_EMAIL_COOKIE), purpose="user_email")
+            if cookie_email and "@" in cookie_email:
                 st.session_state.dev_user_email = cookie_email
                 return cookie_email
         except Exception:
@@ -72,7 +165,7 @@ def handle_signout():
         st.session_state.pop("dev_user_email", None)
     try:
         from streamlit_cookies_controller import CookieController
-        CookieController().remove("lumi_user_email")
+        CookieController().remove(USER_EMAIL_COOKIE)
     except Exception:
         pass
     try:
@@ -94,26 +187,36 @@ def show_signout_dialog():
 
 @st.dialog("Lumi Authentication")
 def show_auth_dialog():
+    _render_auth_options()
+
+
+def _render_auth_options():
+    """Body of the sign-in dialog (split out so it is testable outside a dialog context)."""
     st.markdown('<p style="color: #a3a3a3; font-size: 0.95rem; text-align: center; margin-bottom: 1.5rem;">Sign in to sync and manage your cleaning workspaces.</p>', unsafe_allow_html=True)
     
-    # 1. Dev / Local Email Login
-    st.markdown("**Sign In with Email**")
-    user_email_input = st.text_input("Email address", value="user@example.com", key="auth_dev_email_input")
-    if st.button("Sign In", key="auth_dev_email_login_btn", use_container_width=True, type="primary"):
-        if user_email_input and "@" in user_email_input:
-            email_clean = user_email_input.strip()
-            st.session_state.dev_user_email = email_clean
-            try:
-                from streamlit_cookies_controller import CookieController
-                CookieController().set("lumi_user_email", email_clean)
-            except Exception:
-                pass
-            st.toast(f"Signed in as {email_clean}")
-            st.rerun()
-        else:
-            st.error("Please enter a valid email address.")
+    # 1. Dev / Local Email Login (passwordless mock) -- only behind an explicit dev flag
+    if is_dev_auth_enabled():
+        st.markdown("**Sign In with Email (dev mode)**")
+        user_email_input = st.text_input("Email address", value="user@example.com", key="auth_dev_email_input")
+        if st.button("Sign In", key="auth_dev_email_login_btn", use_container_width=True, type="primary"):
+            if not is_dev_auth_enabled():
+                st.error("Email sign-in is disabled.")
+            elif user_email_input and "@" in user_email_input:
+                email_clean = user_email_input.strip()
+                st.session_state.dev_user_email = email_clean
+                try:
+                    from streamlit_cookies_controller import CookieController
+                    CookieController().set(USER_EMAIL_COOKIE, sign_cookie_value(email_clean, purpose="user_email"))
+                except Exception:
+                    pass
+                st.toast(f"Signed in as {email_clean}")
+                st.rerun()
+            else:
+                st.error("Please enter a valid email address.")
 
-    st.markdown('<div style="text-align: center; margin: 1rem 0; color: #555;">— OR —</div>', unsafe_allow_html=True)
+        st.markdown('<div style="text-align: center; margin: 1rem 0; color: #555;">— OR —</div>', unsafe_allow_html=True)
+    elif not is_auth_configured():
+        st.info("Account sign-in is not configured on this deployment. You can keep using Lumi as a guest.")
 
     # 2. Google Login Button (if configured)
     if is_auth_configured():
@@ -129,7 +232,7 @@ def show_auth_dialog():
     # 3. Guest / Dev Login
     if st.button("Continue as Anonymous Guest", key="auth_dev_login_btn", use_container_width=True):
         import uuid
-        guest_id = f"guest_{uuid.uuid4().hex[:8]}@lumi.ai"
+        guest_id = f"guest_{uuid.uuid4().hex}@lumi.ai"
         st.session_state.dev_user_email = guest_id
         st.toast("Started temporary guest session")
         st.rerun()
@@ -342,6 +445,50 @@ def plot_outlier_distribution(df: pd.DataFrame, df_state_key: str = "default") -
         )
         return fig, is_sampled
     return None, False
+
+MAX_BOX_COLUMNS = 12
+
+
+def zscore_candidate_columns(df: pd.DataFrame) -> list:
+    """Numeric columns with at least two non-null values and non-zero variance."""
+    cols = []
+    for col in df.select_dtypes(include=[np.number]).columns:
+        s = df[col]
+        if s.notna().sum() > 1 and (s.std() or 0) > 0:
+            cols.append(col)
+    return cols
+
+
+def build_zscore_boxplot(df: pd.DataFrame, columns=None, max_columns: int = MAX_BOX_COLUMNS) -> tuple:
+    """Pure builder: side-by-side box plots of z-scored numeric columns.
+
+    Constant / all-null columns are skipped. Returns (figure_or_None, is_sampled).
+    """
+    candidates = zscore_candidate_columns(df)
+    if columns is not None:
+        wanted = set(columns)
+        candidates = [c for c in candidates if c in wanted]
+    candidates = candidates[:max_columns]
+    if not candidates:
+        return None, False
+    z_df = pd.DataFrame({c: (df[c] - df[c].mean()) / df[c].std() for c in candidates})
+    plot_z_df, is_sampled = downsample_for_plot(z_df)
+    melted = plot_z_df.melt(var_name="Feature", value_name="Z-Score").dropna()
+    fig = px.box(
+        melted, x="Feature", y="Z-Score", color="Feature",
+        height=420, color_discrete_sequence=px.colors.qualitative.Pastel,
+    )
+    apply_lumi_layout(fig)
+    fig.update_layout(showlegend=False, hovermode="closest",
+                      xaxis_title=None, yaxis_title="Standardized Value (Z-Score)")
+    return fig, is_sampled
+
+
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+def plot_zscore_boxes(df: pd.DataFrame, columns: tuple, df_state_key: str = "default") -> tuple:
+    """Cached wrapper around build_zscore_boxplot (keyed by df_state_key like other charts)."""
+    return build_zscore_boxplot(df, columns)
+
 
 def inject_posthog(st_object):
     """Injects PostHog tracking script if a key is configured in st.secrets or environment variables."""

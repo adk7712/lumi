@@ -67,13 +67,10 @@ def render_landing_page():
     st.html('<div class="welcome-bg welcome-grid-bg"><div class="welcome-orb welcome-orb-1"></div><div class="welcome-orb welcome-orb-2"></div><div class="welcome-orb welcome-orb-3"></div></div>')
     # Top right login/status bar is now rendered in the main card content to be always visible
     # Primary detection: check browser cookie via controller
-    cookie_session_id = None
-    try:
-        from streamlit_cookies_controller import CookieController
-        controller = CookieController()
-        cookie_session_id = controller.get("lumi_session")
-    except Exception:
-        pass
+    # Only HMAC-signed session cookies are trusted; unsigned legacy or forged values are ignored
+    # (the user simply gets a fresh guest session).
+    from ui_utils import read_session_cookie
+    cookie_session_id = read_session_cookie()
 
     # Secondary fallback: URL query parameter
     fallback_session_id = st.query_params.get("session")
