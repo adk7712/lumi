@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from state_manager import add_step, add_rule, save_session_state, save_db_session, regenerate_proposals
+from state_manager import reset_intermediate_states, add_step, add_rule, save_session_state, save_db_session, regenerate_proposals
 from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
 
 def handle_accept_all():
@@ -47,9 +47,9 @@ def handle_clear_all():
         if '_source_proposal_type' in s and '_source_proposal_col' in s:
             st.session_state.scanned_columns.discard(f"{s['_source_proposal_col']}:{s['_source_proposal_type']}")
     st.session_state.rules, st.session_state.cleaning_recipe = [], []
-    st.session_state.intermediate_states = []
     if st.session_state.raw_data is not None:
         st.session_state.current_df = st.session_state.raw_data.copy()
+    reset_intermediate_states()
     regenerate_proposals()
     save_session_state()
     save_db_session()

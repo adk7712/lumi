@@ -244,7 +244,8 @@ class TestCookiesAndPersistence(unittest.TestCase):
             self.assertEqual(st.session_state.filename, "test_data.csv")
             
             # Verify cookie set was called
-            controller_instance.set.assert_called_once_with("lumi_session", session_id)
+            from ui_utils import sign_cookie_value
+            controller_instance.set.assert_called_once_with("lumi_session", sign_cookie_value(session_id, purpose="session"))
             
             # Verify initial state saved in DB
             db_session = load_session(session_id)
@@ -277,7 +278,9 @@ class TestCookiesAndPersistence(unittest.TestCase):
     def test_resume_banner_appears_when_session_found(self, mock_load_session, mock_cookie_controller, mock_runtime):
         # 1. Cookie is present
         controller_instance = mock_cookie_controller.return_value
-        controller_instance.get.side_effect = lambda key: "session-cookie-123" if key == "lumi_session" else None
+        from ui_utils import sign_cookie_value
+        signed_cookie = sign_cookie_value("session-cookie-123", purpose="session")
+        controller_instance.get.side_effect = lambda key: signed_cookie if key == "lumi_session" else None
         
         # 2. Database matches
         mock_load_session.return_value = {

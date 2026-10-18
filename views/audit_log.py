@@ -1,5 +1,5 @@
 import streamlit as st
-from state_manager import add_step, get_state_at_step, save_session_state
+from state_manager import replay_steps, get_state_at_step
 
 def render_audit_log_tab():
     if not st.session_state.cleaning_recipe:
@@ -18,9 +18,6 @@ def render_audit_log_tab():
                     # Reset current_df to the correct pre-removal state before replaying
                     # downstream steps, so add_step records accurate row counts.
                     st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
-                    for r_step in remaining_recipe:
-                        add_step(r_step)
-                        st.session_state._needs_rerun = True
-                    save_session_state()
-                    st.session_state._needs_rerun = True
+                    replay_steps(remaining_recipe)
+                    st.session_state.redo_stack = []
                     st.session_state._needs_rerun = True
