@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+    branches: [experimental, master]
+  pull_request:
+    branches: [experimental, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      LUMI_TESTING: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: >
+          pytest -q tests/
+          --ignore=tests/stress_test_db.py
+          --ignore=tests/benchmark_db_operations.py
+          --ignore=tests/benchmark_pool_improvements.py
+          --ignore=tests/autonomous_perf_suite.py
+          --ignore=tests/analyze_db_perf.py
