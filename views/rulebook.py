@@ -1,36 +1,33 @@
 import streamlit as st
 import pandas as pd
-from state_manager import reset_intermediate_states, add_step, add_rule, save_session_state, save_db_session, regenerate_proposals
+from state_manager import reset_intermediate_states, add_step, add_rule, save_session_state, save_db_session, regenerate_proposals, sync_column_rename
 from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
+
+def _accept_proposal(p, at_end=False):
+    st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
+    data = p['rule_data'].copy()
+    data['_source_proposal_type'] = p['type']
+    data['_source_proposal_col'] = p['column']
+    if 'action' in data:
+        if data['action'] == 'normalize_column_names':
+            from engine_ops import predict_column_renames
+            renames = predict_column_renames(st.session_state.current_df.columns.tolist(), data.get('value', 'snake_case'), only_changed=True)
+            add_step(data)
+            for orig, new in renames.items():
+                sync_column_rename(orig, new)
+        else:
+            add_step(data)
+    else:
+        add_rule(data, at_end=at_end)
 
 def handle_accept_all():
     for p in st.session_state.proposals:
-        st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
-        if 'action' in p['rule_data']:
-            s_data = p['rule_data'].copy()
-            s_data['_source_proposal_type'] = p['type']
-            s_data['_source_proposal_col'] = p['column']
-            add_step(s_data)
-        else:
-            r_data = p['rule_data'].copy()
-            r_data['_source_proposal_type'] = p['type']
-            r_data['_source_proposal_col'] = p['column']
-            add_rule(r_data, at_end=True)
+        _accept_proposal(p, at_end=True)
     st.session_state.proposals = []
     st.toast("All recommendations accepted")
 
 def handle_accept_proposal(p_idx, p):
-    st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
-    if 'action' in p['rule_data']:
-        s_data = p['rule_data'].copy()
-        s_data['_source_proposal_type'] = p['type']
-        s_data['_source_proposal_col'] = p['column']
-        add_step(s_data)
-    else:
-        r_data = p['rule_data'].copy()
-        r_data['_source_proposal_type'] = p['type']
-        r_data['_source_proposal_col'] = p['column']
-        add_rule(r_data, at_end=False)
+    _accept_proposal(p)
     st.session_state.proposals.pop(p_idx)
 
 def handle_dismiss_proposal(p_idx, p):
@@ -73,7 +70,7 @@ def render_rulebook_tab(df):
             p_cols = st.columns(2)
             for p_idx, p in enumerate(st.session_state.proposals):
                 with p_cols[p_idx % 2]:
-                    st.markdown(f'<div class="proposal-box"><strong>{p["type"]} on {p["column"]}</strong><br/><small>{p["reason"]}</small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="proposal-box"><strong>{p["title"] + " (dataset)" if p["column"] == "__dataset__" else p["type"] + " on " + p["column"]}</strong><br/><small>{p["reason"]}</small></div>', unsafe_allow_html=True)
                     acc, dis = st.columns(2)
                     acc.button("Accept", key=f"p_acc_{p['column']}_{p['type']}_{p_idx}", width="stretch", on_click=handle_accept_proposal, args=(p_idx, p))
                     dis.button("Dismiss", key=f"p_dis_{p['column']}_{p['type']}_{p_idx}", width="stretch", on_click=handle_dismiss_proposal, args=(p_idx, p))
