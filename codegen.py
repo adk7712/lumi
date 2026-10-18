@@ -387,21 +387,30 @@ def _codegen_drop_empty_rows(step: dict) -> list[str]:
 
 def _codegen_normalize_column_names(step: dict) -> list[str]:
     method = step.get('value', 'snake_case')
+    # snake_case mirrors engine_ops.predict_column_renames line-for-line; keep them in sync.
+    snake_lines = [
+        "        _val = re.sub(r'[ \\-.]', '_', _orig.strip())",
+        "        _val = re.sub(r'[^a-zA-Z0-9_]', '', _val)",
+        "        _val = re.sub(r'([a-z0-9])([A-Z])', r'\\1_\\2', _val)",
+        "        _val = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\\1_\\2', _val)",
+        "        _val = re.sub(r'_+', '_', _val).lower().strip('_')",
+        "        if _val[:1].isdigit():",
+        "            _val = 'col_' + _val",
+    ]
     exprs = {
-        'snake_case': "re.sub(r'_+', '_', re.sub(r'[^a-zA-Z0-9_]', '', _orig.strip().replace(' ', '_').replace('-', '_'))).lower()",
         'lowercase': "_orig.lower()",
         'uppercase': "_orig.upper()",
         'remove_spaces': "_orig.replace(' ', '')",
     }
-    if method not in exprs:
+    if method != 'snake_case' and method not in exprs:
         return [f"    # Unknown column-name normalization method {method!r}: no change."]
     code = [f"    # Normalize column names using {method} format."]
     if method == 'snake_case':
         code.append("    import re")
-    code.extend([
-        "    _new_cols = []",
-        "    for _orig in df.columns:",
-        f"        _val = {exprs[method]}",
+        body = ["    _new_cols = []", "    for _orig in df.columns:"] + snake_lines
+    else:
+        body = ["    _new_cols = []", "    for _orig in df.columns:", f"        _val = {exprs[method]}"]
+    code.extend(body + [
         "        _new_cols.append(_val if _val else f\"column_{_orig}\")",
         "    df.columns = _new_cols",
     ])

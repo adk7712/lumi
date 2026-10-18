@@ -13,8 +13,13 @@ def predict_column_renames(columns: list, method: str, only_changed: bool = Fals
     new_names = {}
     for orig in columns:
         if method == 'snake_case':
-            val = re.sub(r'[^a-zA-Z0-9_]', '', orig.strip().replace(' ', '_').replace('-', '_'))
-            val = re.sub(r'_+', '_', val).lower()
+            val = re.sub(r'[ \-.]', '_', orig.strip())
+            val = re.sub(r'[^a-zA-Z0-9_]', '', val)
+            val = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', val)
+            val = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', val)
+            val = re.sub(r'_+', '_', val).lower().strip('_')
+            if val[:1].isdigit():
+                val = 'col_' + val
         elif method == 'lowercase':
             val = orig.lower()
         elif method == 'uppercase':
