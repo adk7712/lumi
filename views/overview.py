@@ -147,7 +147,6 @@ def render_overview_tab(df):
                         new_names = predict_column_renames(df.columns.tolist(), 'snake_case', only_changed=True)
 
                         add_step({"action": "normalize_column_names", "value": "snake_case"})
-                        st.session_state._needs_rerun = True
                         for orig, val in new_names.items():
                             sync_column_rename(orig, val)
                         st.session_state._needs_rerun = True

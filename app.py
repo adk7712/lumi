@@ -191,6 +191,11 @@ with tab_pipeline:
 # Bottom violation browser
 render_violation_browser(st.session_state.current_df)
 
+# Views set _needs_rerun after mutating state mid-run (their metrics were already
+# rendered from the old state). Consume it here with a single rerun.
+if st.session_state.pop("_needs_rerun", False):
+    st.rerun()
+
 # --- Tab State Persistence Script ---
 import json
 _tab_names_json = json.dumps(TAB_NAMES)
