@@ -73,15 +73,80 @@ def _warn_save_failure_once(msg: str):
         logger.debug("Could not display save warning", exc_info=True)
 
 
+def resume_owner():
+    """Owner scope for the local resume cache, or None when there is no identity yet.
+
+    Signed-in users are scoped by account id. Guests are scoped by their session id:
+    the current ``session_id`` if a dataset is loaded, else the one recovered from the
+    HMAC-signed ``lumi_session`` cookie (unsigned/forged cookies yield nothing), so only
+    the same browser sees its own restore prompt.
+    """
+    try:
+        from ui_utils import get_logged_in_user, is_authenticated_user, read_session_cookie
+        if is_authenticated_user():
+            return f"user:{get_logged_in_user()}"
+        sid = st.session_state.get("session_id") or read_session_cookie()
+    except Exception:
+        logger.warning("Could not resolve resume-cache owner", exc_info=True)
+        return None
+    return f"guest:{sid}" if sid else None
+
+
+def resume_cache_path(file_hash: str, owner: str = None):
+    """Owner-scoped cache file ``.lumi_cache/<sha256(owner|file_hash)>.json`` (None without an owner).
+
+    Best-effort only: on Streamlit Community Cloud the local disk is ephemeral, so this
+    cache disappears on redeploy/restart. Signed-in users' durable path is the DB-backed
+    workspace list; for guests, resume after closing the tab is best-effort.
+    """
+    owner = owner if owner is not None else resume_owner()
+    if not owner or not file_hash:
+        return None
+    key = hashlib.sha256(f"lumi-resume-v2|{owner}|{file_hash}".encode("utf-8")).hexdigest()
+    return CACHE_DIR / f"{key}.json"
+
+
+def _purge_legacy_cache(file_hash: str):
+    """Delete the pre-V1 unscoped ``.lumi_cache/{file_hash}.json`` (it is never offered to anyone)."""
+    if not file_hash:
+        return
+    legacy = CACHE_DIR / f"{file_hash}.json"
+    try:
+        if legacy.exists():
+            legacy.unlink()
+    except Exception:
+        logger.debug("Could not delete legacy cache %s", legacy, exc_info=True)
+
+
+def has_resume_cache(file_hash: str, owner: str = None) -> bool:
+    """True only when *this owner* has saved progress for this file."""
+    _purge_legacy_cache(file_hash)
+    path = resume_cache_path(file_hash, owner)
+    return bool(path and path.exists())
+
+
+def discard_resume_cache(file_hash: str, owner: str = None):
+    """Delete this owner's saved progress for this file (no-op if absent)."""
+    _purge_legacy_cache(file_hash)
+    path = resume_cache_path(file_hash, owner)
+    if path and path.exists():
+        try:
+            path.unlink()
+        except Exception:
+            logger.warning("Could not delete resume cache %s", path, exc_info=True)
+
+
 def save_session_state():
-    """Saves the current recipe and rules to the local cache directory."""
+    """Saves the current recipe and rules to the owner-scoped local cache."""
     file_hash = st.session_state.get('last_file_hash')
     if not file_hash:
         return
         
     try:
+        cache_path = resume_cache_path(file_hash)
+        if cache_path is None:
+            return  # no owner identity yet -> never write an unscoped cache
         CACHE_DIR.mkdir(exist_ok=True)
-        cache_path = CACHE_DIR / f"{file_hash}.json"
         
         # Serialize scanned_columns as list
         scanned_cols = list(st.session_state.get('scanned_columns', set()))
@@ -192,11 +257,17 @@ def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str =
     st.toast("Dataset Analyzed")
 
 def load_session_state(file_hash: str, file_buffer):
-    """Loads and restores the cleaning recipe and rules from the local cache."""
-    process_uploaded_file(file_buffer, file_hash, _skip_db_save=True)
+    """Loads and restores the cleaning recipe and rules from this owner's local cache."""
+    # Resolve the owner before process_uploaded_file() assigns a session id.
+    owner = resume_owner()
+    cache_path = resume_cache_path(file_hash, owner)
+    _purge_legacy_cache(file_hash)
+    # Guests keep their session id across a restore so the cookie (and therefore the
+    # scope of this cache) stays the same after the next reload.
+    restore_sid = owner.split(":", 1)[1] if owner and owner.startswith("guest:") else None
+    process_uploaded_file(file_buffer, file_hash, restore_session_id=restore_sid, _skip_db_save=True)
     
-    cache_path = CACHE_DIR / f"{file_hash}.json"
-    if not cache_path.exists():
+    if cache_path is None or not cache_path.exists():
         save_db_session()
         return
         
@@ -252,9 +323,8 @@ def _on_bg_done(fut, old_sid):
 def _set_session_cookie(session_id):
     """Write the signed ``lumi_session`` cookie for ``session_id``."""
     try:
-        from streamlit_cookies_controller import CookieController
-        from ui_utils import sign_cookie_value, SESSION_COOKIE
-        CookieController().set(SESSION_COOKIE, sign_cookie_value(session_id, purpose="session"))
+        from ui_utils import sign_cookie_value, set_cookie, SESSION_COOKIE
+        set_cookie(SESSION_COOKIE, sign_cookie_value(session_id, purpose="session"))
     except Exception as e:
         logger.warning("Error setting session cookie: %s", e)
 

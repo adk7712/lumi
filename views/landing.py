@@ -7,9 +7,11 @@ from state_manager import (
     process_uploaded_file,
     load_session_state,
     load_db_session,
+    has_resume_cache,
+    discard_resume_cache,
     LARGE_FILE_THRESHOLD_BYTES
 )
-from ui_utils import is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, format_timestamp
+from ui_utils import is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, format_timestamp, remove_cookie, SESSION_COOKIE
 from persistence import count_user_sessions, get_user_projects
 
 def render_iframe_dropzone_patch():
@@ -178,12 +180,7 @@ def render_landing_page():
                 if st.button("Start a new project instead", key="btn_cancel_resume", use_container_width=True):
                     st.query_params.pop("session", None)
                     st.session_state.pop("resume_session_id", None)
-                    try:
-                        from streamlit_cookies_controller import CookieController
-                        controller = CookieController()
-                        controller.remove("lumi_session")
-                    except Exception:
-                        pass
+                    remove_cookie(SESSION_COOKIE)
                     st.rerun()
             render_iframe_dropzone_patch()
             st.stop()
@@ -191,12 +188,7 @@ def render_landing_page():
             # Clean invalid/expired sessions gracefully
             st.query_params.pop("session", None)
             st.session_state.pop("resume_session_id", None)
-            try:
-                from streamlit_cookies_controller import CookieController
-                controller = CookieController()
-                controller.remove("lumi_session")
-            except Exception:
-                pass
+            remove_cookie(SESSION_COOKIE)
             st.rerun()
 
     # 2. Dismissible Session Banner (Primary Flow for anonymous guests only)
@@ -213,19 +205,14 @@ def render_landing_page():
             
             with st.container(border=True):
                 c_text, c_resume, c_fresh, c_dismiss = st.columns([5, 2, 2, 1])
-                c_text.markdown(f"**Continue your last session?** ({filename}, {step_count} steps)")
+                c_text.markdown(f"**Continue your last session?** ({filename}, {step_count} step{'' if step_count == 1 else 's'})")
                 
                 if c_resume.button("Resume", key="cookie_resume_btn", use_container_width=True):
                     st.session_state.resume_session_id = cookie_session_id
                     st.session_state[f"_cached_resume_{cookie_session_id}"] = db_session
                     st.rerun()
                 if c_fresh.button("Start fresh", key="cookie_fresh_btn", use_container_width=True):
-                    try:
-                        from streamlit_cookies_controller import CookieController
-                        controller = CookieController()
-                        controller.remove("lumi_session")
-                    except Exception:
-                        pass
+                    remove_cookie(SESSION_COOKIE)
                     st.session_state.pop("resume_session_id", None)
                     st.session_state.pop(cookie_cache_key, None)
                     st.query_params.pop("session", None)
@@ -261,12 +248,9 @@ def render_landing_page():
                 st.session_state.pop("temp_uploader_file", None)
                 st.rerun()
             if c2.button("No, Start Fresh", key="btn_discard_session", use_container_width=True):
+                # Delete this owner's cache first (owner is resolved before a new session id is assigned)
+                discard_resume_cache(st.session_state.pending_restore_hash)
                 process_uploaded_file(st.session_state.temp_uploader_file, st.session_state.pending_restore_hash)
-                # Delete cache
-                cache_file = Path(".lumi_cache") / f"{st.session_state.pending_restore_hash}.json"
-                if cache_file.exists():
-                    try: cache_file.unlink()
-                    except Exception: pass
                 st.session_state.pop("pending_restore_hash", None)
                 st.session_state.pop("temp_uploader_file", None)
                 st.rerun()
@@ -328,7 +312,7 @@ def render_landing_page():
                     p_name = p["project_name"] or p["filename"] or "Untitled Workspace"
                     is_pinned = bool(p.get("pinned", 0))
                     pin_icon = "📌 " if is_pinned else ""
-                    step_text = f"{p.get('step_count', 0)} steps"
+                    step_text = f"{p.get('step_count', 0)} step{'' if p.get('step_count', 0) == 1 else 's'}"
                     fn_text = p.get('filename', '')
                     ts_str = format_timestamp(p.get("updated_at"))
                     caption_parts = [part for part in [fn_text, step_text, ts_str] if part]
@@ -365,11 +349,12 @@ def render_landing_page():
             st.stop()
             
         file_hash = calculate_file_hash(welcome_uploader)
-        cache_file = Path(".lumi_cache") / f"{file_hash}.json"
         
         is_testing = st.session_state.get("_is_testing", False)
         
-        if cache_file.exists() and not is_testing and not is_authenticated_user() and st.session_state.get("pending_restore_hash") != file_hash:
+        # Only offer a restore when *this* owner (signed session id for guests) saved progress
+        # for this file; another visitor uploading the same file never sees it (V1).
+        if has_resume_cache(file_hash) and not is_testing and not is_authenticated_user() and st.session_state.get("pending_restore_hash") != file_hash:
             st.session_state.pending_restore_hash = file_hash
             st.session_state.temp_uploader_file = welcome_uploader
             st.rerun()

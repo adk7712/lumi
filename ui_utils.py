@@ -81,12 +81,130 @@ def verify_cookie_value(raw, purpose: str):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Cookie controller: exactly one CookieController per script run.
+#
+# streamlit_cookies_controller binds the browser's cookie jar to the widget key
+# ``cookies``. The first instance in a run renders that widget; any further instance
+# in the same run tries ``st.session_state["cookies"] = ...`` and Streamlit raises
+# "cannot be modified after the widget with key cookies is instantiated", so the
+# second caller's set()/get() silently failed (that is why lumi_session was never
+# written). All Lumi code goes through get_cookie_controller() instead.
+#
+# A set()/remove() renders a hidden component whose iframe writes document.cookie.
+# Callers usually st.rerun() right after (e.g. after an upload), which can discard
+# that iframe before it runs, so writes are also queued and re-asserted at the top
+# of the next few runs by sync_cookies() (idempotent).
+# ---------------------------------------------------------------------------
+_COOKIE_CTRL_STATE_KEY = "_lumi_cookie_ctrl"
+_COOKIE_OPS_STATE_KEY = "_lumi_cookie_ops"
+_COOKIE_REASSERT_RUNS = 3
+
+
+def _current_run_marker():
+    """An object unique to the current script run (None outside a Streamlit run).
+
+    ``ScriptRunContext.reset()`` replaces ``widget_ids_this_run`` with a fresh set at the
+    start of every run; we hold a reference to it, so identity comparison is reliable.
+    """
+    try:
+        from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+        ctx = get_script_run_ctx(suppress_warning=True)
+        return getattr(ctx, "widget_ids_this_run", None) if ctx is not None else None
+    except Exception:
+        return None
+
+
+def get_cookie_controller():
+    """Return this run's single CookieController (created on first use in the run), or None."""
+    marker = _current_run_marker()
+    if marker is not None:
+        cached = st.session_state.get(_COOKIE_CTRL_STATE_KEY)
+        if isinstance(cached, tuple) and len(cached) == 2 and cached[0] is marker:
+            return cached[1]
+    try:
+        from streamlit_cookies_controller import CookieController
+        controller = CookieController()
+    except Exception as e:
+        import logging
+        logging.getLogger("lumi.auth").warning("Cookie controller unavailable: %s", e)
+        return None
+    if marker is not None:
+        st.session_state[_COOKIE_CTRL_STATE_KEY] = (marker, controller)
+    return controller
+
+
+def _apply_cookie_op(controller, name, value):
+    if value is None:
+        try:
+            controller.remove(name)
+        except KeyError:
+            pass  # library pops its local copy without a default; browser removal was still issued
+    else:
+        controller.set(name, value)
+
+
+def _queue_cookie_op(name, value):
+    try:
+        ops = dict(st.session_state.get(_COOKIE_OPS_STATE_KEY) or {})
+        ops[name] = [value, _COOKIE_REASSERT_RUNS]
+        st.session_state[_COOKIE_OPS_STATE_KEY] = ops
+    except Exception:
+        pass
+
+
+def set_cookie(name: str, value: str) -> bool:
+    """Write a cookie now and re-assert it on the next runs (survives an immediate st.rerun)."""
+    _queue_cookie_op(name, value)
+    controller = get_cookie_controller()
+    if controller is None:
+        return False
+    try:
+        _apply_cookie_op(controller, name, value)
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger("lumi.auth").warning("Error setting cookie %s: %s", name, e)
+        return False
+
+
+def remove_cookie(name: str) -> bool:
+    """Delete a cookie now and re-assert the deletion on the next runs."""
+    _queue_cookie_op(name, None)
+    controller = get_cookie_controller()
+    if controller is None:
+        return False
+    try:
+        _apply_cookie_op(controller, name, None)
+        return True
+    except Exception:
+        return False
+
+
+def sync_cookies():
+    """Call once near the top of app.py: creates the run's controller, replays queued writes."""
+    controller = get_cookie_controller()
+    ops = st.session_state.get(_COOKIE_OPS_STATE_KEY)
+    if controller is None or not ops:
+        return
+    remaining = {}
+    for name, (value, runs_left) in list(ops.items()):
+        try:
+            _apply_cookie_op(controller, name, value)
+        except Exception:
+            pass
+        if runs_left - 1 > 0:
+            remaining[name] = [value, runs_left - 1]
+    st.session_state[_COOKIE_OPS_STATE_KEY] = remaining
+
+
 def read_session_cookie(controller=None):
     """Read and verify the signed ``lumi_session`` cookie; unsigned/tampered values yield None."""
     try:
         if controller is None:
-            from streamlit_cookies_controller import CookieController
-            controller = CookieController()
+            controller = get_cookie_controller()
+        if controller is None:
+            return None
         return verify_cookie_value(controller.get(SESSION_COOKIE), purpose="session")
     except Exception:
         return None
@@ -130,9 +248,9 @@ def get_logged_in_user() -> str:
 
     if dev_enabled and not st.session_state.get("_is_testing", False):
         try:
-            from streamlit_cookies_controller import CookieController
-            controller = CookieController()
-            cookie_email = verify_cookie_value(controller.get(USER_EMAIL_COOKIE), purpose="user_email")
+            controller = get_cookie_controller()
+            raw_email = controller.get(USER_EMAIL_COOKIE) if controller is not None else None
+            cookie_email = verify_cookie_value(raw_email, purpose="user_email")
             if cookie_email and "@" in cookie_email:
                 st.session_state.dev_user_email = cookie_email
                 return cookie_email
@@ -163,11 +281,7 @@ def handle_signout():
     """Sign out the user, clearing local dev mock email, removing cookies, resetting state, and redirecting to landing page."""
     if "dev_user_email" in st.session_state:
         st.session_state.pop("dev_user_email", None)
-    try:
-        from streamlit_cookies_controller import CookieController
-        CookieController().remove(USER_EMAIL_COOKIE)
-    except Exception:
-        pass
+    remove_cookie(USER_EMAIL_COOKIE)
     try:
         st.logout()
     except Exception:
@@ -204,11 +318,7 @@ def _render_auth_options():
             elif user_email_input and "@" in user_email_input:
                 email_clean = user_email_input.strip()
                 st.session_state.dev_user_email = email_clean
-                try:
-                    from streamlit_cookies_controller import CookieController
-                    CookieController().set(USER_EMAIL_COOKIE, sign_cookie_value(email_clean, purpose="user_email"))
-                except Exception:
-                    pass
+                set_cookie(USER_EMAIL_COOKIE, sign_cookie_value(email_clean, purpose="user_email"))
                 st.toast(f"Signed in as {email_clean}")
                 st.rerun()
             else:

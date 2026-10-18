@@ -44,6 +44,11 @@ flush_pending_events()
 # Initialize Session State
 initialize_state()
 
+# One CookieController per run (created here, reused by every helper), and replay of
+# queued cookie writes so a set followed by st.rerun() still reaches the browser.
+from ui_utils import sync_cookies
+sync_cookies()
+
 # Ensure database schema is initialized once at app startup
 from persistence import init_db, storage_warning
 init_db()

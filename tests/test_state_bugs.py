@@ -113,6 +113,7 @@ def test_replay_steps_persists_once(monkeypatch):
 def test_save_session_state_failure_logs_and_warns_once(monkeypatch, caplog):
     _base()
     st.session_state["last_file_hash"] = "abc"
+    st.session_state["session_id"] = "sid-1"  # resume cache needs an owner (V1)
     st.session_state.pop("_save_warning_shown", None)
     toasts = []
     monkeypatch.setattr(st, "toast", lambda m, *a, **k: toasts.append(m))
