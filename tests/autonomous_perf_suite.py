@@ -114,15 +114,14 @@ def run_suite():
         record_step("4. Diagnostics Tab & Correlation Heatmap", t_diag, True, "Selected SalePrice & LotArea, verified metrics & correlation heatmap", sc_diag)
 
         # ------------------------------------------------------------------
-        # 5. Visual Insights Tab: Reorganization Verification
+        # 5. Diagnostics Tab: Z-score Outlier Box Plots
         # ------------------------------------------------------------------
         t0 = time.perf_counter()
-        page.get_by_role("tab", name="Visual Insights").click()
-        page.wait_for_selector("text=Visualizations have been reorganized", timeout=10000)
+        page.get_by_text("Outlier", exact=False).first.scroll_into_view_if_needed(timeout=10000)
         t_insights = (time.perf_counter() - t0) * 1000
-        sc_insights = str(SCREENSHOTS_DIR / "05_visual_insights.png")
+        sc_insights = str(SCREENSHOTS_DIR / "05_outlier_boxplots.png")
         page.screenshot(path=sc_insights)
-        record_step("5. Visual Insights Tab", t_insights, True, "Verified outlier chart removed & reorganization notice rendered", sc_insights)
+        record_step("5. Z-score Outlier Box Plots", t_insights, True, "Verified standardized outlier panel renders in Diagnostics", sc_insights)
 
         # ------------------------------------------------------------------
         # 6. Rulebook Tab: Proposals Expander, Adding Rules & Resolving

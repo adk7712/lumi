@@ -1,6 +1,5 @@
 from .overview import render_overview_tab
 from .diagnostics import render_diagnostics_tab
-from .insights import render_insights_tab
 from .rulebook import render_rulebook_tab
 from .transformations import render_transformations_tab
 from .audit_log import render_audit_log_tab

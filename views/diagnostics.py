@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from ui_utils import render_diagnostic_metric, downsample_for_plot, DIAGNOSTIC_CHART_HEIGHT, MAX_CATEGORIES_DISPLAY
-from views.insights import render_correlation_panel
+from views.insights import render_correlation_panel, render_outlier_panel
 
 def render_diagnostics_tab(df):
     all_cols = df.columns.tolist()
@@ -86,4 +86,4 @@ def render_diagnostics_tab(df):
     step_count = len(st.session_state.get("cleaning_recipe", []))
     df_state_key = f"{last_file_hash}_{step_count}"
     render_correlation_panel(df, df_state_key)
-
+    render_outlier_panel(df, df_state_key)

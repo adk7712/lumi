@@ -6,7 +6,6 @@ from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_stat
 from views import (
     render_overview_tab,
     render_diagnostics_tab,
-    render_insights_tab,
     render_rulebook_tab,
     render_transformations_tab,
     render_audit_log_tab,
@@ -46,8 +45,13 @@ flush_pending_events()
 initialize_state()
 
 # Ensure database schema is initialized once at app startup
-from persistence import init_db
+from persistence import init_db, storage_warning
 init_db()
+
+# Warn loudly if production is running on ephemeral SQLite
+_storage_warning = storage_warning()
+if _storage_warning:
+    st.error(_storage_warning)
 
 # Render Workspace Sidebar (for authenticated users)
 render_workspace_sidebar()
@@ -157,9 +161,9 @@ def render_header():
 st.divider()
 
 # --- TABS ---
-TAB_NAMES = ["Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"]
+TAB_NAMES = ["Overview", "Diagnostics", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"]
 
-tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs(
+tab_overview, tab_diagnostics, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs(
     TAB_NAMES
 )
 
@@ -167,9 +171,6 @@ with tab_overview:
     render_overview_tab(st.session_state.current_df)
 with tab_diagnostics:
     render_diagnostics_tab(st.session_state.current_df)
-with tab_insights:
-    render_insights_tab(st.session_state.current_df)
-
 with tab_rulebook:
     render_rulebook_tab(st.session_state.current_df)
 
