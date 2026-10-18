@@ -24,6 +24,9 @@ image*.png
 *.md
 !README.md
 
+# Shared agent progress tracker (local coordination only)
+PROGRESS.md
+
 # Session Cache
 .lumi_cache/
 
