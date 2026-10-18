@@ -5,12 +5,347 @@ import plotly.graph_objects as go
 from pathlib import Path
 import streamlit as st
 from rule_utils import evaluate_rule
+import os
+import hmac as _hmac_mod
+import hashlib as _hashlib_mod
+import secrets as _secrets_mod
 
 # Constants for UI plots and displays
 PLOT_SAMPLE_SIZE = 1000
 DIAGNOSTIC_CHART_HEIGHT = 220
 MAX_CATEGORIES_DISPLAY = 10
 VIOLATION_PREVIEW_LIMIT = 100
+
+# ---------------------------------------------------------------------------
+# Auth hardening helpers (dev-auth gate + HMAC-signed cookies)
+# ---------------------------------------------------------------------------
+USER_EMAIL_COOKIE = "lumi_user_email"
+SESSION_COOKIE = "lumi_session"
+_TRUTHY = {"1", "true", "yes", "on"}
+# Per-process fallback secret: cookies signed with it stop verifying after a restart,
+# which simply degrades users to a fresh guest session.
+_PROCESS_COOKIE_SECRET = _secrets_mod.token_bytes(32)
+
+
+def _is_truthy(value) -> bool:
+    return str(value).strip().lower() in _TRUTHY
+
+
+def is_dev_auth_enabled() -> bool:
+    """Passwordless mock email login is only allowed with an explicit dev flag.
+
+    Enabled by env ``LUMI_DEV_AUTH=1``, ``st.secrets["dev_auth"] = true``, or ``LUMI_TESTING=1``.
+    """
+    if _is_truthy(os.environ.get("LUMI_DEV_AUTH", "")) or _is_truthy(os.environ.get("LUMI_TESTING", "")):
+        return True
+    try:
+        return _is_truthy(st.secrets.get("dev_auth", False))
+    except Exception:
+        return False
+
+
+def _get_cookie_secret() -> bytes:
+    """Secret for signing Lumi cookies: [auth].cookie_secret, env LUMI_COOKIE_SECRET, else per-process random."""
+    try:
+        if "auth" in st.secrets:
+            sec = st.secrets["auth"].get("cookie_secret")
+            if sec:
+                return str(sec).encode("utf-8")
+    except Exception:
+        pass
+    env_sec = os.environ.get("LUMI_COOKIE_SECRET")
+    if env_sec:
+        return env_sec.encode("utf-8")
+    return _PROCESS_COOKIE_SECRET
+
+
+def _cookie_signature(value: str, purpose: str) -> str:
+    msg = f"lumi-cookie-v1|{purpose}|{value}".encode("utf-8")
+    return _hmac_mod.new(_get_cookie_secret(), msg, _hashlib_mod.sha256).hexdigest()
+
+
+def sign_cookie_value(value: str, purpose: str) -> str:
+    """Return ``value.<hmac-sha256>`` bound to ``purpose`` (prevents cross-cookie reuse)."""
+    return f"{value}.{_cookie_signature(str(value), purpose)}"
+
+
+def verify_cookie_value(raw, purpose: str):
+    """Return the original value if ``raw`` carries a valid signature, else None (legacy/forged cookies)."""
+    if not raw or not isinstance(raw, str) or "." not in raw:
+        return None
+    value, sig = raw.rsplit(".", 1)
+    if not value or not sig:
+        return None
+    if _hmac_mod.compare_digest(sig, _cookie_signature(value, purpose)):
+        return value
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Cookie controller: exactly one CookieController per script run.
+#
+# streamlit_cookies_controller binds the browser's cookie jar to the widget key
+# ``cookies``. The first instance in a run renders that widget; any further instance
+# in the same run tries ``st.session_state["cookies"] = ...`` and Streamlit raises
+# "cannot be modified after the widget with key cookies is instantiated", so the
+# second caller's set()/get() silently failed (that is why lumi_session was never
+# written). All Lumi code goes through get_cookie_controller() instead.
+#
+# A set()/remove() renders a hidden component whose iframe writes document.cookie.
+# Callers usually st.rerun() right after (e.g. after an upload), which can discard
+# that iframe before it runs, so writes are also queued and re-asserted at the top
+# of the next few runs by sync_cookies() (idempotent).
+# ---------------------------------------------------------------------------
+_COOKIE_CTRL_STATE_KEY = "_lumi_cookie_ctrl"
+_COOKIE_OPS_STATE_KEY = "_lumi_cookie_ops"
+_COOKIE_REASSERT_RUNS = 3
+
+
+def _current_run_marker():
+    """An object unique to the current script run (None outside a Streamlit run).
+
+    ``ScriptRunContext.reset()`` replaces ``widget_ids_this_run`` with a fresh set at the
+    start of every run; we hold a reference to it, so identity comparison is reliable.
+    """
+    try:
+        from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+        ctx = get_script_run_ctx(suppress_warning=True)
+        return getattr(ctx, "widget_ids_this_run", None) if ctx is not None else None
+    except Exception:
+        return None
+
+
+def get_cookie_controller():
+    """Return this run's single CookieController (created on first use in the run), or None."""
+    marker = _current_run_marker()
+    if marker is not None:
+        cached = st.session_state.get(_COOKIE_CTRL_STATE_KEY)
+        if isinstance(cached, tuple) and len(cached) == 2 and cached[0] is marker:
+            return cached[1]
+    try:
+        from streamlit_cookies_controller import CookieController
+        controller = CookieController()
+    except Exception as e:
+        import logging
+        logging.getLogger("lumi.auth").warning("Cookie controller unavailable: %s", e)
+        return None
+    if marker is not None:
+        st.session_state[_COOKIE_CTRL_STATE_KEY] = (marker, controller)
+    return controller
+
+
+def _apply_cookie_op(controller, name, value):
+    if value is None:
+        try:
+            controller.remove(name)
+        except KeyError:
+            pass  # library pops its local copy without a default; browser removal was still issued
+    else:
+        controller.set(name, value)
+
+
+def _queue_cookie_op(name, value):
+    try:
+        ops = dict(st.session_state.get(_COOKIE_OPS_STATE_KEY) or {})
+        ops[name] = [value, _COOKIE_REASSERT_RUNS]
+        st.session_state[_COOKIE_OPS_STATE_KEY] = ops
+    except Exception:
+        pass
+
+
+def set_cookie(name: str, value: str) -> bool:
+    """Write a cookie now and re-assert it on the next runs (survives an immediate st.rerun)."""
+    _queue_cookie_op(name, value)
+    controller = get_cookie_controller()
+    if controller is None:
+        return False
+    try:
+        _apply_cookie_op(controller, name, value)
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger("lumi.auth").warning("Error setting cookie %s: %s", name, e)
+        return False
+
+
+def remove_cookie(name: str) -> bool:
+    """Delete a cookie now and re-assert the deletion on the next runs."""
+    _queue_cookie_op(name, None)
+    controller = get_cookie_controller()
+    if controller is None:
+        return False
+    try:
+        _apply_cookie_op(controller, name, None)
+        return True
+    except Exception:
+        return False
+
+
+def sync_cookies():
+    """Call once near the top of app.py: creates the run's controller, replays queued writes."""
+    controller = get_cookie_controller()
+    ops = st.session_state.get(_COOKIE_OPS_STATE_KEY)
+    if controller is None or not ops:
+        return
+    remaining = {}
+    for name, (value, runs_left) in list(ops.items()):
+        try:
+            _apply_cookie_op(controller, name, value)
+        except Exception:
+            pass
+        if runs_left - 1 > 0:
+            remaining[name] = [value, runs_left - 1]
+    st.session_state[_COOKIE_OPS_STATE_KEY] = remaining
+
+
+def read_session_cookie(controller=None):
+    """Read and verify the signed ``lumi_session`` cookie; unsigned/tampered values yield None."""
+    try:
+        if controller is None:
+            controller = get_cookie_controller()
+        if controller is None:
+            return None
+        return verify_cookie_value(controller.get(SESSION_COOKIE), purpose="session")
+    except Exception:
+        return None
+
+
+def is_auth_configured() -> bool:
+    """Check if streamlit OIDC auth credentials are set in secrets.toml."""
+    try:
+        if "auth" in st.secrets:
+            auth_sec = st.secrets["auth"]
+            if "google" in auth_sec:
+                return True
+    except Exception:
+        pass
+    return False
+
+def get_logged_in_user() -> str:
+    """Get the active user's email.
+
+    Resolution order (S1/S2 hardening):
+      1. Real Streamlit OIDC identity (``st.user``) always wins.
+      2. Server-side ``dev_user_email`` in session state: anonymous ``guest_*`` ids are
+         always honoured; any other email only when dev auth is enabled.
+      3. HMAC-signed ``lumi_user_email`` cookie, only when dev auth is enabled.
+         Unsigned/forged/tampered cookies are ignored.
+    """
+    try:
+        if hasattr(st, "user") and st.user and st.user.get("email"):
+            return st.user.get("email")
+    except Exception:
+        pass
+
+    dev_enabled = is_dev_auth_enabled()
+
+    dev_email = st.session_state.get("dev_user_email")
+    if dev_email:
+        if str(dev_email).startswith("guest_") or dev_enabled:
+            return dev_email
+        # A non-guest mock email without the dev flag is never a valid identity.
+        st.session_state.pop("dev_user_email", None)
+
+    if dev_enabled and not st.session_state.get("_is_testing", False):
+        try:
+            controller = get_cookie_controller()
+            raw_email = controller.get(USER_EMAIL_COOKIE) if controller is not None else None
+            cookie_email = verify_cookie_value(raw_email, purpose="user_email")
+            if cookie_email and "@" in cookie_email:
+                st.session_state.dev_user_email = cookie_email
+                return cookie_email
+        except Exception:
+            pass
+
+    return None
+
+def is_authenticated_user() -> bool:
+    """Check if the user is signed in with a real account (not an anonymous guest)."""
+    user_email = get_logged_in_user()
+    if not user_email or user_email.startswith("guest_"):
+        return False
+    return True
+
+def format_timestamp(iso_str: str) -> str:
+    """Formats an ISO timestamp into a readable date/time string like 'Jul 31, 20:15'."""
+    if not iso_str:
+        return ""
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(iso_str)
+        return dt.strftime("%b %d, %H:%M")
+    except Exception:
+        return str(iso_str)[:16]
+
+def handle_signout():
+    """Sign out the user, clearing local dev mock email, removing cookies, resetting state, and redirecting to landing page."""
+    if "dev_user_email" in st.session_state:
+        st.session_state.pop("dev_user_email", None)
+    remove_cookie(USER_EMAIL_COOKIE)
+    try:
+        st.logout()
+    except Exception:
+        pass
+    from state_manager import initialize_state
+    initialize_state(from_reset=True)
+    st.rerun()
+
+@st.dialog("Sign Out")
+def show_signout_dialog():
+    st.write("Are you sure you want to sign out?")
+    col1, col2 = st.columns(2)
+    if col1.button("Yes, Sign Out", type="primary", use_container_width=True, key="confirm_signout_btn"):
+        handle_signout()
+    if col2.button("Cancel", use_container_width=True, key="cancel_signout_btn"):
+        st.rerun()
+
+@st.dialog("Lumi Authentication")
+def show_auth_dialog():
+    _render_auth_options()
+
+
+def _render_auth_options():
+    """Body of the sign-in dialog (split out so it is testable outside a dialog context)."""
+    st.markdown('<p style="color: #a3a3a3; font-size: 0.95rem; text-align: center; margin-bottom: 1.5rem;">Sign in to sync and manage your cleaning workspaces.</p>', unsafe_allow_html=True)
+    
+    # 1. Dev / Local Email Login (passwordless mock) -- only behind an explicit dev flag
+    if is_dev_auth_enabled():
+        st.markdown("**Sign In with Email (dev mode)**")
+        user_email_input = st.text_input("Email address", value="user@example.com", key="auth_dev_email_input")
+        if st.button("Sign In", key="auth_dev_email_login_btn", use_container_width=True, type="primary"):
+            if not is_dev_auth_enabled():
+                st.error("Email sign-in is disabled.")
+            elif user_email_input and "@" in user_email_input:
+                email_clean = user_email_input.strip()
+                st.session_state.dev_user_email = email_clean
+                set_cookie(USER_EMAIL_COOKIE, sign_cookie_value(email_clean, purpose="user_email"))
+                st.toast(f"Signed in as {email_clean}")
+                st.rerun()
+            else:
+                st.error("Please enter a valid email address.")
+
+        st.markdown('<div style="text-align: center; margin: 1rem 0; color: #555;">— OR —</div>', unsafe_allow_html=True)
+    elif not is_auth_configured():
+        st.info("Account sign-in is not configured on this deployment. You can keep using Lumi as a guest.")
+
+    # 2. Google Login Button (if configured)
+    if is_auth_configured():
+        st.button(
+            "Sign In with Google", 
+            key="btn_login_google_auth", 
+            use_container_width=True, 
+            on_click=st.login, 
+            kwargs={"provider": "google"}
+        )
+        st.markdown('<div style="text-align: center; margin: 1rem 0; color: #555;">— OR —</div>', unsafe_allow_html=True)
+            
+    # 3. Guest / Dev Login
+    if st.button("Continue as Anonymous Guest", key="auth_dev_login_btn", use_container_width=True):
+        import uuid
+        guest_id = f"guest_{uuid.uuid4().hex}@lumi.ai"
+        st.session_state.dev_user_email = guest_id
+        st.toast("Started temporary guest session")
+        st.rerun()
 
 def downsample_for_plot(df_or_series, sample_size: int = PLOT_SAMPLE_SIZE):
     """Downsamples a DataFrame or Series if it exceeds sample_size, returning the sample and an is_sampled bool."""
@@ -113,8 +448,8 @@ def apply_lumi_layout(fig: go.Figure) -> go.Figure:
     )
     return fig
 
-@st.cache_data
-def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple, df_state_key: str = "default") -> go.Figure:
     """Computes features' correlation matrix and plots a filtered heatmap."""
     numeric_df = df.select_dtypes(include=[np.number])
     if len(numeric_df.columns) > 1:
@@ -136,8 +471,8 @@ def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple) -> go.Figure:
             return apply_lumi_layout(fig)
     return None
 
-@st.cache_data
-def plot_missingness_map(df: pd.DataFrame) -> tuple:
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+def plot_missingness_map(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Generates a binary missingness pattern map representation."""
     if df.size > 0:
         null_mask = df.isnull().astype(int)
@@ -187,8 +522,8 @@ def get_loading_spinner_html(text: str = "Apply Column Order") -> str:
     </div>
     """
 
-@st.cache_data
-def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+def plot_outlier_distribution(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Computes column Z-scores and plots comparative outlier box plots."""
     numeric_df = df.select_dtypes(include=[np.number])
     if len(numeric_df.columns) > 0:
@@ -221,6 +556,50 @@ def plot_outlier_distribution(df: pd.DataFrame) -> tuple:
         return fig, is_sampled
     return None, False
 
+MAX_BOX_COLUMNS = 12
+
+
+def zscore_candidate_columns(df: pd.DataFrame) -> list:
+    """Numeric columns with at least two non-null values and non-zero variance."""
+    cols = []
+    for col in df.select_dtypes(include=[np.number]).columns:
+        s = df[col]
+        if s.notna().sum() > 1 and (s.std() or 0) > 0:
+            cols.append(col)
+    return cols
+
+
+def build_zscore_boxplot(df: pd.DataFrame, columns=None, max_columns: int = MAX_BOX_COLUMNS) -> tuple:
+    """Pure builder: side-by-side box plots of z-scored numeric columns.
+
+    Constant / all-null columns are skipped. Returns (figure_or_None, is_sampled).
+    """
+    candidates = zscore_candidate_columns(df)
+    if columns is not None:
+        wanted = set(columns)
+        candidates = [c for c in candidates if c in wanted]
+    candidates = candidates[:max_columns]
+    if not candidates:
+        return None, False
+    z_df = pd.DataFrame({c: (df[c] - df[c].mean()) / df[c].std() for c in candidates})
+    plot_z_df, is_sampled = downsample_for_plot(z_df)
+    melted = plot_z_df.melt(var_name="Feature", value_name="Z-Score").dropna()
+    fig = px.box(
+        melted, x="Feature", y="Z-Score", color="Feature",
+        height=420, color_discrete_sequence=px.colors.qualitative.Pastel,
+    )
+    apply_lumi_layout(fig)
+    fig.update_layout(showlegend=False, hovermode="closest",
+                      xaxis_title=None, yaxis_title="Standardized Value (Z-Score)")
+    return fig, is_sampled
+
+
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+def plot_zscore_boxes(df: pd.DataFrame, columns: tuple, df_state_key: str = "default") -> tuple:
+    """Cached wrapper around build_zscore_boxplot (keyed by df_state_key like other charts)."""
+    return build_zscore_boxplot(df, columns)
+
+
 def inject_posthog(st_object):
     """Injects PostHog tracking script if a key is configured in st.secrets or environment variables."""
     posthog_key = None
@@ -245,3 +624,21 @@ def inject_posthog(st_object):
         </script>
         """
         st_object.html(posthog_js)
+
+def queue_event(event_name: str, properties: dict = None):
+    """Queues a PostHog event to be captured on the next render pass."""
+    if "pending_posthog_events" not in st.session_state:
+        st.session_state.pending_posthog_events = []
+    st.session_state.pending_posthog_events.append((event_name, properties or {}))
+
+def flush_pending_events():
+    """Renders any queued PostHog events via JS and clears the queue."""
+    if "pending_posthog_events" in st.session_state and st.session_state.pending_posthog_events:
+        import json
+        js_lines = []
+        for event_name, properties in st.session_state.pending_posthog_events:
+            props_str = json.dumps(properties)
+            js_lines.append(f"if(window.parent && window.parent.posthog) {{ window.parent.posthog.capture('{event_name}', {props_str}); }} else if(window.posthog) {{ window.posthog.capture('{event_name}', {props_str}); }}")
+        js = "<script>\n" + "\n".join(js_lines) + "\n</script>"
+        st.html(js)
+        st.session_state.pending_posthog_events = []

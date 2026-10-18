@@ -45,7 +45,12 @@ def render_pipeline_preview_tab(df):
             st.divider()
             d_col1, d_col2 = st.columns(2)
             csv_data = df.to_csv(index=False).encode('utf-8')
-            d_col1.download_button("Download Cleaned CSV (.csv)", csv_data, "cleaned_data.csv", "text/csv", use_container_width=True, key="download_clean_csv")
+            
+            def _track_csv():
+                from ui_utils import queue_event
+                queue_event("file_downloaded", {"format": "csv"})
+                
+            d_col1.download_button("Download Cleaned CSV (.csv)", csv_data, "cleaned_data.csv", "text/csv", use_container_width=True, key="download_clean_csv", on_click=_track_csv)
 
             try:
                 import io
@@ -53,7 +58,12 @@ def render_pipeline_preview_tab(df):
                 with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                     df.to_excel(writer, index=False, sheet_name='Cleaned Data')
                 excel_data = excel_buffer.getvalue()
-                d_col2.download_button("Download Cleaned Excel (.xlsx)", excel_data, "cleaned_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True, key="download_clean_excel")
+                
+                def _track_excel():
+                    from ui_utils import queue_event
+                    queue_event("file_downloaded", {"format": "xlsx"})
+                    
+                d_col2.download_button("Download Cleaned Excel (.xlsx)", excel_data, "cleaned_data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True, key="download_clean_excel", on_click=_track_excel)
             except Exception as e:
                 d_col2.error(f"Error generating Excel file: {str(e)}")
     else:
@@ -62,5 +72,14 @@ def render_pipeline_preview_tab(df):
         st.code(code_output, language="python")
         
         c1, c2 = st.columns(2)
-        c1.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", use_container_width=True, key="download_pipeline_btn")
-        c2.download_button("Download clean_data.ipynb", notebook_output, "clean_data.ipynb", "application/x-ipynb+json", use_container_width=True, key="download_notebook_btn")
+        
+        def _track_py():
+            from ui_utils import queue_event
+            queue_event("script_exported", {"format": "python"})
+            
+        def _track_nb():
+            from ui_utils import queue_event
+            queue_event("script_exported", {"format": "jupyter"})
+            
+        c1.download_button("Download clean_data.py", code_output, "clean_data.py", "text/x-python", use_container_width=True, key="download_pipeline_btn", on_click=_track_py)
+        c2.download_button("Download clean_data.ipynb", notebook_output, "clean_data.ipynb", "application/x-ipynb+json", use_container_width=True, key="download_notebook_btn", on_click=_track_nb)

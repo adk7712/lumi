@@ -24,5 +24,22 @@ image*.png
 *.md
 !README.md
 
+# Shared agent progress tracker (local coordination only)
+PROGRESS.md
+
 # Session Cache
 .lumi_cache/
+
+# SQLite Databases
+*.db
+lumi.db
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# mcps
+.playwright-mcp/
+
+# Tooling and reports
+graphify-out/
+reports/

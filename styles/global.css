@@ -2,16 +2,87 @@
 @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
 /* --- Hidden Streamlit Elements --- */
-header,
 [data-testid="stHeaderActionElements"],
-.stMarkdown a {
+[data-testid="stHeaderDeployButton"],
+[data-testid="stMainMenu"],
+[data-testid="stBaseButton-headerNoPadding"],
+.stDeployButton,
+.stAppDeployButton,
+[data-testid="stAppDeployButton"],
+footer,
+.viewerBadge,
+[data-testid="viewerBadge"] {
     display: none !important;
 }
 
+/* Ensure header is transparent and behind main content — never intercepts clicks */
+header,
+[data-testid="stHeader"],
+.stAppHeader {
+    background: transparent !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    pointer-events: none !important;
+    z-index: 0 !important;
+}
 
-/* Push content up to the very top */
+/* Hide sidebar and its toggle — no sidebar used in this app */
+[data-testid="stSidebar"],
+[data-testid="collapsedControl"],
+header [data-testid="collapsedControl"],
+.stAppHeader [data-testid="collapsedControl"] {
+    display: none !important;
+}
+
+/* --- Circular Profile Icon Popover Button --- */
+.profile-popover-container [data-testid="stPopover"],
+.profile-popover-container [data-testid="stPopover"] > div {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.profile-popover-container [data-testid="stPopover"] button,
+.profile-popover-container [data-testid="stPopover"] button:hover,
+.profile-popover-container [data-testid="stPopover"] button:focus,
+.profile-popover-container [data-testid="stPopover"] button:active {
+    border-radius: 50% !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+    overflow: hidden !important;
+}
+
+.profile-popover-container [data-testid="stPopover"] button * {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+}
+
+.profile-popover-container [data-testid="stPopover"] button:hover {
+    background-color: rgba(255, 255, 255, 0.16) !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    transform: scale(1.06);
+}
+
+/* Tight top padding for maximum viewport size */
 .block-container {
-    padding-top: 0rem;
+    padding-top: 0.5rem !important;
     padding-bottom: 1rem;
 }
 
@@ -566,7 +637,7 @@ div.stMarkdown:has(.welcome-uploader-marker) {
 }
 
 /* Target the Uploader container */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
+[data-testid="stFileUploader"] {
     max-width: 700px;
     margin: 0.5rem auto 2.5rem auto !important;
     position: relative;
@@ -574,19 +645,19 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] {
 }
 
 /* Hide Streamlit default components inside dropzone */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] label {
+[data-testid="stFileUploader"] label {
     display: none !important;
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] > * {
+[data-testid="stFileUploaderDropzone"] > * {
     display: none !important;
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploader"] div:not([data-testid="stFileUploaderDropzone"]) {
+[data-testid="stFileUploader"] div:not([data-testid="stFileUploaderDropzone"]) {
     border: none !important;
     outline: none !important;
 }
 
 /* Styled dropzone outer container */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
+[data-testid="stFileUploaderDropzone"] {
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -605,13 +676,13 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"] {
     outline: none !important;
     box-shadow: none !important;
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover {
+[data-testid="stFileUploaderDropzone"]:hover {
     border-color: #ff4b4b !important;
     background: rgba(255, 75, 75, 0.03) !important;
 }
 
 /* Label text */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::before {
+[data-testid="stFileUploaderDropzone"]::before {
     content: "Drag & drop your CSV or Excel file here";
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.95rem;
@@ -620,7 +691,7 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::
 }
 
 /* CTA browse button */
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::after {
+[data-testid="stFileUploaderDropzone"]::after {
     content: "Browse Files →";
     display: flex;
     align-items: center;
@@ -635,11 +706,11 @@ div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]::
     box-shadow: 0px 4px 15px rgba(255, 75, 75, 0.2);
     transition: all 0.3s ease;
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzone"]:hover::after {
+[data-testid="stFileUploaderDropzone"]:hover::after {
     transform: translateY(-1px);
     box-shadow: 0px 6px 20px rgba(255, 75, 75, 0.4);
 }
-div:has(.welcome-uploader-marker) ~ div [data-testid="stFileUploaderDropzoneInstructions"] {
+[data-testid="stFileUploaderDropzoneInstructions"] {
     display: none !important;
 }
 
@@ -756,15 +827,24 @@ div.stMarkdown:has(.lumi-logo-button) {
     padding: 0;
 }
 
-/* Clickable Header Logo Link */
-div.element-container:has(.lumi-logo-button) + div.element-container [data-testid="stButton"],
-div.element-container:has(.lumi-logo-button) + div.element-container button,
-div.element-container:has(.lumi-logo-button) + div.element-container button p,
-div.element-container:has(.lumi-logo-button) + div.element-container button span {
+/* ---- LUMI logo button — scoped via st-key- class (most reliable targeting) ---- */
+/* Shrink the stButton wrapper to match text size exactly */
+.st-key-lumi_logo {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    width: fit-content !important;
+    display: inline-block !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Style the actual <button> element */
+.st-key-lumi_logo button {
     background: transparent !important;
     background-color: transparent !important;
     border: none !important;
-    border-color: transparent !important;
     outline: none !important;
     box-shadow: none !important;
     color: #FFFFFF !important;
@@ -773,26 +853,38 @@ div.element-container:has(.lumi-logo-button) + div.element-container button span
     padding: 0 !important;
     margin: 0 !important;
     height: auto !important;
+    min-height: unset !important;
     line-height: 1.2 !important;
     cursor: pointer !important;
     font-family: inherit !important;
     text-align: left !important;
     justify-content: flex-start !important;
     transition: color 0.2s ease !important;
+    /* Ensure it is fully above any overlay */
+    position: relative !important;
+    z-index: 9999 !important;
 }
-div.element-container:has(.lumi-logo-button) + div.element-container button:hover,
-div.element-container:has(.lumi-logo-button) + div.element-container button:hover p,
-div.element-container:has(.lumi-logo-button) + div.element-container button:hover span {
+
+.st-key-lumi_logo button p,
+.st-key-lumi_logo button span {
+    color: #FFFFFF !important;
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+}
+
+.st-key-lumi_logo button:hover,
+.st-key-lumi_logo button:hover p,
+.st-key-lumi_logo button:hover span {
     color: #ff4b4b !important;
     background: transparent !important;
-    background-color: transparent !important;
 }
-div.element-container:has(.lumi-logo-button) + div.element-container button:active,
-div.element-container:has(.lumi-logo-button) + div.element-container button:active p,
-div.element-container:has(.lumi-logo-button) + div.element-container button:focus,
-div.element-container:has(.lumi-logo-button) + div.element-container button:focus p {
+
+.st-key-lumi_logo button:active,
+.st-key-lumi_logo button:active p,
+.st-key-lumi_logo button:focus,
+.st-key-lumi_logo button:focus p {
     background: transparent !important;
-    background-color: transparent !important;
     color: #ff4b4b !important;
     box-shadow: none !important;
 }
@@ -838,4 +930,28 @@ div.element-container:has(.lumi-logo-button) + div.element-container button:focu
 
 .footer-version {
     font-variant-numeric: tabular-nums;
+}
+
+/* --- Header Actions Row Alignment --- */
+.header-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Vertically center header columns */
+[data-testid="stHorizontalBlock"]:first-child {
+    align-items: center !important;
+}
+
+/* Undo/Redo button pair consistent sizing */
+.st-key-undo_btn button,
+.st-key-redo_btn button {
+    height: 38px !important;
+    min-height: 38px !important;
+    font-size: 0.85rem !important;
+}
+
+.st-key-redo_btn button:disabled {
+    opacity: 0.35 !important;
 }

@@ -5,27 +5,68 @@ import re
 from rule_utils import evaluate_rule
 from state_manager import add_step, sync_column_rename, calculate_health
 from engine_ops import predict_column_renames
+from ui_utils import plot_missingness_map
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
-    health = calculate_health(df)
-    active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
 
-    total_violations = 0
-    for rule in active_rules_list:
-        if rule.get('type') == "Informational":
-            continue
-        try:
-            total_violations += evaluate_rule(df, rule).sum()
-        except (ValueError, KeyError, TypeError) as e:
-            st.toast(f"Overview Rule Error ({rule.get('desc', 'N/A')}): {type(e).__name__} - {str(e)}")
+    # Memoize metrics per DataFrame shape & recipe length
+    recipe_len = len(st.session_state.cleaning_recipe)
+    rules_len = len(st.session_state.rules)
+    cache_key = f"_overview_metrics_{id(df)}_{recipe_len}_{rules_len}"
+
+    if cache_key in st.session_state:
+        metrics = st.session_state[cache_key]
+    else:
+        health = calculate_health(df)
+        active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
+        total_violations = 0
+        for rule in active_rules_list:
+            if rule.get('type') == "Informational":
+                continue
+            try:
+                total_violations += evaluate_rule(df, rule).sum()
+            except (ValueError, KeyError, TypeError):
+                pass
+
+        dup_count = int(df.duplicated().sum())
+        mem_mb = df.memory_usage(deep=True).sum() / (1024**2)
+        empty_cols = [c for c in df.columns if df[c].isnull().all()]
+        empty_rows_count = int(df.isnull().all(axis=1).sum())
+
+        whitespace_cols = []
+        for c in df.select_dtypes(include=['object', 'string']).columns:
+            s = df[c].dropna().astype(str)
+            if (s.str.strip() != s).any():
+                whitespace_cols.append(c)
+
+        metrics = {
+            "health": health,
+            "active_rules_list": active_rules_list,
+            "total_violations": total_violations,
+            "dup_count": dup_count,
+            "mem_mb": mem_mb,
+            "empty_cols": empty_cols,
+            "empty_rows_count": empty_rows_count,
+            "whitespace_cols": whitespace_cols
+        }
+        st.session_state[cache_key] = metrics
+
+    health = metrics["health"]
+    active_rules_list = metrics["active_rules_list"]
+    total_violations = metrics["total_violations"]
+    duplicates_count = metrics["dup_count"]
+    empty_cols = metrics["empty_cols"]
+    empty_cols_count = len(empty_cols)
+    empty_rows_count = metrics["empty_rows_count"]
+    whitespace_cols = metrics["whitespace_cols"]
 
     m_col1.metric("Health", f"{health}%")
     m_col2.metric("Rows", f"{len(df):,}")
     m_col3.metric("Columns", f"{len(df.columns)}")
-    m_col4.metric("Duplicates", f"{df.duplicated().sum():,}")
+    m_col4.metric("Duplicates", f"{duplicates_count:,}")
     m_col5.metric("Violations", f"{total_violations:,}")
-    m_col6.metric("Memory", f"{df.memory_usage(deep=True).sum() / 1024**2:.1f}MB")
+    m_col6.metric("Memory", f"{metrics['mem_mb']:.1f}MB")
     st.divider()
 
     o_col1, o_col2 = st.columns(2)
@@ -41,13 +82,6 @@ def render_overview_tab(df):
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
         st.subheader("Quick Actions")
-        duplicates_count = int(df.duplicated().sum())
-        empty_cols = [c for c in df.columns if df[c].isnull().all()]
-        empty_cols_count = len(empty_cols)
-        empty_rows_count = int(df.isnull().all(axis=1).sum())
-
-        # Scan for columns with leading/trailing whitespaces
-        whitespace_cols = []
         for c in df.columns:
             if df[c].dtype == 'object' or pd.api.types.is_string_dtype(df[c]):
                 non_null_strings = df[c].dropna().astype(str)
@@ -72,7 +106,7 @@ def render_overview_tab(df):
                         help=f"Removes the {duplicates_count} rows that contain identical values across all features."
                     ):
                         add_step({"action": "drop_duplicates"})
-                        st.rerun()
+                        st.session_state._needs_rerun = True
                 if empty_cols_count > 0:
                     cols_preview = ", ".join(empty_cols[:3]) + ("..." if len(empty_cols) > 3 else "")
                     if st.button(
@@ -82,7 +116,7 @@ def render_overview_tab(df):
                         help=f"Drops columns containing 100% missing values: {cols_preview}"
                     ):
                         add_step({"action": "drop_empty_columns"})
-                        st.rerun()
+                        st.session_state._needs_rerun = True
                 if empty_rows_count > 0:
                     if st.button(
                         f"Remove {empty_rows_count} Empty Rows",
@@ -91,7 +125,7 @@ def render_overview_tab(df):
                         help=f"Removes the {empty_rows_count} rows that are entirely empty."
                     ):
                         add_step({"action": "drop_empty_rows"})
-                        st.rerun()
+                        st.session_state._needs_rerun = True
                 if whitespace_cols:
                     cols_preview = ", ".join(whitespace_cols[:3]) + ("..." if len(whitespace_cols) > 3 else "")
                     if st.button(
@@ -101,7 +135,7 @@ def render_overview_tab(df):
                         help=f"Strips leading/trailing whitespaces from text columns: {cols_preview}"
                     ):
                         add_step({"action": "strip_whitespace", "column": "All"})
-                        st.rerun()
+                        st.session_state._needs_rerun = True
                 if unnormalized_cols:
                     cols_preview = ", ".join(f"'{c}'" for c in unnormalized_cols[:3]) + ("..." if len(unnormalized_cols) > 3 else "")
                     if st.button(
@@ -115,9 +149,9 @@ def render_overview_tab(df):
                         add_step({"action": "normalize_column_names", "value": "snake_case"})
                         for orig, val in new_names.items():
                             sync_column_rename(orig, val)
-                        st.rerun()
+                        st.session_state._needs_rerun = True
         else:
-            st.markdown("*Your dataset looks clean! No quick actions recommended.*")
+            st.markdown("*No quick actions recommended!*")
 
         if duplicates_count > 0:
             with st.expander(f"Preview {duplicates_count} Duplicate Rows", expanded=False):
@@ -184,3 +218,22 @@ def render_overview_tab(df):
             st.dataframe(desc_df, width="stretch")
         with t_summary:
             st.dataframe(summary_df, width="stretch", hide_index=True)
+
+    # --- Missingness Pattern Map (relocated from Visual Insights) ---
+    st.divider()
+    last_file_hash = st.session_state.get("last_file_hash", "none")
+    step_count = len(st.session_state.get("cleaning_recipe", []))
+    df_state_key = f"{last_file_hash}_{step_count}"
+    with st.expander("Missingness Pattern Map", expanded=False):
+        st.markdown("Visualizes where missing values occur across the rows of the dataset.")
+        fig_null, is_null_sampled = plot_missingness_map(df, df_state_key)
+        if fig_null is not None:
+            st.plotly_chart(fig_null, width="stretch", theme="streamlit")
+            if is_null_sampled:
+                st.caption("Showing a representative sample of 1,000 rows for rendering performance.")
+        else:
+            if df.size > 0:
+                st.success("No missing values found in the dataset!")
+            else:
+                st.caption("Dataset is empty.")
+

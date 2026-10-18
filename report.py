@@ -80,6 +80,18 @@ def generate_evidence_report(
                     desc = f"Reordered columns to custom order: `{step.get('value')}`"
                 elif act == "replace":
                     desc = f"Replaced values matching `{step.get('find')}` with `{step.get('replace')}` (Regex: `{step.get('regex')}`)"
+                elif act == "drop_nulls":
+                    desc = f"Dropped rows with missing values in column `{col}`"
+                elif act == "drop_duplicates":
+                    desc = "Removed fully duplicate rows from the dataset"
+                elif act == "drop_empty_columns":
+                    desc = "Dropped columns that contain only missing values"
+                elif act == "drop_empty_rows":
+                    desc = "Dropped rows in which every value is missing"
+                elif act == "log_transform":
+                    desc = f"Applied log(1 + x) transform to numeric column `{col}` (negative values clipped to 0)"
+                elif act == "normalize_column_names":
+                    desc = f"Normalized all column names using method: `{step.get('value', 'snake_case')}`"
                 else:
                     desc = f"Applied custom action `{act}` on column `{col}`"
                     

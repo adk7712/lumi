@@ -8,6 +8,7 @@ import pytest
 from scout import generate_proposals
 from rule_utils import evaluate_rule
 from engine import apply_recipe, generate_pipeline_code
+from state_manager import downcast_dtypes  # the app downcasts on upload; the exported script mirrors it
 
 def test_scout_heuristics():
     # Setup a mock dataframe tailored to trigger each scout heuristic
@@ -43,7 +44,10 @@ def test_scout_heuristics():
     # Assertions
     assert len(redundant_props) == 1 and redundant_props[0]['column'] == 'mostly_null'
     assert len(null_props) == 1 and null_props[0]['column'] == 'some_null'
-    assert len(constant_props) == 2 and any(p['column'] == 'constant_col' for p in constant_props)
+    # Bug 5 fix: mostly_null was previously double-flagged as both Redundant Column AND Constant Value.
+    # After the fix, _check_constant_column is skipped for columns already flagged as Redundant Column.
+    # So constant_props should now contain only constant_col (1 entry, not 2).
+    assert len(constant_props) == 1 and constant_props[0]['column'] == 'constant_col'
     assert len(range_props) == 2 and any(p['column'] == 'outliers_col' for p in range_props)
     assert len(skew_props) == 2 and any(p['column'] == 'skewed_col' for p in skew_props)
     assert len(type_props) == 1 and type_props[0]['column'] == 'mixed_col'
@@ -172,7 +176,7 @@ def test_comprehensive_code_generation():
     clean_func = exec_globals['clean_data']
     df_generated = clean_func(df.copy())
 
-    pd.testing.assert_frame_equal(df_clean, df_generated)
+    pd.testing.assert_frame_equal(apply_recipe(downcast_dtypes(df), recipe)[0], df_generated)
     print("Comprehensive code generation compilation and equality tests passed.")
 
 def test_rule_resolution_mapping():

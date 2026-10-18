@@ -132,6 +132,7 @@ def test_session_resume_recovery():
         st.session_state.raw_data = pd.read_csv(io.BytesIO(mock_csv))
         st.session_state.current_df = st.session_state.raw_data.copy()
         st.session_state.last_file_hash = file_hash
+        st.session_state.session_id = "resume-test-sid"  # resume cache is owner-scoped (V1)
         st.session_state.intermediate_states = [("Original Data", 100, len(st.session_state.raw_data))]
         
         # Add a step and a rule
@@ -142,11 +143,13 @@ def test_session_resume_recovery():
         add_rule(rule)
         
         # Verify JSON cache exists
-        cache_file = Path(".lumi_cache") / f"{file_hash}.json"
+        from state_manager import resume_cache_path
+        cache_file = resume_cache_path(file_hash)  # current owner (guest sid or signed-in user)
         assert cache_file.exists(), "Cache file should be created"
         
-        # 3. Simulate session teardown/refresh by resetting state
+        # 3. Simulate session teardown/refresh by resetting state (same guest session)
         initialize_state(from_reset=True)
+        st.session_state.session_id = "resume-test-sid"
         assert len(st.session_state.cleaning_recipe) == 0
         assert len(st.session_state.rules) == 0
         

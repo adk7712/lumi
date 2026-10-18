@@ -1,17 +1,18 @@
 import streamlit as st
 import os
-from ui_utils import inject_custom_css, inject_posthog
-from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state
+import streamlit.components.v1 as components
+from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, flush_pending_events
+from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state, regenerate_proposals, add_step
 from views import (
     render_overview_tab,
     render_diagnostics_tab,
-    render_insights_tab,
     render_rulebook_tab,
     render_transformations_tab,
     render_audit_log_tab,
     render_pipeline_preview_tab,
     render_violation_browser,
-    render_landing_page
+    render_landing_page,
+    render_workspace_sidebar
 )
 from scout import generate_proposals
 
@@ -38,71 +39,221 @@ inject_custom_css(st)
 
 # Inject PostHog Analytics
 inject_posthog(st)
+flush_pending_events()
 
 # Initialize Session State
 initialize_state()
 
-# Welcome view if no data is loaded yet
+# One CookieController per run (created here, reused by every helper), and replay of
+# queued cookie writes so a set followed by st.rerun() still reaches the browser.
+from ui_utils import sync_cookies
+sync_cookies()
+
+# Ensure database schema is initialized once at app startup
+from persistence import init_db, storage_warning
+init_db()
+
+# Warn loudly if production is running on ephemeral SQLite
+_storage_warning = storage_warning()
+if _storage_warning:
+    st.error(_storage_warning)
+
+# Render Workspace Sidebar (for authenticated users)
+render_workspace_sidebar()
+
+# Resolve current user (used in header sign-out button)
+user_email = get_logged_in_user()
+
+# Reconciliation flow for signed-in users (evaluated only once per session)
+if user_email:
+    session_id = st.session_state.get("session_id")
+    if session_id and st.session_state.get("_reconciled_session") != session_id:
+        from persistence import load_session, reconcile_session
+        db_session = load_session(session_id, user_email)
+        if db_session and db_session.get("user_id") != user_email:
+            reconcile_session(session_id, user_email)
+            st.toast("Workspace saved to your account!")
+        st.session_state["_reconciled_session"] = session_id
+
+# Landing page (no dataset loaded yet)
 if st.session_state.raw_data is None:
     render_landing_page()
     render_footer()
     st.stop()
 
-# --- HEADER (only shown after a dataset is loaded) ---
-h_col1, h_col2 = st.columns([10, 2], vertical_alignment="bottom")
-with h_col1:
-    st.markdown('<div class="lumi-logo-button">', unsafe_allow_html=True)
-    if st.button("LUMI", key="lumi_logo"):
-        initialize_state(from_reset=True)
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-with h_col2:
-    u_c1, u_c2 = st.columns(2)
-    if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0):
-        st.session_state.cleaning_recipe.pop()
+
+# --- HEADER PLACEHOLDER ---
+header_placeholder = st.container()
+
+def handle_reset():
+    initialize_state(from_reset=True)
+
+def handle_undo():
+    if len(st.session_state.cleaning_recipe) > 0:
+        popped_step = st.session_state.cleaning_recipe.pop()
+        if '_source_proposal_type' in popped_step and '_source_proposal_col' in popped_step:
+            st.session_state.scanned_columns.discard(f"{popped_step['_source_proposal_col']}:{popped_step['_source_proposal_type']}")
         st.session_state.intermediate_states.pop()
         st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
+        # Push undone step onto redo stack
+        if 'redo_stack' not in st.session_state:
+            st.session_state.redo_stack = []
+        st.session_state.redo_stack.append(popped_step)
+        regenerate_proposals()
         save_session_state()
-        st.toast("Last step undone")
+
+def handle_redo():
+    if st.session_state.get('redo_stack'):
+        step = st.session_state.redo_stack.pop()
+        add_step(step)
+
+@st.dialog("Reset Workspace")
+def show_reset_dialog():
+    st.warning("This will clear all cleaning steps, rules, and reset the dataset to its original state. This action cannot be undone.")
+    col1, col2 = st.columns(2)
+    if col1.button("Yes, Reset Everything", type="primary", use_container_width=True, key="confirm_reset_btn"):
+        handle_reset()
         st.rerun()
-    if u_c2.button("Reset", key="reset_all", width="stretch"):
-        initialize_state(from_reset=True)
+    if col2.button("Cancel", use_container_width=True, key="cancel_reset_btn"):
         st.rerun()
+
+def render_header():
+    with header_placeholder:
+        h_col1, h_col2, h_col3 = st.columns([7, 3, 2])
+        with h_col1:
+            st.markdown('<div class="lumi-logo-button">', unsafe_allow_html=True)
+            st.button("LUMI", key="lumi_logo", on_click=handle_reset)
+            st.markdown('</div>', unsafe_allow_html=True)
+        with h_col2:
+            st.markdown('<div class="header-actions-row">', unsafe_allow_html=True)
+            u_c1, u_c2 = st.columns(2)
+            if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0, on_click=handle_undo):
+                st.toast("Last step undone")
+            redo_disabled = not st.session_state.get('redo_stack')
+            if u_c2.button("Redo", key="redo_btn", width="stretch", disabled=redo_disabled, on_click=handle_redo):
+                st.toast("Step re-applied")
+            st.markdown('</div>', unsafe_allow_html=True)
+        with h_col3:
+            if is_authenticated_user():
+                u_email = get_logged_in_user()
+                u_email_safe = u_email.replace("@", "&#64;") if u_email else ""
+                current_ws = st.session_state.get("project_name") or st.session_state.get("filename") or "Untitled Workspace"
+                st.markdown('<div class="profile-popover-container">', unsafe_allow_html=True)
+                with st.popover("", icon=":material/person:", help="Account Settings"):
+                    st.markdown('<div style="font-weight: 600; font-size: 0.8rem; color: #a3a3a3; letter-spacing: 0.05em; margin-bottom: 0.2rem;">ACCOUNT</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="font-size: 0.95rem; font-weight: 500; color: #ffffff; margin-bottom: 0.5rem; word-break: break-all; pointer-events: none;">{u_email_safe}</div>', unsafe_allow_html=True)
+                    st.caption(f"Active Workspace:\n{current_ws}")
+                    st.divider()
+                    if st.button("Reset Workspace", key="header_popover_reset_btn", use_container_width=True):
+                        show_reset_dialog()
+                    st.divider()
+                    if st.button("Sign Out", key="header_popover_signout_btn", use_container_width=True):
+                        show_signout_dialog()
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                if is_auth_configured():
+                    st.button(
+                        "Sign In", 
+                        key="header_signin_btn", 
+                        use_container_width=True, 
+                        on_click=st.login, 
+                        kwargs={"provider": "google"}
+                    )
+                else:
+                    if st.button("Sign In", key="header_signin_btn", use_container_width=True):
+                        show_auth_dialog()
 
 st.divider()
 
-# Get the latest dataframe from cache
-df = st.session_state.current_df
-
 # --- TABS ---
-tab_overview, tab_diagnostics, tab_insights, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs([
-    "Overview", "Diagnostics", "Visual Insights", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"
-])
+TAB_NAMES = ["Overview", "Diagnostics", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"]
+
+tab_overview, tab_diagnostics, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs(
+    TAB_NAMES
+)
 
 with tab_overview:
-    render_overview_tab(df)
-
+    render_overview_tab(st.session_state.current_df)
 with tab_diagnostics:
-    render_diagnostics_tab(df)
-
-with tab_insights:
-    render_insights_tab(df)
-
+    render_diagnostics_tab(st.session_state.current_df)
 with tab_rulebook:
-    render_rulebook_tab(df)
+    render_rulebook_tab(st.session_state.current_df)
 
 with tab_transformations:
-    render_transformations_tab(df)
+    render_transformations_tab(st.session_state.current_df)
 
 with tab_audit:
     render_audit_log_tab()
 
 with tab_pipeline:
-    render_pipeline_preview_tab(df)
+    render_pipeline_preview_tab(st.session_state.current_df)
 
 # Bottom violation browser
-render_violation_browser(df)
+render_violation_browser(st.session_state.current_df)
+
+# Views set _needs_rerun after mutating state mid-run (their metrics were already
+# rendered from the old state). Consume it here with a single rerun.
+if st.session_state.pop("_needs_rerun", False):
+    st.rerun()
+
+# --- Tab State Persistence Script ---
+import json
+_tab_names_json = json.dumps(TAB_NAMES)
+components.html(
+    f"""
+    <script>
+    (function() {{
+        const tabNames = {_tab_names_json};
+        const doc = window.parent.document;
+        
+        function restoreTab() {{
+            const urlParams = new URLSearchParams(window.parent.location.search);
+            const activeTab = urlParams.get('tab');
+            if (activeTab && tabNames.includes(activeTab)) {{
+                const tabs = doc.querySelectorAll('[data-baseweb="tab"]');
+                for (let tab of tabs) {{
+                    const p = tab.querySelector('p');
+                    if (p && p.innerText === activeTab) {{
+                        if (tab.getAttribute('aria-selected') !== 'true') {{
+                            p.click();
+                        }}
+                        return true;
+                    }}
+                }}
+            }}
+            return false;
+        }}
+
+        let attempts = 0;
+        const interval = setInterval(function() {{
+            attempts++;
+            if (restoreTab() || attempts > 20) clearInterval(interval);
+        }}, 50);
+
+        function attachListeners() {{
+            if (doc._lumiTabListenerAttached) return;
+            doc._lumiTabListenerAttached = true;
+            doc.addEventListener('click', function(e) {{
+                const tab = e.target.closest('[data-baseweb="tab"]');
+                if (!tab) return;
+                const p = tab.querySelector('p');
+                if (p && tabNames.includes(p.innerText)) {{
+                    const url = new URL(window.parent.location.href);
+                    url.searchParams.set('tab', p.innerText);
+                    window.parent.history.replaceState(null, '', url.toString());
+                }}
+            }}, true);
+        }}
+        attachListeners();
+    }})();
+    </script>
+    """,
+    height=0,
+    width=0
+)
 
 # --- FOOTER ---
+render_header()
 render_footer()
+
 

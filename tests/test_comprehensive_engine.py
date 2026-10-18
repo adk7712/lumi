@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from engine import apply_recipe, generate_pipeline_code
 from rule_utils import evaluate_rule
+from state_manager import downcast_dtypes  # the app downcasts on upload; the exported script mirrors it
 
 def test_all_engine_actions():
     # Setup a comprehensive test dataframe
@@ -70,7 +71,7 @@ def test_all_engine_actions():
     df_generated = clean_func(df.copy())
     
     # Assert generated dataframe matches engine output
-    pd.testing.assert_frame_equal(df_clean, df_generated)
+    pd.testing.assert_frame_equal(apply_recipe(downcast_dtypes(df), recipe)[0], df_generated)
     print("Code generation and comparison test passed.")
 
 def test_advanced_imputation():
@@ -105,15 +106,16 @@ def test_rule_violations():
     # 2. Range Check
     rule_range = {'type': 'Range Check', 'col': 'age', 'min': 18.0, 'max': 60.0}
     mask_range = evaluate_rule(df, rule_range)
-    assert list(mask_range) == [False, True, False, True] # Out of range and null rows violate
+    assert list(mask_range) == [False, True, False, False] # Out of range violates; nulls are the Null Check's job
     
     # 3. Relational Check
     rule_rel = {'type': 'Relational Check', 'col_a': 'parent_age', 'op': '>', 'col_b': 'age', 'target_type': 'Feature'}
     mask_rel = evaluate_rule(df, rule_rel)
     assert list(mask_rel) == [False, False, True, True] # Row 2 violates (20 > 30 is False), Row 3 violates (nan comparison)
     
-    # 4. Custom Expression
-    rule_custom = {'type': 'Custom Expression', 'query': "city == 'NYC'"}
+    # 4. Custom Expression — query now describes VIOLATIONS (rows to flag directly).
+    # "city != 'NYC'" flags London and Paris as violations. Expected: [False, True, True, False]
+    rule_custom = {'type': 'Custom Expression', 'query': "city != 'NYC'"}
     mask_custom = evaluate_rule(df, rule_custom)
     assert list(mask_custom) == [False, True, True, False] # Non-NYC rows violate
     
@@ -149,7 +151,7 @@ def test_rename_and_reorder():
     
     # Verify reorder code gen
     code_reorder = generate_pipeline_code(recipe_reorder)
-    assert "df = df[['C', 'B', 'Alpha']]" in code_reorder
+    assert "_cols = [c for c in ['C', 'B', 'Alpha'] if c in df.columns]" in code_reorder
     
     # Run generated code on df
     recipe_combined = recipe_rename + recipe_reorder
@@ -159,7 +161,7 @@ def test_rename_and_reorder():
     clean_func = exec_globals['clean_data']
     df_generated = clean_func(df.copy())
     
-    pd.testing.assert_frame_equal(df_reorder, df_generated)
+    pd.testing.assert_frame_equal(apply_recipe(downcast_dtypes(df), recipe_combined)[0], df_generated)
     print("Rename and Reorder engine tests passed.")
 
 def test_new_engine_actions():
@@ -193,7 +195,7 @@ def test_new_engine_actions():
     clean_func = exec_globals['clean_data']
     df_generated = clean_func(df.copy())
     
-    pd.testing.assert_frame_equal(df_clean, df_generated)
+    pd.testing.assert_frame_equal(apply_recipe(downcast_dtypes(df), recipe)[0], df_generated)
     print("New engine actions codegen test passed.")
 
 if __name__ == "__main__":

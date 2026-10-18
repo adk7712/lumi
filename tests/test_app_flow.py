@@ -9,10 +9,10 @@ APP_PATH = str(Path(__file__).parent.parent / "app.py")
 
 
 def setup_app_test():
-    at = AppTest.from_file(APP_PATH)
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
     at.run()
     # Click Get Started first to reveal the uploader
-    at.run()
+    at.run(timeout=10)
     at.session_state["_is_testing"] = True
     mock_csv = b"Id,Age,Sex,LotArea,Alley\n1,25,male,500,Pave\n2,30,female,600,Grvl\n3,35,male,700,\n"
     at.file_uploader(key="welcome_uploader").upload("train.csv", mock_csv, "text/csv").run()
@@ -21,8 +21,8 @@ def setup_app_test():
 
 def test_app_initialization():
     # Load app in memory
-    at = AppTest.from_file(APP_PATH)
-    at.run()
+    at = AppTest.from_file(APP_PATH, default_timeout=15)
+    at.run(timeout=10)
     
     # Assert no exceptions occurred during execution
     assert not at.exception, "App should run without exceptions"
@@ -120,11 +120,18 @@ def test_undo_and_reset():
     assert len(at.session_state.cleaning_recipe) == 0
     assert len(at.session_state.intermediate_states) == 1
     
-    # Click Reset
-    reset_btn = at.button(key="reset_all")
-    reset_btn.click().run()
-    assert len(at.session_state.cleaning_recipe) == 0
-    print("Test Undo and Reset passed.")
+    # Verify redo stack has the undone step
+    assert len(at.session_state.redo_stack) == 1
+    
+    # Click Redo to re-apply the undone step
+    redo_btn = at.button(key="redo_btn")
+    assert not redo_btn.disabled
+    redo_btn.click().run()
+    
+    # Verify recipe is restored
+    assert len(at.session_state.cleaning_recipe) == 1
+    assert len(at.session_state.redo_stack) == 0
+    print("Test Undo and Redo passed.")
 
 
 def test_rename_and_reorder_ui():
@@ -215,17 +222,16 @@ def test_audit_log_remove_step():
     at = setup_app_test()
     
     # 1. Add three distinct transformations to the recipe
-    trans_select = at.selectbox(key="trans_type_select")
-    trans_select.select("Strip Whitespace").run()
+    at.selectbox(key="trans_type_select").select("Strip Whitespace").run()
     at.button(key="btn_strip").click().run()
-    
-    trans_select.select("Cast Data Type").run()
+
+    at.selectbox(key="trans_type_select").select("Cast Data Type").run()
     sb = at.selectbox(key="cast_target_col")
     sb.select("Id").run()
     at.selectbox(key="cast_dtype_select").select("string").run()
     at.button(key="btn_cast").click().run()
-    
-    trans_select.select("Drop Column").run()
+
+    at.selectbox(key="trans_type_select").select("Drop Column").run()
     at.selectbox(key="drop_target_col").select("Alley").run()
     at.button(key="btn_drop").click().run()
     

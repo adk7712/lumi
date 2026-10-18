@@ -18,12 +18,25 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
         if rule_type == "Null Check":
             mask = df[rule['col']].isnull()
         elif rule_type == "Range Check":
-            # Coerce to numeric to avoid errors with mixed types before comparison
-            col_numeric = pd.to_numeric(df[rule['col']], errors='coerce')
-            # Flag values outside the range OR values that could not be coerced (are NaN)
-            out_of_range_mask = (col_numeric < rule['min']) | (col_numeric > rule['max'])
-            nan_mask = col_numeric.isnull()
-            mask = out_of_range_mask | nan_mask
+            col_name = rule['col']  # KeyError if missing — intentional for malformed rules
+            rule_min = rule.get('min')
+            rule_max = rule.get('max')
+            # Guard against NaN/None/inf in bounds (can happen from corrupted JSON)
+            import math
+            if rule_min is None or rule_max is None:
+                mask = pd.Series(False, index=df.index)
+            elif isinstance(rule_min, float) and (math.isnan(rule_min) or math.isinf(rule_min)):
+                mask = pd.Series(False, index=df.index)
+            elif isinstance(rule_max, float) and (math.isnan(rule_max) or math.isinf(rule_max)):
+                mask = pd.Series(False, index=df.index)
+            else:
+                # Coerce to numeric to avoid errors with mixed types before comparison
+                col_numeric = pd.to_numeric(df[col_name], errors='coerce')
+                # Flag values outside the range OR non-null values that could not be coerced.
+                # Genuine nulls are NOT range violations — that is the Null Check's job.
+                out_of_range_mask = (col_numeric < rule_min) | (col_numeric > rule_max)
+                unparseable_mask = col_numeric.isnull() & df[col_name].notnull()
+                mask = out_of_range_mask | unparseable_mask
         elif rule_type == "Relational Check":
             a = df[rule['col_a']]
             b = df[rule['col_b']] if rule.get('target_type') == 'Feature' else rule['value']
@@ -33,20 +46,24 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
             # To correctly handle NaNs as violations, we first evaluate the valid condition
             # and then invert the result. Comparisons with NaN always return False.
             # Thus, ~False will correctly flag NaNs as True (violations).
-            if op == ">": valid = (a > b)
-            elif op == "<": valid = (a < b)
-            elif op == "==": valid = (a == b)
-            elif op == "!=": valid = (a != b)
-            elif op == ">=": valid = (a >= b)
-            elif op == "<=": valid = (a <= b)
-            else: valid = pd.Series(False, index=df.index)
+            try:
+                if op == ">": valid = (a > b)
+                elif op == "<": valid = (a < b)
+                elif op == "==": valid = (a == b)
+                elif op == "!=": valid = (a != b)
+                elif op == ">=": valid = (a >= b)
+                elif op == "<=": valid = (a <= b)
+                else: valid = pd.Series(False, index=df.index)
+            except TypeError:
+                # Incompatible comparison types (e.g. string vs int) mean no row is valid (all violate)
+                valid = pd.Series(False, index=df.index)
             
             mask = ~valid
         elif rule_type == "Custom Expression":
-            # df.query() returns rows that satisfy the condition (non-violators).
-            # We need to find the violators.
-            valid_indices = df.query(rule['query']).index
-            mask = ~df.index.isin(valid_indices)
+            # The query describes the VIOLATION condition — rows that match are flagged.
+            # e.g., query = "age > 100 or age < 0" flags those exact rows as violations.
+            violated_indices = df.query(rule['query']).index
+            mask = df.index.isin(violated_indices)
         elif rule_type == "Informational":
             # Informational rules don't have "violations", so we return an all-False mask.
             mask = pd.Series(False, index=df.index)

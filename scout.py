@@ -117,6 +117,56 @@ def _check_string_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
                     })
     return proposals
 
+DATASET_KEY = "__dataset__"
+
+
+def _check_dataset_level(df: pd.DataFrame) -> list[dict]:
+    """Dataset-wide issues: exact duplicate rows, all-empty rows, non-normalized headers.
+
+    Proposals use the reserved column "__dataset__" so dismissal keys look like
+    "__dataset__:duplicates". Run on the full frame (cheap vectorised checks).
+    """
+    from engine_ops import predict_column_renames
+    proposals = []
+
+    dup = int(df.duplicated().sum())
+    if dup > 0:
+        proposals.append({
+            "type": "duplicates", "column": DATASET_KEY, "title": "Duplicate Rows",
+            "reason": f"{dup} exact duplicate row{'s' if dup != 1 else ''} detected",
+            "rule_data": {"action": "drop_duplicates"},
+        })
+
+    empty = int(df.isnull().all(axis=1).sum())
+    if empty > 0:
+        proposals.append({
+            "type": "empty_rows", "column": DATASET_KEY, "title": "Empty Rows",
+            "reason": f"{empty} entirely empty row{'s' if empty != 1 else ''} detected",
+            "rule_data": {"action": "drop_empty_rows"},
+        })
+
+    cols = [str(c) for c in df.columns]
+    renames = predict_column_renames(cols, 'snake_case', only_changed=True)
+    # Names that would collide after normalization (all columns, not only changed ones)
+    normalized = predict_column_renames(cols, 'snake_case')
+    seen, collisions = {}, set()
+    for orig, new in normalized.items():
+        if new in seen and seen[new] != orig:
+            collisions.add(new)
+        seen.setdefault(new, orig)
+    if renames:
+        preview = ", ".join(f"'{c}'" for c in list(renames)[:3]) + ("..." if len(renames) > 3 else "")
+        reason = f"{len(renames)} column name{'s' if len(renames) != 1 else ''} not snake_case ({preview})"
+        if collisions:
+            reason += f"; {len(collisions)} name(s) would collide after normalization"
+        proposals.append({
+            "type": "column_names", "column": DATASET_KEY, "title": "Column Names",
+            "reason": reason,
+            "rule_data": {"action": "normalize_column_names", "value": "snake_case"},
+        })
+    return proposals
+
+
 def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
     """
     Automatically detects potential data quality issues in a DataFrame and proposes cleaning rules or transformations.
@@ -146,18 +196,37 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
     if df.empty:
         return proposals
         
+    # Dataset-level checks run on the full frame before sampling.
+    proposals.extend(_check_dataset_level(df))
+
     # Sample down to 10,000 rows if dataset is larger, to ensure scouts run fast
     if len(df) > 10000:
         df = df.sample(n=10000, random_state=42).reset_index(drop=True)
 
     for col in df.columns:
-        # Skip columns that have already been processed or whose proposals have been handled.
+        # Skip columns that have already been completely processed (backward compatibility).
         if col in scanned_columns: 
             continue
         
-        proposals.extend(_check_null_values(df, col))
-        proposals.extend(_check_constant_column(df, col))
+        null_proposals = _check_null_values(df, col)
+        proposals.extend(null_proposals)
+
+        # If a column was already flagged as Redundant (near-complete nullity → drop),
+        # skip _check_constant_column to prevent a duplicate drop_column proposal.
+        # A 100% null column trivially has nunique() == 0 which also triggers Constant Value.
+        already_redundant = any(p['type'] == 'Redundant Column' for p in null_proposals)
+        if not already_redundant:
+            proposals.extend(_check_constant_column(df, col))
+
         proposals.extend(_check_numeric_diagnostics(df, col))
         proposals.extend(_check_string_diagnostics(df, col))
                     
-    return proposals
+    # Filter out individual proposals that have been accepted or dismissed.
+    # The format in scanned_columns is "column:proposal_type".
+    filtered_proposals = []
+    for p in proposals:
+        key = f"{p['column']}:{p['type']}"
+        if key not in scanned_columns:
+            filtered_proposals.append(p)
+            
+    return filtered_proposals
