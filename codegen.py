@@ -51,6 +51,15 @@ _DOWNCAST_HELPER = (
     "        s = s.astype('float64')\n"
     "    return s.clip(lower=lo, upper=hi)\n"
     "\n\n"
+    "def _apply_to_str(s, fn):\n"
+    "    \"\"\"Apply fn(<Series of the str cells>) to the actual str cells only; nulls and non-str values are left untouched.\"\"\"\n"
+    "    is_str = s.map(lambda v: isinstance(v, str)).astype(bool)\n"
+    "    if not is_str.any():\n"
+    "        return s\n"
+    "    out = s.copy()\n"
+    "    out.loc[is_str] = fn(s.loc[is_str]).to_numpy()\n"
+    "    return out\n"
+    "\n\n"
     "def _numeric_to_datetime(s, col):\n"
     "    \"\"\"Numeric -> datetime as years (1000-2999) or YYYYMMDD; else warn and return None.\"\"\"\n"
     "    nn = s[s.notna()]\n"
@@ -89,8 +98,21 @@ def _lit(v) -> str:
 
 
 def _comment(text) -> str:
-    """Make arbitrary user text safe for a single-line # comment."""
-    return " ".join(str(text).splitlines())
+    """Make arbitrary user text safe for a single-line # comment.
+
+    Every line terminator Python (or str.splitlines) knows - \\n, \\r, \\x0b, \\x0c, \\x1c-\\x1e,
+    \\x85, \\u2028, \\u2029 - is folded to a space and other control characters (e.g. NUL, which
+    would make the source uncompilable) are dropped, so user text can never leave the comment.
+    """
+    t = " ".join(str(text).splitlines())
+    return "".join(ch for ch in t if ch == "\t" or ch.isprintable())
+
+
+def _relational_helper_source() -> str:
+    """Exact source of rule_utils._relational_violations, so export == engine by construction."""
+    import inspect
+    import rule_utils
+    return inspect.getsource(rule_utils._relational_violations).rstrip() + "\n\n\n"
 
 
 def _valid_bound(v) -> bool:
@@ -144,7 +166,7 @@ def _codegen_fill_null(step: dict) -> list[str]:
             code.append(f"        imputer = IterativeImputer(random_state=42)")
         code.append(f"        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()")
         code.append(f"        if {c_repr} not in numeric_cols:")
-        code.append(f"            raise TypeError(f\"{v.upper()} imputation requires a numeric column. {{{c_repr}!r}} is {{df[{c_repr}].dtype}}.\")")
+        code.append(f"            raise TypeError({repr(v.upper() + ' imputation requires a numeric column. ')} + repr({c_repr}) + ' is ' + str(df[{c_repr}].dtype) + '.')")
         code.append(f"        _others = [_c for _c in numeric_cols if _c != {c_repr}]")
         code.append(f"        if len(_others) > {KNN_MAX_FEATURES}:")
         code.append(f"            _corrs = df[numeric_cols].corrwith(df[{c_repr}]).abs().fillna(0)")
@@ -154,7 +176,7 @@ def _codegen_fill_null(step: dict) -> list[str]:
         code.append(f"        _imputed = pd.DataFrame(imputer.fit_transform(df[_selected].copy()), columns=_selected, index=df.index)")
         code.append(f"        df[{c_repr}] = _imputed[{c_repr}]")
         code.append(f"    except Exception as e:")
-        code.append(f"        warnings.warn(f\"{v.upper()} imputation on {{{c_repr}!r}} skipped: {{e}}\")")
+        code.append(f"        warnings.warn({repr(v.upper() + ' imputation on ')} + repr({c_repr}) + ' skipped: ' + str(e))")
     else:
         code.append(f"    # Fill null values with a custom constant.")
         code.append(f"    df[{c_repr}] = df[{c_repr}].fillna({_lit(v)})")
@@ -214,26 +236,24 @@ def _rule_mask_lines(r: dict, indent: str, var: str = "mask") -> list[str] | Non
         return [
             f"{indent}# Nulls are not range violations (that is the Null Check's job); unparseable values are.",
             f"{indent}_col_num = pd.to_numeric(df[{c}], errors='coerce')",
-            f"{indent}{var} = (_col_num < {_lit(lo)}) | (_col_num > {_lit(hi)}) | (_col_num.isnull() & df[{c}].notnull())",
+            f"{indent}# Nullable dtypes give pd.NA in comparisons: NA is not a violation.",
+            f"{indent}{var} = ((_col_num < {_lit(lo)}) | (_col_num > {_lit(hi)})).fillna(False).astype(bool) | (_col_num.isnull() & df[{c}].notnull())",
         ]
     if t == "Relational Check":
         a = f"df[{repr(r['col_a'])}]"
         b = f"df[{repr(r['col_b'])}]" if r.get('target_type') == 'Feature' else _lit(r.get('value'))
         op = r.get('op')
         if op not in _RELATIONAL_OPS:
-            return [f"{indent}{var} = pd.Series(True, index=df.index)  # unsupported operator {op!r}"]
+            return [f"{indent}{var} = pd.Series(True, index=df.index)  # unsupported operator {_comment(repr(op))}"]
         return [
-            f"{indent}try:",
-            f"{indent}    _valid = ({a} {op} {b})",
-            f"{indent}except TypeError:",
-            f"{indent}    _valid = pd.Series(False, index=df.index)  # incomparable types: every row violates",
-            f"{indent}{var} = ~_valid",
+            f"{indent}# Nulls and incomparable cells violate; mirrors rule_utils._relational_violations.",
+            f"{indent}{var} = _relational_violations({a}, {b}, {op!r})",
         ]
     if t == "Custom Expression":
         # Query describes the VIOLATION condition — rows that match are flagged.
         return [
             f"{indent}_violated_idx = safe_query_index(df, {repr(r['query'])})",
-            f"{indent}{var} = df.index.isin(_violated_idx)",
+            f"{indent}{var} = pd.Series(df.index.isin(_violated_idx), index=df.index, dtype=bool)",
         ]
     return None
 
@@ -249,7 +269,7 @@ def _codegen_drop_violated(step: dict) -> list[str]:
         body = ["    " + ln for ln in lines] + ["        df = df[~_mask]"]
         return header + ["    try:"] + body + [
             "    except Exception as e:",
-            f"        warnings.warn(\"Skipped drop_violated rule ({_comment(r.get('desc', 'N/A'))}): \" + str(e))",
+            f"        warnings.warn({('Skipped drop_violated rule (' + str(r.get('desc', 'N/A')) + '): ')!r} + str(e))",
         ]
     return header + lines + ["    df = df[~_mask]"]
 
@@ -273,16 +293,17 @@ def _codegen_strip_whitespace(step: dict) -> list[str]:
     col = step.get('column')
     if col == "All":
         return [
-            f"    # Strip whitespace from all object/string columns, preserving NaNs.",
+            f"    # Strip whitespace from the text cells of all object/string columns (nulls and non-text values untouched).",
             f"    for c in df.select_dtypes(include=['object', 'string']).columns:",
-            f"        mask = df[c].notnull()",
-            f"        df.loc[mask, c] = df.loc[mask, c].astype(str).str.strip().astype(df[c].dtype)"
+            f"        df[c] = _apply_to_str(df[c], lambda x: x.str.strip())"
         ]
     c_repr = repr(col)
     return [
-        f"    # Strip whitespace from the specified column, preserving NaNs.",
-        f"    mask = df[{c_repr}].notnull()",
-        f"    df.loc[mask, {c_repr}] = df.loc[mask, {c_repr}].astype(str).str.strip().astype(df[{c_repr}].dtype)"
+        f"    # Strip whitespace from the text cells of the specified column (nulls and non-text values untouched).",
+        f"    if pd.api.types.is_object_dtype(df[{c_repr}]) or pd.api.types.is_string_dtype(df[{c_repr}]):",
+        f"        df[{c_repr}] = _apply_to_str(df[{c_repr}], lambda x: x.str.strip())",
+        f"    else:",
+        f"        warnings.warn('strip_whitespace skipped on non-text column ' + repr({c_repr}) + ' (' + str(df[{c_repr}].dtype) + ').')",
     ]
 
 def _normalize_text_body(method: str, target: str, indent: str, label: str) -> list[str]:
@@ -290,9 +311,9 @@ def _normalize_text_body(method: str, target: str, indent: str, label: str) -> l
     if method == "fuzzy_dedupe":
         return [
             f"{indent}_s = {target}",
-            f"{indent}unique_vals = _s.dropna().unique()",
+            f"{indent}unique_vals = [v for v in _s.dropna().unique() if isinstance(v, str)]",
             f"{indent}if len(unique_vals) > {FUZZY_MAX_UNIQUE}:",
-            f"{indent}    warnings.warn(f\"Fuzzy deduplication skipped on {{{label}!r}}: too many unique values ({{len(unique_vals)}} > {FUZZY_MAX_UNIQUE}).\")",
+            f"{indent}    warnings.warn('Fuzzy deduplication skipped on ' + repr({label}) + ': too many unique values (' + str(len(unique_vals)) + ' > {FUZZY_MAX_UNIQUE}).')",
             f"{indent}else:",
             f"{indent}    from thefuzz import process",
             f"{indent}    mapping = {{}}",
@@ -304,19 +325,19 @@ def _normalize_text_body(method: str, target: str, indent: str, label: str) -> l
             f"{indent}    {target} = _s.replace(mapping).astype(_s.dtype)",
         ]
     if method == "remove_punctuation":
-        op = "str.replace(f'[{string.punctuation}]', '', regex=True)"
+        op = "replace(f'[{string.punctuation}]', '', regex=True)"
     else:
-        op = f"str.{_TEXT_METHODS[method]}()"
+        op = f"{_TEXT_METHODS[method]}()"
     return [
         f"{indent}_s = {target}",
-        f"{indent}{target} = _s.astype(str).{op}.where(_s.notnull(), _s).astype(_s.dtype)",
+        f"{indent}{target} = _apply_to_str(_s, lambda x: x.str.{op})",
     ]
 
 def _codegen_normalize_text(step: dict) -> list[str]:
     col = step.get('column')
     method = step.get('value', 'lowercase')
     if method not in _TEXT_METHODS and method not in ("remove_punctuation", "fuzzy_dedupe"):
-        return [f"    # Unknown text normalization method {method!r}: no change."]
+        return [f"    # Unknown text normalization method {_comment(repr(method))}: no change."]
     code = [f"    # Normalize text using {method} method (nulls are preserved)."]
     if method == "remove_punctuation":
         code.append("    import string")
@@ -328,7 +349,7 @@ def _codegen_normalize_text(step: dict) -> list[str]:
         code.append(f"    if pd.api.types.is_object_dtype(df[{c_repr}]) or pd.api.types.is_string_dtype(df[{c_repr}]):")
         code.extend(_normalize_text_body(method, f"df[{c_repr}]", "        ", c_repr))
         code.append("    else:")
-        code.append(f"        warnings.warn(f\"normalize_text skipped on non-text column {{{c_repr}!r}} ({{df[{c_repr}].dtype}}).\")")
+        code.append(f"        warnings.warn('normalize_text skipped on non-text column ' + repr({c_repr}) + ' (' + str(df[{c_repr}].dtype) + ').')")
     return code
 
 def _codegen_log_transform(step: dict) -> list[str]:
@@ -339,14 +360,14 @@ def _codegen_log_transform(step: dict) -> list[str]:
         f"    if pd.api.types.is_numeric_dtype(df[{c_repr}]):",
         f"        df[{c_repr}] = np.log1p(df[{c_repr}].clip(lower=0))",
         f"    else:",
-        f"        warnings.warn(f\"Log transformation requires a numeric column. {{{c_repr}!r}} is {{df[{c_repr}].dtype}}.\")"
+        f"        warnings.warn('Log transformation requires a numeric column. ' + repr({c_repr}) + ' is ' + str(df[{c_repr}].dtype) + '.')"
     ]
 
 def _codegen_rename_column(step: dict) -> list[str]:
     col = step.get('column')
     new_name = step['value']
     return [
-        f"    # Rename column {col!r} to {new_name!r}.",
+        f"    # Rename column {_comment(repr(col))} to {_comment(repr(new_name))}.",
         f"    df = df.rename(columns={{{repr(col)}: {repr(new_name)}}})"
     ]
 
@@ -366,12 +387,12 @@ def _codegen_extract_datetime(step: dict) -> list[str]:
     component = step.get('component')
     new_col = step.get('new_column')
     if not new_col:
-        return [f"    # extract_datetime on {col!r} skipped: no target column name specified."]
+        return [f"    # extract_datetime on {_comment(repr(col))} skipped: no target column name specified."]
     accessor = _DATETIME_ACCESSORS.get(component)
     if accessor is None:
-        return [f"    # extract_datetime on {col!r} skipped: unknown datetime component {component!r}."]
+        return [f"    # extract_datetime on {_comment(repr(col))} skipped: unknown datetime component {_comment(repr(component))}."]
     return [
-        f"    # Extract {component} component from {col!r} into {new_col!r}.",
+        f"    # Extract {_comment(component)} component from {_comment(repr(col))} into {_comment(repr(new_col))}.",
         f"    if pd.api.types.is_numeric_dtype(df[{repr(col)}]) and not pd.api.types.is_bool_dtype(df[{repr(col)}]):",
         f"        _dt = _numeric_to_datetime(df[{repr(col)}], {repr(col)})",
         f"    else:",
@@ -389,14 +410,19 @@ def _codegen_drop_duplicates(step: dict) -> list[str]:
 def _codegen_drop_empty_columns(step: dict) -> list[str]:
     return [
         "    # Remove columns that are completely empty (all nulls).",
-        "    empty_cols = [c for c in df.columns if df[c].isnull().all()]",
-        "    df = df.drop(columns=empty_cols)"
+        "    # (A frame with no rows is left alone: 'all null' is vacuously true there.)",
+        "    if len(df) == 0:",
+        "        warnings.warn('drop_empty_columns skipped: the dataset has no rows.')",
+        "    else:",
+        "        empty_cols = [c for c in df.columns if df[c].isnull().all()]",
+        "        df = df.drop(columns=empty_cols)"
     ]
 
 def _codegen_drop_empty_rows(step: dict) -> list[str]:
     return [
         "    # Remove rows that are completely empty (all nulls).",
-        "    df = df.dropna(how='all')"
+        "    if df.shape[1] > 0:",
+        "        df = df.dropna(how='all')"
     ]
 
 def _codegen_normalize_column_names(step: dict) -> list[str]:
@@ -417,7 +443,7 @@ def _codegen_normalize_column_names(step: dict) -> list[str]:
         'remove_spaces': "_orig.replace(' ', '')",
     }
     if method != 'snake_case' and method not in exprs:
-        return [f"    # Unknown column-name normalization method {method!r}: no change."]
+        return [f"    # Unknown column-name normalization method {_comment(repr(method))}: no change."]
     code = [f"    # Normalize column names using {method} format."]
     if method == 'snake_case':
         code.append("    import re")
@@ -529,7 +555,7 @@ def _generate_clean_data_lines(recipe: list) -> list[str]:
                 code.extend(_guard_missing_columns(step, generator(step)))
             else:
                 msg = f"Unknown action {action!r} in recipe was skipped (not supported by export)."
-                code.append(f"    # WARNING: {msg}")
+                code.append(f"    # WARNING: {_comment(msg)}")
                 code.append(f"    warnings.warn({repr(msg)})")
     code.append("    return df")
     return code
@@ -575,6 +601,9 @@ def _generate_validate_data_lines(rules: list) -> list[str]:
 def _uses_query_guard(*line_groups) -> bool:
     return any("safe_query_index(" in ln for group in line_groups for ln in group)
 
+def _uses_relational_helper(*line_groups) -> bool:
+    return any("_relational_violations(" in ln for group in line_groups for ln in group)
+
 def generate_pipeline_code(recipe: list, rules: list = None) -> str:
     """
     Generates standalone Python code for a given cleaning recipe and optional validation rules.
@@ -584,6 +613,8 @@ def generate_pipeline_code(recipe: list, rules: list = None) -> str:
     code = [_IMPORTS, _DOWNCAST_HELPER]
     if _uses_query_guard(clean_lines, validate_lines):
         code.append(_query_guard_source())
+    if _uses_relational_helper(clean_lines, validate_lines):
+        code.append(_relational_helper_source())
     code.append("def clean_data(df):")
     code.extend(clean_lines)
     code.append("\n\ndef validate_data(df):")
@@ -613,6 +644,8 @@ def generate_notebook_code(recipe: list, rules: list = None) -> str:
     import_lines += ["\n"] + [f"{line}\n" for line in _DOWNCAST_HELPER.rstrip("\n").split("\n")]
     if _uses_query_guard(clean_lines, validate_lines):
         import_lines += ["\n"] + [f"{line}\n" for line in _query_guard_source().rstrip("\n").split("\n")]
+    if _uses_relational_helper(clean_lines, validate_lines):
+        import_lines += ["\n"] + [f"{line}\n" for line in _relational_helper_source().rstrip("\n").split("\n")]
 
     cells = [
         {

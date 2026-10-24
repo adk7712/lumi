@@ -234,18 +234,32 @@ def _handle_replace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame,
         return df, []
     return df, [f"Warning: Column '{col}' not found for replace action."]
 
+def _is_text_dtype(s: pd.Series) -> bool:
+    return pd.api.types.is_object_dtype(s) or pd.api.types.is_string_dtype(s)
+
+def _apply_to_str(s: pd.Series, fn) -> pd.Series:
+    """Apply fn(<Series of the str cells>) to the actual str cells only.
+
+    Nulls and non-str values (ints, bools, ... inside object columns) are left untouched,
+    never stringified. Must mirror codegen's exported _apply_to_str.
+    """
+    is_str = s.map(lambda v: isinstance(v, str)).astype(bool)
+    if not is_str.any():
+        return s
+    out = s.copy()
+    out.loc[is_str] = fn(s.loc[is_str]).to_numpy()
+    return out
+
 def _handle_strip_whitespace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     col = step.get('column')
     if col == "All":
         for c in df.select_dtypes(include=['object', 'string']).columns:
-            orig_dtype = df[c].dtype
-            mask = df[c].notnull()
-            df.loc[mask, c] = df.loc[mask, c].astype(str).str.strip().astype(orig_dtype)
+            df[c] = _apply_to_str(df[c], lambda x: x.str.strip())
         return df, []
     elif col in df.columns:
-        orig_dtype = df[col].dtype
-        mask = df[col].notnull()
-        df.loc[mask, col] = df.loc[mask, col].astype(str).str.strip().astype(orig_dtype)
+        if not _is_text_dtype(df[col]):
+            return df, [f"Warning: strip_whitespace skipped on non-text column '{col}' ({df[col].dtype})."]
+        df[col] = _apply_to_str(df[col], lambda x: x.str.strip())
         return df, []
     return df, [f"Warning: Column '{col}' not found for strip_whitespace action."]
 
@@ -253,20 +267,17 @@ def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Dat
     col = step.get('column')
     method = step.get('value', 'lowercase')
     messages = []
-    
-    def _apply_str(s, fn):
-        # Transform non-null values only so NaN/None/pd.NA are preserved (not turned into "nan").
-        return fn(s.astype(str)).where(s.notnull(), s)
 
     def normalize_series(s, orig_dtype, col_name):
-        if method == "lowercase": res = _apply_str(s, lambda x: x.str.lower())
-        elif method == "uppercase": res = _apply_str(s, lambda x: x.str.upper())
-        elif method == "titlecase": res = _apply_str(s, lambda x: x.str.title())
+        # Only real str cells are transformed; NaN/None/pd.NA and non-str values are preserved.
+        if method == "lowercase": return _apply_to_str(s, lambda x: x.str.lower())
+        elif method == "uppercase": return _apply_to_str(s, lambda x: x.str.upper())
+        elif method == "titlecase": return _apply_to_str(s, lambda x: x.str.title())
         elif method == "remove_punctuation":
             import string
-            res = _apply_str(s, lambda x: x.str.replace(f'[{string.punctuation}]', '', regex=True))
+            return _apply_to_str(s, lambda x: x.str.replace(f'[{string.punctuation}]', '', regex=True))
         elif method == "fuzzy_dedupe":
-            unique_vals = s.dropna().unique()
+            unique_vals = [v for v in s.dropna().unique() if isinstance(v, str)]
             if len(unique_vals) > 1000:
                 messages.append(f"Fuzzy deduplication skipped on '{col_name}' because it has too many unique values ({len(unique_vals)} > 1000) to prevent performance hangs.")
                 return s
@@ -280,18 +291,16 @@ def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Dat
                     if score > FUZZY_MATCH_THRESHOLD: # Threshold for fuzzy matching
                         mapping[match] = v
                         handled.add(match)
-            res = s.replace(mapping)
-        else:
-            res = s
-        return res.astype(orig_dtype)
+            return s.replace(mapping).astype(orig_dtype)
+        return s
 
     if col == "All":
         for c in df.select_dtypes(include=['object', 'string']).columns:
             df[c] = normalize_series(df[c], df[c].dtype, c)
         return df, messages
     elif col in df.columns:
-        if not (pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col])):
-            # Text ops on numeric/datetime columns corrupt values (e.g. remove_punctuation turns 1.5 into 15).
+        if not _is_text_dtype(df[col]):
+            # Text ops on numeric/datetime/bool columns corrupt values (e.g. remove_punctuation turns 1.5 into 15).
             return df, [f"Warning: normalize_text skipped on non-text column '{col}' ({df[col].dtype})."]
         df[col] = normalize_series(df[col], df[col].dtype, col)
         return df, messages
@@ -367,6 +376,9 @@ def _handle_drop_duplicates(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Da
     return df, [f"Removed {dropped} duplicate rows."]
 
 def _handle_drop_empty_columns(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
+    if len(df) == 0:
+        # isnull().all() is vacuously True on zero rows; dropping every column would destroy the schema.
+        return df, ["Warning: drop_empty_columns skipped: the dataset has no rows."]
     empty_cols = [c for c in df.columns if df[c].isnull().all()]
     if empty_cols:
         df = df.drop(columns=empty_cols)
@@ -375,6 +387,8 @@ def _handle_drop_empty_columns(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd
 
 def _handle_drop_empty_rows(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     initial_rows = len(df)
+    if df.shape[1] == 0:
+        return df, ["Removed 0 empty rows."]
     df = df.dropna(how='all')
     dropped = initial_rows - len(df)
     return df, [f"Removed {dropped} empty rows."]

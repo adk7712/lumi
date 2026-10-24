@@ -1,6 +1,53 @@
 import pandas as pd
 from query_guard import UnsafeQueryError, validate_query_expression, safe_query_index  # noqa: F401
 
+
+def _relational_violations(a, b, op):
+    """Boolean violation mask for a Relational Check (``a <op> b`` describes the VALID state).
+
+    Semantics (the engine and the exported script share this exact source):
+      * a null (NaN / None / pd.NA / NaT) in ``a`` or in ``b`` is a violation for EVERY
+        operator, for float and nullable dtypes alike;
+      * cells that cannot be compared (e.g. 2 < 'x') violate individually - one bad cell
+        never flags the whole column;
+      * an unsupported operator flags every row.
+    Always returns a plain boolean Series (never contains pd.NA).
+    """
+    import operator
+    ops = {">": operator.gt, "<": operator.lt, "==": operator.eq,
+           "!=": operator.ne, ">=": operator.ge, "<=": operator.le}
+    a = pd.Series(a)
+    b_is_series = isinstance(b, pd.Series)
+    if op not in ops:
+        return pd.Series(True, index=a.index, dtype=bool)
+    fn = ops[op]
+    null = a.isna().to_numpy(dtype=bool)
+    if b_is_series:
+        null = null | b.isna().to_numpy(dtype=bool)
+    else:
+        try:
+            if bool(pd.isna(b)):
+                return pd.Series(True, index=a.index, dtype=bool)
+        except (TypeError, ValueError):
+            pass
+    try:
+        valid = fn(a, b)
+        valid = pd.Series(valid, index=a.index).fillna(False).astype(bool).to_numpy()
+    except (TypeError, ValueError):
+        # Some cell is not comparable: decide row by row, vectorised path stays the fast case.
+        av = a.tolist()
+        bv = b.tolist() if b_is_series else None
+        valid = []
+        for i, x in enumerate(av):
+            y = bv[i] if b_is_series else b
+            try:
+                valid.append(bool(fn(x, y)) if not null[i] else False)
+            except (TypeError, ValueError):
+                valid.append(False)
+        valid = pd.Series(valid, dtype=bool).to_numpy()
+    return pd.Series(~(valid & ~null), index=a.index, dtype=bool)
+
+
 def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
     """
     Evaluates a rule against a DataFrame and returns a boolean mask for violating rows.
@@ -37,34 +84,22 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
                 # Genuine nulls are NOT range violations — that is the Null Check's job.
                 out_of_range_mask = (col_numeric < rule_min) | (col_numeric > rule_max)
                 unparseable_mask = col_numeric.isnull() & df[col_name].notnull()
-                mask = out_of_range_mask | unparseable_mask
+                # Nullable dtypes (Int64/Float64/boolean) yield pd.NA in comparisons: NA -> not a violation.
+                mask = (out_of_range_mask.fillna(False).astype(bool)
+                        | unparseable_mask.fillna(False).astype(bool))
         elif rule_type == "Relational Check":
             a = df[rule['col_a']]
             b = df[rule['col_b']] if rule.get('target_type') == 'Feature' else rule['value']
             op = rule['op']
             
-            # The rule describes the valid state (e.g., "Age > 18").
-            # To correctly handle NaNs as violations, we first evaluate the valid condition
-            # and then invert the result. Comparisons with NaN always return False.
-            # Thus, ~False will correctly flag NaNs as True (violations).
-            try:
-                if op == ">": valid = (a > b)
-                elif op == "<": valid = (a < b)
-                elif op == "==": valid = (a == b)
-                elif op == "!=": valid = (a != b)
-                elif op == ">=": valid = (a >= b)
-                elif op == "<=": valid = (a <= b)
-                else: valid = pd.Series(False, index=df.index)
-            except TypeError:
-                # Incompatible comparison types (e.g. string vs int) mean no row is valid (all violate)
-                valid = pd.Series(False, index=df.index)
-            
-            mask = ~valid
+            # The rule describes the valid state (e.g., "Age > 18"); nulls on either side and
+            # incomparable cells are violations (see _relational_violations).
+            mask = _relational_violations(a, b, op)
         elif rule_type == "Custom Expression":
             # The query describes the VIOLATION condition — rows that match are flagged.
             # e.g., query = "age > 100 or age < 0" flags those exact rows as violations.
             violated_indices = safe_query_index(df, rule['query'])
-            mask = df.index.isin(violated_indices)
+            mask = pd.Series(df.index.isin(violated_indices), index=df.index, dtype=bool)
         elif rule_type == "Informational":
             # Informational rules don't have "violations", so we return an all-False mask.
             mask = pd.Series(False, index=df.index)
