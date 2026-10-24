@@ -62,11 +62,33 @@ def render_overview_tab(df):
     whitespace_cols = metrics["whitespace_cols"]
 
     m_col1.metric("Health", f"{health}%")
-    m_col2.metric("Rows", f"{len(df):,}")
+    sample_info = st.session_state.get("sample_info")
+    raw_now = st.session_state.get("raw_data")
+    # Ignore stale info (e.g. after a workspace switch that bypassed the upload path).
+    if sample_info and (raw_now is None or sample_info.get("shown") != len(raw_now)):
+        sample_info = None
+    rows_help = None
+    if sample_info and sample_info.get("total"):
+        rows_help = f"Sampled from {sample_info['total']:,} rows in the uploaded file."
+    m_col2.metric("Rows", f"{len(df):,}", help=rows_help)
     m_col3.metric("Columns", f"{len(df.columns)}")
     m_col4.metric("Duplicates", f"{duplicates_count:,}")
     m_col5.metric("Violations", f"{total_violations:,}")
     m_col6.metric("Memory", f"{metrics['mem_mb']:.1f}MB")
+    if sample_info:
+        shown = sample_info["shown"]
+        if sample_info.get("method") == "head" or not sample_info.get("total"):
+            st.info(
+                f"Showing the first {shown:,} rows of a large file (total row count not computed). "
+                "Cleaning steps and the exported script apply to the full file; "
+                "Downloads in the Pipeline tab use these rows; use 'Prepare full-file download' there to export all rows."
+            )
+        else:
+            st.info(
+                f"Showing {shown:,} of {sample_info['total']:,} rows (random sample). "
+                "Cleaning steps and the exported script apply to the full file; "
+                "Downloads in the Pipeline tab use the sample; use 'Prepare full-file download' there to export all rows."
+            )
     st.divider()
 
     o_col1, o_col2 = st.columns(2)
@@ -91,7 +113,7 @@ def render_overview_tab(df):
         # Scan for column names containing spaces, dashes, or special characters
         unnormalized_cols = []
         for c in df.columns:
-            if ' ' in c or '-' in c or any(not (char.isalnum() or char == '_') for char in c):
+            if ' ' in str(c) or '-' in str(c) or any(not (char.isalnum() or char == '_') for char in str(c)):
                 unnormalized_cols.append(c)
 
         has_recommended = (duplicates_count > 0 or empty_cols_count > 0 or empty_rows_count > 0 or len(whitespace_cols) > 0 or len(unnormalized_cols) > 0)

@@ -13,7 +13,7 @@ logger = logging.getLogger("lumi.state")
 
 from lumi_state.core import (
     MAX_SAMPLE_ROWS, LARGE_FILE_THRESHOLD_BYTES, CachedFileWrapper, load_data, calculate_health,
-    build_original_entry, initialize_state,
+    build_original_entry, initialize_state, downcast_dtypes,
 )
 
 _db_executor = ThreadPoolExecutor(max_workers=4)
@@ -200,6 +200,38 @@ def delete_cached_file(session_id: str):
         except Exception:
             logger.warning("Could not delete cached file %s", cache_path, exc_info=True)
 
+def _capture_full_source(file_buffer):
+    """Raw bytes + name of the upload, kept only for sampled files (None if unreadable)."""
+    try:
+        if hasattr(file_buffer, 'seek'):
+            file_buffer.seek(0)
+        raw = file_buffer.read()
+        if hasattr(file_buffer, 'seek'):
+            file_buffer.seek(0)
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8")
+        return {"name": getattr(file_buffer, 'name', 'dataset.csv'), "bytes": bytes(raw)}
+    except Exception:
+        logger.warning("Could not retain uploaded bytes for full-file export", exc_info=True)
+        return None
+
+
+def load_full_data():
+    """Re-reads the entire uploaded file (all rows, same dtype downcasting as load_data).
+
+    Deliberately bypasses the ``st.cache_data`` wrapper on ``load_data`` so the big frame is not
+    retained in the global cache. Raises ``ValueError`` when the source bytes are unavailable.
+    """
+    import io
+    import pandas as pd
+    src = st.session_state.get("full_source")
+    if not src or not src.get("bytes"):
+        raise ValueError("The original upload is no longer available; re-upload the file to export all rows.")
+    from lumi_state.core import read_tabular
+    df, _notices = read_tabular(src["bytes"], src.get("name") or "")
+    return downcast_dtypes(df)
+
+
 def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str = None, _skip_db_save: bool = False):
     """Processes a newly uploaded file and initializes the session state.
     
@@ -217,11 +249,28 @@ def process_uploaded_file(file_buffer, file_hash: str, restore_session_id: str =
     if is_large:
         st.toast("Large file detected (>50MB). Loading first 10,000 rows for responsiveness.")
     raw_df = load_data(file_buffer, nrows=MAX_SAMPLE_ROWS if is_large else None)
-    st.session_state.original_full_data = raw_df
+    load_notices = list(raw_df.attrs.pop("lumi_notices", []) or [])
+    st.session_state.load_notices = load_notices
+    for _n in load_notices:
+        st.toast(_n)
+    # The full frame is never kept in session_state; sampled uploads keep only the raw file bytes
+    # (smaller than a frame) so the full file can be re-read on demand (see load_full_data).
+    st.session_state.original_full_data = None
+    st.session_state.full_export = None
+    st.session_state.sample_export = None
+    st.session_state.full_source = None
     if not is_large and len(raw_df) > MAX_SAMPLE_ROWS:
         st.session_state.raw_data = raw_df.sample(MAX_SAMPLE_ROWS, random_state=42).reset_index(drop=True)
+        st.session_state.sample_info = {"shown": MAX_SAMPLE_ROWS, "total": len(raw_df), "method": "random"}
+    elif is_large:
+        # Total is unknown: counting rows would mean reading the whole >50MB file.
+        st.session_state.raw_data = raw_df
+        st.session_state.sample_info = {"shown": len(raw_df), "total": None, "method": "head"}
     else:
         st.session_state.raw_data = raw_df
+        st.session_state.sample_info = None
+    if st.session_state.sample_info:
+        st.session_state.full_source = _capture_full_source(file_buffer)
 
     st.session_state.last_file_hash = file_hash
     st.session_state.filename = getattr(file_buffer, 'name', 'dataset.csv')

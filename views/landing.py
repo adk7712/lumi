@@ -131,11 +131,9 @@ def render_landing_page():
                     # Mismatch detection (Requirement 7)
                     uploaded_filename = resume_uploader.name
                     try:
-                        import pandas as pd
-                        if uploaded_filename.endswith(".csv"):
-                            df_header = pd.read_csv(resume_uploader, nrows=0)
-                        else:
-                            df_header = pd.read_excel(resume_uploader, nrows=0)
+                        # same reader as the upload (delimiter/encoding detection, str headers)
+                        from state_manager import read_tabular
+                        df_header, _ = read_tabular(resume_uploader, name=uploaded_filename, nrows=0)
                         uploaded_columns = set(df_header.columns)
                     except Exception:
                         uploaded_columns = set()
