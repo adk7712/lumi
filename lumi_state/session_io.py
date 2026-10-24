@@ -7,6 +7,7 @@ from engine import apply_recipe
 from scout import generate_proposals
 from concurrent.futures import ThreadPoolExecutor
 import copy
+import threading
 import logging
 
 logger = logging.getLogger("lumi.state")
@@ -355,6 +356,19 @@ def load_session_state(file_hash: str, file_buffer):
         st.error(f"Error restoring session: {str(e)}")
 
 _rotated_sessions: dict = {}
+# Failed background saves, keyed by the session id that was saved. Background threads must not
+# touch st.session_state / st.toast, so they only record here; the next main-thread run consumes it.
+_failed_saves: dict = {}
+_bg_lock = threading.Lock()
+_BG_MAP_CAP = 256
+
+
+def _bounded_put(mapping: dict, key, value):
+    """Insert under ``_bg_lock`` (held by caller), evicting oldest entries beyond the cap."""
+    mapping.pop(key, None)
+    mapping[key] = value
+    while len(mapping) > _BG_MAP_CAP:
+        mapping.pop(next(iter(mapping)), None)
 
 
 def _on_bg_done(fut, old_sid):
@@ -362,11 +376,15 @@ def _on_bg_done(fut, old_sid):
         res = fut.result()
     except Exception:
         logger.error("Background save crashed", exc_info=True)
-        return
-    if res is False:
-        logger.error("Background DB save failed for session %s", old_sid)
-    elif res and res != old_sid:
-        _rotated_sessions[old_sid] = res
+        res = False
+    with _bg_lock:
+        if res is False:
+            logger.error("Background DB save failed for session %s", old_sid)
+            _bounded_put(_failed_saves, old_sid, True)
+        else:
+            _failed_saves.pop(old_sid, None)
+            if res and res != old_sid:
+                _bounded_put(_rotated_sessions, old_sid, res)
 
 
 def _set_session_cookie(session_id):
@@ -379,7 +397,13 @@ def _set_session_cookie(session_id):
 
 
 def _apply_rotated_session():
-    new = _rotated_sessions.pop(st.session_state.get("session_id"), None)
+    """Main-thread hook (call each run): surface a failed background save once, apply id rotation."""
+    sid = st.session_state.get("session_id")
+    with _bg_lock:
+        failed = _failed_saves.pop(sid, None)
+        new = _rotated_sessions.pop(sid, None)
+    if failed:
+        _warn_save_failure_once("Could not save to the database.")
     if new:
         st.session_state.session_id = new
         _set_session_cookie(new)

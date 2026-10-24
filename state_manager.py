@@ -24,7 +24,7 @@ from lumi_state.session_io import (  # noqa: F401
 from lumi_state.steps import (  # noqa: F401
     add_rule, add_step, replay_steps, get_state_at_step, get_column_dependencies, _name_regex,
     _STR_OR_BACKTICK, _rename_in_expression, _rename_in_text, sync_column_rename,
-    regenerate_proposals,
+    regenerate_proposals, unresolve_broken_rules, reresolve_rules,
 )
 from facade_util import install_facade
 

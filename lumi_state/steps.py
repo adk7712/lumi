@@ -34,15 +34,17 @@ def add_rule(rule_dict: dict, at_end: bool = True):
     save_db_session()
     _update_project_cache()
 
-def add_step(step, quiet: bool = False, persist: bool = True):
+def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool = True):
     """Adds a cleaning step to the recipe, updates the cached state, and shows a toast.
 
     quiet=True suppresses toasts; persist=False skips disk/DB saves (caller must persist once).
+    clear_redo=False (used by redo) keeps the remaining redo stack; new actions clear it.
     """
     st.session_state.cleaning_recipe.append(step)
     
-    # Clear redo stack on new action (linear invalidation)
-    st.session_state.redo_stack = []
+    # Clear redo stack on new action (linear invalidation); redo itself preserves it
+    if clear_redo:
+        st.session_state.redo_stack = []
 
     # Calculate delta state from current_df and cache metadata only (no full df copy)
     new_df, messages = apply_recipe(st.session_state.current_df, [step])
@@ -172,6 +174,40 @@ def sync_column_rename(target: str, new_name: str):
     if target in st.session_state.active_features:
         idx = st.session_state.active_features.index(target)
         st.session_state.active_features[idx] = new_name
+
+
+def unresolve_broken_rules() -> list:
+    """Clear `resolved` on rules whose violations are back in current_df.
+
+    Returns ``(index, desc)`` of each rule changed, so a redo can restore the flag.
+    """
+    from rule_utils import evaluate_rule
+    changed = []
+    df = st.session_state.get('current_df')
+    for i, rule in enumerate(st.session_state.get('rules', [])):
+        if not rule.get('resolved') or df is None:
+            continue
+        try:
+            if evaluate_rule(df, rule).sum() > 0:
+                rule['resolved'] = False
+                changed.append((i, rule.get('desc')))
+        except Exception:
+            logger.debug("Could not re-evaluate rule %s", rule.get('desc'), exc_info=True)
+    return changed
+
+
+def reresolve_rules(changed: list):
+    """Restore `resolved` for rules from ``unresolve_broken_rules`` that are clean again."""
+    from rule_utils import evaluate_rule
+    rules = st.session_state.get('rules', [])
+    df = st.session_state.get('current_df')
+    for i, desc in changed or []:
+        if i < len(rules) and rules[i].get('desc') == desc and df is not None:
+            try:
+                if evaluate_rule(df, rules[i]).sum() == 0:
+                    rules[i]['resolved'] = True
+            except Exception:
+                logger.debug("Could not re-evaluate rule %s", desc, exc_info=True)
 
 
 def regenerate_proposals():

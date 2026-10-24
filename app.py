@@ -14,6 +14,7 @@ from views import (
     render_landing_page,
     render_workspace_sidebar
 )
+import state_manager as _sm
 from scout import generate_proposals
 
 
@@ -48,6 +49,10 @@ initialize_state()
 # queued cookie writes so a set followed by st.rerun() still reaches the browser.
 from ui_utils import sync_cookies
 sync_cookies()
+
+# Apply results of background DB saves (session-id rotation, one-time save-failure toast)
+from state_manager import _apply_rotated_session
+_apply_rotated_session()
 
 # Ensure database schema is initialized once at app startup
 from persistence import init_db, storage_warning
@@ -98,14 +103,22 @@ def handle_undo():
         # Push undone step onto redo stack
         if 'redo_stack' not in st.session_state:
             st.session_state.redo_stack = []
+        # Un-resolve rules whose violations are back; remember them so redo can restore the flag.
+        popped_step = dict(popped_step, _unresolved_rules=_sm.unresolve_broken_rules())
         st.session_state.redo_stack.append(popped_step)
         regenerate_proposals()
         save_session_state()
+        _sm.save_db_session()
+        _sm._update_project_cache()
 
 def handle_redo():
     if st.session_state.get('redo_stack'):
         step = st.session_state.redo_stack.pop()
-        add_step(step)
+        if '_source_proposal_type' in step and '_source_proposal_col' in step:
+            st.session_state.scanned_columns.add(f"{step['_source_proposal_col']}:{step['_source_proposal_type']}")
+        unresolved = step.pop('_unresolved_rules', [])
+        add_step(step, clear_redo=False)
+        _sm.reresolve_rules(unresolved)
 
 @st.dialog("Reset Workspace")
 def show_reset_dialog():
