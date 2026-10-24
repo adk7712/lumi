@@ -13,7 +13,7 @@ not copied here; reads are resolved live from the owning submodule.
 from lumi_db import pool as _pool, schema as _schema, sessions as _sessions
 from lumi_db.pool import (  # noqa: F401
     logger, _perf_lock, _log_db_perf, _get_cached_db_url, _get_db_url, get_env, storage_warning,
-    _commit, BoundedPgPool, _get_pg_pool, _warm_pool_async, db_cursor, get_db_connection,
+    _commit, BoundedPgPool, DatabaseUnavailableError, POOL_WAIT_TIMEOUT, _get_pg_pool, _warm_pool_async, db_cursor, get_db_connection,
     release_db_connection, _execute,
 )
 from lumi_db.schema import (  # noqa: F401

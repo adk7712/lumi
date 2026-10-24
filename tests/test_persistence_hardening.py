@@ -170,3 +170,29 @@ class TestMigrations(_Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_db_url_miss_is_not_cached_but_hit_is(monkeypatch):
+    from lumi_db import pool
+
+    pool._get_cached_db_url.cache_clear()
+    calls = []
+    results = iter([None, "postgresql://u:p@h/db", "postgresql://other@h/db"])
+
+    def fake_lookup(is_testing):
+        calls.append(is_testing)
+        return next(results)
+
+    monkeypatch.setattr(pool, "_lookup_db_url", fake_lookup)
+    try:
+        assert pool._get_cached_db_url(False) is None
+        # a miss is remembered briefly: no re-lookup within the TTL
+        assert pool._get_cached_db_url(False) is None
+        assert len(calls) == 1
+        monkeypatch.setattr(pool, "_DB_URL_MISS_TTL", 0.0)
+        assert pool._get_cached_db_url(False) == "postgresql://u:p@h/db"
+        # found URL is cached: no further lookup
+        assert pool._get_cached_db_url(False) == "postgresql://u:p@h/db"
+        assert len(calls) == 2
+    finally:
+        pool._get_cached_db_url.cache_clear()

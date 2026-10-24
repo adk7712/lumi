@@ -104,8 +104,9 @@ def _current_schema_version(conn, cursor) -> int:
 
 def _run_migrations() -> bool:
     """Applies pending migrations in order. Returns True if schema is current. Never raises."""
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()
         cursor = conn.cursor()
         current = _current_schema_version(conn, cursor)
         if current >= LATEST_SCHEMA_VERSION:
@@ -128,7 +129,7 @@ def _run_migrations() -> bool:
     except Exception:
         logger.error("Database migration/initialization failed", exc_info=True)
         try:
-            conn.rollback()
+            conn.rollback()  # conn may be None if acquiring it failed; swallowed below
         except Exception:
             logger.debug("Rollback after failed migration failed", exc_info=True)
         return False

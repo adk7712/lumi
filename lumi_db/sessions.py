@@ -91,8 +91,9 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
     t0 = time.perf_counter()
     err = None
     saved = False
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()  # may raise DatabaseUnavailableError; handled below
         cursor = conn.cursor()
         
         # Serialize fields to JSON
@@ -148,8 +149,9 @@ def load_session(session_id: str, current_user_email: str = None) -> dict:
     """Loads a session's details from the database."""
     t0 = time.perf_counter()
     err = None
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()  # may raise DatabaseUnavailableError; handled below
         cursor = conn.cursor()
         _execute(conn, cursor, "SELECT * FROM sessions WHERE session_id = ?", (session_id,))
         row = cursor.fetchone()
@@ -193,8 +195,9 @@ def get_user_projects(user_id: str) -> list:
 
     t0 = time.perf_counter()
     err = None
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()  # may raise DatabaseUnavailableError; handled below
         cursor = conn.cursor()
         # Pruned column list to avoid downloading large recipes and rules blobs over WAN
         _execute(conn, cursor, "SELECT session_id, filename, project_name, updated_at, step_count, pinned FROM sessions WHERE user_id = ? ORDER BY pinned DESC, updated_at DESC", (user_id,))
@@ -242,8 +245,9 @@ def delete_session(session_id: str, user_id: str) -> bool:
         return False
     t0 = time.perf_counter()
     err = None
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()  # may raise DatabaseUnavailableError; handled below
         cursor = conn.cursor()
         _execute(conn, cursor, "DELETE FROM sessions WHERE session_id = ? AND user_id = ?", (session_id, user_id))
         _commit(conn)
@@ -265,8 +269,9 @@ def rename_session(session_id: str, new_name: str, user_id: str) -> bool:
         return False
     t0 = time.perf_counter()
     err = None
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()  # may raise DatabaseUnavailableError; handled below
         cursor = conn.cursor()
         now = datetime.now().isoformat()
         _execute(conn, cursor, "UPDATE sessions SET project_name = ?, updated_at = ? WHERE session_id = ? AND user_id = ?", (new_name, now, session_id, user_id))
@@ -289,8 +294,9 @@ def toggle_pin_session(session_id: str, user_id: str) -> bool:
         return False
     t0 = time.perf_counter()
     err = None
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()  # may raise DatabaseUnavailableError; handled below
         cursor = conn.cursor()
         now = datetime.now().isoformat()
         _execute(conn, cursor, """
@@ -318,8 +324,9 @@ def reconcile_session(session_id: str, user_id: str) -> bool:
     Only unowned or guest-owned sessions can be claimed; sessions owned by another registered
     user are left untouched. Returns True if the session now belongs to user_id.
     """
-    conn = get_db_connection()
+    conn = None
     try:
+        conn = get_db_connection()  # may raise DatabaseUnavailableError; handled below
         cursor = conn.cursor()
         now = datetime.now().isoformat()
         _execute(conn, cursor, """

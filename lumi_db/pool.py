@@ -31,13 +31,11 @@ def _log_db_perf(op: str, duration_ms: float, details: dict = None, error: str =
     except Exception:
         logger.debug("Failed to write DB perf log", exc_info=True)
 
-import functools
 import psycopg2.pool
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import PoolError
 
-@functools.lru_cache(maxsize=2)
-def _get_cached_db_url(is_testing: bool):
+def _lookup_db_url(is_testing: bool):
     if is_testing:
         return None
 
@@ -95,6 +93,32 @@ def _get_cached_db_url(is_testing: bool):
             db_url = f"{db_url}{sep}{'&'.join(params_to_add)}"
 
     return db_url
+
+_db_url_cache: dict = {}
+_db_url_miss_at: dict = {}
+_DB_URL_MISS_TTL = 30.0  # seconds a missing URL is remembered before re-reading secrets
+
+def _get_cached_db_url(is_testing: bool):
+    """Cache a found URL for good; remember a miss only briefly so secrets edits apply."""
+    cached = _db_url_cache.get(is_testing)
+    if cached:
+        return cached
+    missed_at = _db_url_miss_at.get(is_testing)
+    if missed_at is not None and time.monotonic() - missed_at < _DB_URL_MISS_TTL:
+        return None
+    db_url = _lookup_db_url(is_testing)
+    if db_url:
+        _db_url_cache[is_testing] = db_url
+        _db_url_miss_at.pop(is_testing, None)
+    else:
+        _db_url_miss_at[is_testing] = time.monotonic()
+    return db_url
+
+def _clear_db_url_cache():
+    _db_url_cache.clear()
+    _db_url_miss_at.clear()
+
+_get_cached_db_url.cache_clear = _clear_db_url_cache
 
 def _get_db_url():
     import streamlit as st
@@ -156,9 +180,32 @@ def _commit(conn):
     elif not getattr(conn, "autocommit", False):
         conn.commit()
 
+POOL_WAIT_TIMEOUT = 3.0  # seconds a caller waits for a free pooled connection
+
+class DatabaseUnavailableError(RuntimeError):
+    """The configured Postgres database cannot be reached (and silently using SQLite would lose data)."""
+
+_fallback_warned = False
+_fallback_lock = threading.Lock()
+
+def _note_pool_failure(e):
+    """Log a dev-mode SQLite fallback once per outage (reset when the pool works again)."""
+    global _fallback_warned
+    with _fallback_lock:
+        first = not _fallback_warned
+        _fallback_warned = True
+    if first:
+        logger.warning("PostgreSQL pool unavailable; falling back to local SQLite (development only): %s", e)
+
+def _note_pool_success():
+    global _fallback_warned
+    if _fallback_warned:
+        with _fallback_lock:
+            _fallback_warned = False
+
 class BoundedPgPool:
     """Thread-safe PostgreSQL connection pool with semaphore queueing and autocommit."""
-    def __init__(self, raw_pool, maxconn=10, timeout=10.0):
+    def __init__(self, raw_pool, maxconn=10, timeout=POOL_WAIT_TIMEOUT):
         self.raw_pool = raw_pool
         self.maxconn = maxconn
         self.timeout = timeout
@@ -215,7 +262,7 @@ def _get_pg_pool(db_url):
     import psycopg2.pool
     from psycopg2.extras import RealDictCursor
     raw_pool = psycopg2.pool.ThreadedConnectionPool(minconn=1, maxconn=10, dsn=db_url, cursor_factory=RealDictCursor)
-    return BoundedPgPool(raw_pool, maxconn=10, timeout=10.0)
+    return BoundedPgPool(raw_pool, maxconn=10, timeout=POOL_WAIT_TIMEOUT)
 
 def _warm_pool_async():
     """Asynchronously establishes initial connections to eliminate cold-start TLS latency for users."""
@@ -268,7 +315,9 @@ def get_db_connection():
     """Establishes and returns a connection to the database.
     
     If DB_URL is present in st.secrets or .streamlit/secrets.toml (and not in testing mode),
-    it borrows a connection from the PostgreSQL connection pool. Otherwise, it falls back to SQLite.
+    it borrows a connection from the PostgreSQL connection pool. Otherwise it uses SQLite.
+    If the pool fails, production raises DatabaseUnavailableError (no silent data loss);
+    development falls back to SQLite with a one-time warning.
     """
     t0 = time.perf_counter()
     backend = "sqlite"
@@ -280,11 +329,16 @@ def get_db_connection():
             try:
                 pool = _get_pg_pool(db_url)
                 conn = pool.getconn()
+                _note_pool_success()
                 return conn
             except Exception as e:
                 err = str(e)
-                logger.error("Failed to get connection from PostgreSQL pool; falling back to SQLite: %s", e)
+                if get_env() == "production":
+                    backend = "postgresql_unavailable"
+                    logger.error("PostgreSQL pool unavailable in production; refusing SQLite fallback: %s", e)
+                    raise DatabaseUnavailableError(f"Database unavailable: {e}") from e
                 backend = "sqlite_fallback"
+                _note_pool_failure(e)
         
         # Fallback to local SQLite database
         import sqlite3
