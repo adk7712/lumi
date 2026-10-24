@@ -52,7 +52,9 @@ def _check_constant_column(df: pd.DataFrame, col: str) -> list[dict]:
 def _check_numeric_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
     """Analyze numeric columns for statistical properties like outliers and skewness."""
     proposals = []
-    if pd.api.types.is_numeric_dtype(df[col]):
+    # bool (incl. nullable "boolean") counts as numeric to pandas but IQR/skew are meaningless
+    # and numpy refuses boolean subtraction.
+    if pd.api.types.is_numeric_dtype(df[col]) and not pd.api.types.is_bool_dtype(df[col]):
         # Outlier Detection (IQR)
         Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
         IQR = Q3 - Q1
