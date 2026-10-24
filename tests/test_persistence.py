@@ -245,7 +245,7 @@ class TestCookiesAndPersistence(unittest.TestCase):
             
             # Verify cookie set was called
             from ui_utils import sign_cookie_value
-            controller_instance.set.assert_called_once_with("lumi_session", sign_cookie_value(session_id, purpose="session"))
+            controller_instance.set.assert_called_once_with("lumi_session", sign_cookie_value(session_id, purpose="session"), max_age=30 * 24 * 60 * 60)
             
             # Verify initial state saved in DB
             db_session = load_session(session_id)

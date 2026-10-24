@@ -157,3 +157,62 @@ def test_session_ids_are_uuid4(monkeypatch):
     src = inspect.getsource(state_manager.process_uploaded_file)
     assert "uuid.uuid4()" in src
     assert uuid.UUID(str(uuid.uuid4())).version == 4
+
+
+def test_set_cookie_passes_long_max_age_and_replays_it():
+    import ui_utils
+    ctrl = mock.MagicMock()
+    with mock.patch("streamlit_cookies_controller.CookieController", return_value=ctrl):
+        assert ui_utils.set_cookie("lumi_session", "v")
+        ctrl.set.assert_called_with("lumi_session", "v", max_age=ui_utils.COOKIE_MAX_AGE_SECONDS)
+        assert ui_utils.COOKIE_MAX_AGE_SECONDS == 30 * 24 * 3600
+        ui_utils.set_cookie("x", "y", max_age=60)
+        ctrl.set.assert_called_with("x", "y", max_age=60)
+        ctrl.set.reset_mock()
+        ui_utils.sync_cookies()
+        got = {c.args[0]: c.kwargs["max_age"] for c in ctrl.set.call_args_list}
+        assert got["lumi_session"] == ui_utils.COOKIE_MAX_AGE_SECONDS and got["x"] == 60
+
+
+# --- I2: dev auth is never available in production ---------------------------
+
+@pytest.fixture
+def production(monkeypatch):
+    monkeypatch.setenv("LUMI_ENV", "production")
+    monkeypatch.setattr(ui_utils, "_DEV_AUTH_PROD_WARNED", False)
+
+
+def test_prod_ignores_lumi_dev_auth_env(production, dev_auth_off, monkeypatch):
+    monkeypatch.setenv("LUMI_DEV_AUTH", "1")
+    assert is_dev_auth_enabled() is False
+
+
+def test_prod_ignores_dev_auth_secret(production, dev_auth_off, monkeypatch):
+    monkeypatch.setattr(ui_utils.st, "secrets", {"dev_auth": True}, raising=False)
+    assert is_dev_auth_enabled() is False
+
+
+def test_prod_ignores_lumi_testing(production, dev_auth_off, monkeypatch):
+    monkeypatch.setenv("LUMI_TESTING", "1")
+    assert is_dev_auth_enabled() is False
+
+
+def test_prod_warns_once(production, dev_auth_off, monkeypatch, caplog):
+    monkeypatch.setenv("LUMI_DEV_AUTH", "1")
+    with caplog.at_level("WARNING", logger="lumi.auth"):
+        is_dev_auth_enabled()
+        is_dev_auth_enabled()
+    assert len([r for r in caplog.records if "production" in r.getMessage()]) == 1
+
+
+def test_development_flag_still_enabled(dev_auth_off, monkeypatch):
+    monkeypatch.setenv("LUMI_ENV", "development")
+    monkeypatch.setenv("LUMI_DEV_AUTH", "1")
+    assert is_dev_auth_enabled() is True
+
+
+def test_prod_get_logged_in_user_ignores_dev_email(production, dev_auth_off, monkeypatch):
+    monkeypatch.setenv("LUMI_DEV_AUTH", "1")
+    st.session_state.dev_user_email = "victim@company.com"
+    assert get_logged_in_user() is None
+    assert "dev_user_email" not in st.session_state

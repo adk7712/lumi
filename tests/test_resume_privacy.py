@@ -225,7 +225,7 @@ def test_signed_session_cookie_written_on_upload(monkeypatch):
         sm.process_uploaded_file(_Upload(), "hash-1")
         sid = st.session_state["session_id"]
         signed = sign_cookie_value(sid, purpose="session")
-        ctrl.set.assert_called_once_with(SESSION_COOKIE, signed)
+        ctrl.set.assert_called_once_with(SESSION_COOKIE, signed, max_age=ui_utils.COOKIE_MAX_AGE_SECONDS)
         assert verify_cookie_value(signed, purpose="session") == sid
         assert signed != sid  # never written unsigned
 

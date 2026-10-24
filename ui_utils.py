@@ -31,17 +31,41 @@ def _is_truthy(value) -> bool:
     return str(value).strip().lower() in _TRUTHY
 
 
+_DEV_AUTH_PROD_WARNED = False
+
+
+def _is_production_env() -> bool:
+    try:
+        import persistence
+        return persistence.get_env() == "production"
+    except Exception:
+        # Fail closed: if the environment cannot be determined, honour LUMI_ENV directly.
+        return str(os.environ.get("LUMI_ENV", "")).strip().lower() == "production"
+
+
 def is_dev_auth_enabled() -> bool:
     """Passwordless mock email login is only allowed with an explicit dev flag.
 
     Enabled by env ``LUMI_DEV_AUTH=1``, ``st.secrets["dev_auth"] = true``, or ``LUMI_TESTING=1``.
+    Always disabled in production (``persistence.get_env() == "production"``), whatever the flags.
     """
-    if _is_truthy(os.environ.get("LUMI_DEV_AUTH", "")) or _is_truthy(os.environ.get("LUMI_TESTING", "")):
-        return True
-    try:
-        return _is_truthy(st.secrets.get("dev_auth", False))
-    except Exception:
+    global _DEV_AUTH_PROD_WARNED
+    flag = _is_truthy(os.environ.get("LUMI_DEV_AUTH", "")) or _is_truthy(os.environ.get("LUMI_TESTING", ""))
+    if not flag:
+        try:
+            flag = _is_truthy(st.secrets.get("dev_auth", False))
+        except Exception:
+            flag = False
+    if flag and _is_production_env():
+        if not _DEV_AUTH_PROD_WARNED:
+            _DEV_AUTH_PROD_WARNED = True
+            import logging
+            logging.getLogger("lumi.auth").warning(
+                "A dev-auth flag (LUMI_DEV_AUTH / LUMI_TESTING / secret dev_auth) is set in production; "
+                "ignoring it and keeping passwordless dev login disabled."
+            )
         return False
+    return flag
 
 
 def _get_cookie_secret() -> bytes:
@@ -99,6 +123,9 @@ def verify_cookie_value(raw, purpose: str):
 _COOKIE_CTRL_STATE_KEY = "_lumi_cookie_ctrl"
 _COOKIE_OPS_STATE_KEY = "_lumi_cookie_ops"
 _COOKIE_REASSERT_RUNS = 3
+# Browser lifetime for Lumi cookies (the library default is 1 day). The HMAC signature
+# carries no timestamp, so this max_age is the only expiry.
+COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 
 
 def _current_run_marker():
@@ -134,33 +161,36 @@ def get_cookie_controller():
     return controller
 
 
-def _apply_cookie_op(controller, name, value):
+def _apply_cookie_op(controller, name, value, max_age=None):
     if value is None:
         try:
             controller.remove(name)
         except KeyError:
             pass  # library pops its local copy without a default; browser removal was still issued
     else:
-        controller.set(name, value)
+        controller.set(name, value, max_age=max_age if max_age is not None else COOKIE_MAX_AGE_SECONDS)
 
 
-def _queue_cookie_op(name, value):
+def _queue_cookie_op(name, value, max_age=None):
     try:
         ops = dict(st.session_state.get(_COOKIE_OPS_STATE_KEY) or {})
-        ops[name] = [value, _COOKIE_REASSERT_RUNS]
+        ops[name] = [value, _COOKIE_REASSERT_RUNS, max_age]
         st.session_state[_COOKIE_OPS_STATE_KEY] = ops
     except Exception:
         pass
 
 
-def set_cookie(name: str, value: str) -> bool:
-    """Write a cookie now and re-assert it on the next runs (survives an immediate st.rerun)."""
-    _queue_cookie_op(name, value)
+def set_cookie(name: str, value: str, max_age=None) -> bool:
+    """Write a cookie now and re-assert it on the next runs (survives an immediate st.rerun).
+
+    ``max_age`` is in seconds; defaults to COOKIE_MAX_AGE_SECONDS (30 days).
+    """
+    _queue_cookie_op(name, value, max_age)
     controller = get_cookie_controller()
     if controller is None:
         return False
     try:
-        _apply_cookie_op(controller, name, value)
+        _apply_cookie_op(controller, name, value, max_age)
         return True
     except Exception as e:
         import logging
@@ -188,13 +218,15 @@ def sync_cookies():
     if controller is None or not ops:
         return
     remaining = {}
-    for name, (value, runs_left) in list(ops.items()):
+    for name, op in list(ops.items()):
+        value, runs_left = op[0], op[1]
+        max_age = op[2] if len(op) > 2 else None
         try:
-            _apply_cookie_op(controller, name, value)
+            _apply_cookie_op(controller, name, value, max_age)
         except Exception:
             pass
         if runs_left - 1 > 0:
-            remaining[name] = [value, runs_left - 1]
+            remaining[name] = [value, runs_left - 1, max_age]
     st.session_state[_COOKIE_OPS_STATE_KEY] = remaining
 
 
@@ -600,15 +632,38 @@ def plot_zscore_boxes(df: pd.DataFrame, columns: tuple, df_state_key: str = "def
     return build_zscore_boxplot(df, columns)
 
 
+_posthog_nested_warned = False
+
+def _find_nested_secret(sec, key):
+    """Return `key` from any nested table of `sec` (TOML puts keys below a [table] header into it)."""
+    for k in sec:
+        val = sec[k]
+        if hasattr(val, "keys"):
+            if key in val:
+                return val[key]
+            found = _find_nested_secret(val, key)
+            if found:
+                return found
+    return None
+
 def inject_posthog(st_object):
     """Injects PostHog tracking script if a key is configured in st.secrets or environment variables."""
     posthog_key = None
     try:
         if "POSTHOG_API_KEY" in st_object.secrets:
             posthog_key = st_object.secrets["POSTHOG_API_KEY"]
+        else:
+            posthog_key = _find_nested_secret(st_object.secrets, "POSTHOG_API_KEY")
+            global _posthog_nested_warned
+            if posthog_key and not _posthog_nested_warned:
+                _posthog_nested_warned = True
+                import logging
+                logging.getLogger("lumi.analytics").warning(
+                    "POSTHOG_API_KEY is nested under a [table] in secrets; move it above [auth]"
+                )
     except Exception:
         pass
-        
+
     if not posthog_key:
         import os
         posthog_key = os.getenv("POSTHOG_API_KEY")
