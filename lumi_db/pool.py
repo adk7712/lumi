@@ -181,6 +181,8 @@ def _commit(conn):
         conn.commit()
 
 POOL_WAIT_TIMEOUT = 3.0  # seconds a caller waits for a free pooled connection
+_CHECKOUT_ATTEMPTS = 2  # fresh connections tried before getconn gives up
+POOL_FAILURE_TTL = 20.0  # seconds a failed pool construction is remembered (fail fast during outages)
 
 class DatabaseUnavailableError(RuntimeError):
     """The configured Postgres database cannot be reached (and silently using SQLite would lose data)."""
@@ -213,28 +215,60 @@ class BoundedPgPool:
         self._semaphore = threading.Semaphore(maxconn)
         self._used = set()
 
+    def _discard(self, conn):
+        """Close a connection and drop it from the raw pool without ever raising."""
+        try:
+            self.raw_pool.putconn(conn, close=True)
+            return
+        except Exception:
+            logger.debug("raw_pool.putconn(close=True) failed while discarding", exc_info=True)
+        try:
+            conn.close()
+        except Exception:
+            logger.debug("conn.close() failed while discarding", exc_info=True)
+
+    def _checkout(self):
+        """Get a healthy, autocommit connection from the raw pool or raise PoolError.
+
+        Closed/broken connections are discarded and replaced (bounded retries).
+        """
+        last_err = None
+        for _ in range(_CHECKOUT_ATTEMPTS):
+            conn = self.raw_pool.getconn()
+            if getattr(conn, "closed", 0) != 0:
+                last_err = "pooled connection was closed"
+                self._discard(conn)
+                continue
+            try:
+                if hasattr(conn, "autocommit"):
+                    status = getattr(conn, "get_transaction_status", lambda: 0)()
+                    if status != 0:
+                        conn.rollback()
+                    conn.autocommit = True
+            except Exception as e:
+                logger.warning("Discarding pooled connection that could not be prepared: %s", e)
+                last_err = str(e)
+                self._discard(conn)
+                continue
+            return conn
+        raise PoolError(f"Could not obtain a healthy pooled connection: {last_err}")
+
     def getconn(self, timeout=None):
         timeout = timeout or self.timeout
         acquired = self._semaphore.acquire(timeout=timeout)
         if not acquired:
             raise PoolError(f"Connection pool timeout after {timeout}s: all {self.maxconn} connections busy")
-        
+
+        ok = False
         try:
-            conn = self.raw_pool.getconn()
-            if getattr(conn, "closed", 0) != 0:
-                try:
-                    self.raw_pool.putconn(conn, close=True)
-                except Exception:
-                    logger.warning("Failed to discard closed pooled connection", exc_info=True)
-                conn = self.raw_pool.getconn()
-            if hasattr(conn, "autocommit"):
-                conn.autocommit = True
+            conn = self._checkout()
             with self._lock:
                 self._used.add(conn)
+            ok = True
             return conn
-        except Exception:
-            self._semaphore.release()
-            raise
+        finally:
+            if not ok:
+                self._semaphore.release()
 
     def putconn(self, conn, close=False):
         was_used = False
@@ -243,12 +277,24 @@ class BoundedPgPool:
                 self._used.remove(conn)
                 was_used = True
         try:
-            if not getattr(conn, "autocommit", False) and getattr(conn, "get_transaction_status", lambda: 0)() != 0:
+            if not close:
+                if getattr(conn, "closed", 0) != 0:
+                    close = True
+                else:
+                    try:
+                        if getattr(conn, "get_transaction_status", lambda: 0)() != 0:
+                            conn.rollback()
+                    except Exception:
+                        logger.warning("Rollback failed while returning connection; discarding it", exc_info=True)
+                        close = True
+            try:
+                self.raw_pool.putconn(conn, close=close)
+            except Exception:
                 try:
-                    conn.rollback()
+                    conn.close()
                 except Exception:
-                    logger.warning("Rollback failed while returning connection to pool", exc_info=True)
-            self.raw_pool.putconn(conn, close=close)
+                    logger.debug("conn.close() failed after putconn error", exc_info=True)
+                raise
         finally:
             if was_used:
                 self._semaphore.release()
@@ -258,11 +304,40 @@ class BoundedPgPool:
             self.raw_pool.closeall()
 
 @st.cache_resource
-def _get_pg_pool(db_url):
+def _build_pg_pool(db_url):
     import psycopg2.pool
     from psycopg2.extras import RealDictCursor
     raw_pool = psycopg2.pool.ThreadedConnectionPool(minconn=1, maxconn=10, dsn=db_url, cursor_factory=RealDictCursor)
     return BoundedPgPool(raw_pool, maxconn=10, timeout=POOL_WAIT_TIMEOUT)
+
+_pool_failures: dict = {}  # db_url -> (monotonic time, error string)
+_pool_failures_lock = threading.Lock()
+
+def _get_pg_pool(db_url):
+    """Cached pool; a failed construction is remembered for POOL_FAILURE_TTL so callers fail fast."""
+    with _pool_failures_lock:
+        failure = _pool_failures.get(db_url)
+    if failure is not None:
+        failed_at, msg = failure
+        if time.monotonic() - failed_at < POOL_FAILURE_TTL:
+            raise PoolError(f"PostgreSQL pool unavailable (recent failure): {msg}")
+    try:
+        pool = _build_pg_pool(db_url)
+    except Exception as e:
+        with _pool_failures_lock:
+            _pool_failures[db_url] = (time.monotonic(), str(e))
+        raise
+    if failure is not None:
+        with _pool_failures_lock:
+            _pool_failures.pop(db_url, None)
+    return pool
+
+def _clear_pg_pool_cache():
+    _build_pg_pool.clear()
+    with _pool_failures_lock:
+        _pool_failures.clear()
+
+_get_pg_pool.clear = _clear_pg_pool_cache
 
 def _warm_pool_async():
     """Asynchronously establishes initial connections to eliminate cold-start TLS latency for users."""
