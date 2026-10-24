@@ -2,6 +2,12 @@ import json
 import math
 import numbers
 
+def _query_guard_source() -> str:
+    # The exported script embeds the exact validator the app uses (query_guard.py, stdlib-only).
+    from pathlib import Path
+    src = Path(__file__).with_name("query_guard.py").read_text(encoding="utf-8")
+    return src[src.index("import ast"):].rstrip() + "\n\n"
+
 KNN_DEFAULT_NEIGHBORS = 5
 FUZZY_MATCH_THRESHOLD = 85
 FUZZY_MAX_UNIQUE = 1000
@@ -226,7 +232,7 @@ def _rule_mask_lines(r: dict, indent: str, var: str = "mask") -> list[str] | Non
     if t == "Custom Expression":
         # Query describes the VIOLATION condition — rows that match are flagged.
         return [
-            f"{indent}_violated_idx = df.query({repr(r['query'])}).index",
+            f"{indent}_violated_idx = safe_query_index(df, {repr(r['query'])})",
             f"{indent}{var} = df.index.isin(_violated_idx)",
         ]
     return None
@@ -237,7 +243,15 @@ def _codegen_drop_violated(step: dict) -> list[str]:
     lines = _rule_mask_lines(r, "    ", "_mask")
     if lines is None:
         return []
-    return [f"    # Remove rows violating rule: {_comment(r.get('desc', 'N/A'))}"] + lines + ["    df = df[~_mask]"]
+    header = [f"    # Remove rows violating rule: {_comment(r.get('desc', 'N/A'))}"]
+    if r.get('type') == "Custom Expression":
+        # Mirror the engine: an unsafe/invalid expression is reported and the step skipped.
+        body = ["    " + ln for ln in lines] + ["        df = df[~_mask]"]
+        return header + ["    try:"] + body + [
+            "    except Exception as e:",
+            f"        warnings.warn(\"Skipped drop_violated rule ({_comment(r.get('desc', 'N/A'))}): \" + str(e))",
+        ]
+    return header + lines + ["    df = df[~_mask]"]
 
 def _codegen_replace(step: dict) -> list[str]:
     col = step.get('column')
@@ -416,6 +430,13 @@ def _codegen_normalize_column_names(step: dict) -> list[str]:
     ])
     return code
 
+_COLUMN_ACTIONS = {
+    "drop_column", "drop_nulls", "fill_null", "cap_range", "cast_type", "replace",
+    "strip_whitespace", "normalize_text", "log_transform", "rename_column", "extract_datetime",
+}
+# Actions where column == "All" means "every text column" (never a missing column).
+_ALL_CAPABLE_ACTIONS = {"replace", "strip_whitespace", "normalize_text"}
+
 _CODEGEN_REGISTRY = {
     "drop_column": _codegen_drop_column,
     "drop_nulls": _codegen_drop_nulls,
@@ -436,6 +457,63 @@ _CODEGEN_REGISTRY = {
     "normalize_column_names": _codegen_normalize_column_names,
 }
 
+def _step_required_columns(step: dict) -> list:
+    """Columns a step needs to exist, mirroring the engine's per-handler checks.
+
+    Steps over "All" columns, whole-frame steps, reorder_columns (which ignores unknown
+    names) and normalize_column_names need none.
+    """
+    action = step.get('action')
+    if action == 'drop_violated':
+        r = step.get('rule') or {}
+        t = r.get('type')
+        if t == "Null Check":
+            cols = [r.get('col')]
+        elif t == "Range Check":
+            # engine never touches the column when a bound is unusable (all-False mask)
+            cols = [r.get('col')] if _valid_bound(r.get('min')) and _valid_bound(r.get('max')) else []
+        elif t == "Relational Check":
+            cols = [r.get('col_a')]
+            if r.get('target_type') == 'Feature':
+                cols.append(r.get('col_b'))
+        else:
+            cols = []
+        return [c for c in cols if c is not None]
+    if action in _COLUMN_ACTIONS:
+        col = step.get('column')
+        if col == "All" and action in _ALL_CAPABLE_ACTIONS:
+            return []
+        return [col]
+    return []
+
+
+def _guard_missing_columns(step: dict, body: list[str]) -> list[str]:
+    """Wrap a step so a missing target column warns and skips it, like engine_ops does."""
+    cols = _step_required_columns(step)
+    if not cols or not body:
+        return body
+    action = step.get('action')
+    inner = ["    " + line if line.strip() else line for line in body]
+    if not any(line.strip() and not line.strip().startswith('#') for line in body):
+        inner.append("        pass")
+    if action == 'drop_violated':
+        desc = _comment((step.get('rule') or {}).get('desc', 'N/A'))
+        prefix = f"Could not apply drop_violated rule ({desc}): column(s) "
+        return [
+            f"    _missing = [_c for _c in {repr(cols)} if _c not in df.columns]",
+            "    if _missing:",
+            f"        warnings.warn({prefix!r} + f\"{{_missing}} not found.\")",
+            "    else:",
+        ] + inner
+    col = cols[0]
+    return [
+        f"    if {repr(col)} in df.columns:",
+    ] + inner + [
+        "    else:",
+        f"        warnings.warn({repr(f'Column {col!r} not found for {action} action.')})",
+    ]
+
+
 def _generate_clean_data_lines(recipe: list) -> list[str]:
     code = [
         "    # Match the dtypes Lumi uses after upload (numeric downcasting) so results agree with the app.",
@@ -448,7 +526,7 @@ def _generate_clean_data_lines(recipe: list) -> list[str]:
             action = step.get('action')
             generator = _CODEGEN_REGISTRY.get(action)
             if generator:
-                code.extend(generator(step))
+                code.extend(_guard_missing_columns(step, generator(step)))
             else:
                 msg = f"Unknown action {action!r} in recipe was skipped (not supported by export)."
                 code.append(f"    # WARNING: {msg}")
@@ -494,14 +572,22 @@ def _generate_validate_data_lines(rules: list) -> list[str]:
     code.append("    return violations")
     return code
 
+def _uses_query_guard(*line_groups) -> bool:
+    return any("safe_query_index(" in ln for group in line_groups for ln in group)
+
 def generate_pipeline_code(recipe: list, rules: list = None) -> str:
     """
     Generates standalone Python code for a given cleaning recipe and optional validation rules.
     """
-    code = [_IMPORTS, _DOWNCAST_HELPER, "def clean_data(df):"]
-    code.extend(_generate_clean_data_lines(recipe))
+    clean_lines = _generate_clean_data_lines(recipe)
+    validate_lines = _generate_validate_data_lines(rules)
+    code = [_IMPORTS, _DOWNCAST_HELPER]
+    if _uses_query_guard(clean_lines, validate_lines):
+        code.append(_query_guard_source())
+    code.append("def clean_data(df):")
+    code.extend(clean_lines)
     code.append("\n\ndef validate_data(df):")
-    code.extend(_generate_validate_data_lines(rules))
+    code.extend(validate_lines)
 
     # Add example runner block
     code.append("\nif __name__ == \"__main__\":")
@@ -525,6 +611,8 @@ def generate_notebook_code(recipe: list, rules: list = None) -> str:
     validate_lines = ["def validate_data(df):\n"] + [f"{line}\n" for line in _generate_validate_data_lines(rules)]
     import_lines = [f"{line}\n" for line in _IMPORTS.rstrip("\n").split("\n")]
     import_lines += ["\n"] + [f"{line}\n" for line in _DOWNCAST_HELPER.rstrip("\n").split("\n")]
+    if _uses_query_guard(clean_lines, validate_lines):
+        import_lines += ["\n"] + [f"{line}\n" for line in _query_guard_source().rstrip("\n").split("\n")]
 
     cells = [
         {

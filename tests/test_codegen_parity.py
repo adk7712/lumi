@@ -285,3 +285,100 @@ def test_validate_data_matches_evaluate_rule(rule):
     report = ns['validate_data'](df)
     got = report.get(rule['desc'], 0)
     assert got == expected, f"{rule['desc']}: script={got!r} engine={expected}"
+
+
+# --------------------------------------------------------------------------- missing columns (N4)
+
+MISSING_STEPS = {
+    'drop_column': {'action': 'drop_column', 'column': 'nope'},
+    'drop_nulls': {'action': 'drop_nulls', 'column': 'nope'},
+    'fill_null_mean': {'action': 'fill_null', 'column': 'nope', 'value': 'mean'},
+    'fill_null_mode': {'action': 'fill_null', 'column': 'nope', 'value': 'mode'},
+    'fill_null_knn': {'action': 'fill_null', 'column': 'nope', 'value': 'knn'},
+    'fill_null_const': {'action': 'fill_null', 'column': 'nope', 'value': 0},
+    'cap_range': {'action': 'cap_range', 'column': 'nope', 'min': 0, 'max': 1},
+    'cast_float': {'action': 'cast_type', 'column': 'nope', 'dtype': 'float64'},
+    'cast_datetime': {'action': 'cast_type', 'column': 'nope', 'dtype': 'datetime64[ns]'},
+    'replace': {'action': 'replace', 'column': 'nope', 'find': 'a', 'replace': 'b'},
+    'strip': {'action': 'strip_whitespace', 'column': 'nope'},
+    'normalize_text': {'action': 'normalize_text', 'column': 'nope', 'value': 'lowercase'},
+    'normalize_fuzzy': {'action': 'normalize_text', 'column': 'nope', 'value': 'fuzzy_dedupe'},
+    'log': {'action': 'log_transform', 'column': 'nope'},
+    'rename': {'action': 'rename_column', 'column': 'nope', 'value': 'other'},
+    'extract_datetime': {'action': 'extract_datetime', 'column': 'nope', 'new_column': 'y', 'component': 'year'},
+    'dv_null': {'action': 'drop_violated', 'rule': {'type': 'Null Check', 'col': 'nope', 'desc': 'd'}},
+    'dv_range': {'action': 'drop_violated', 'rule': {'type': 'Range Check', 'col': 'nope', 'min': 0, 'max': 1, 'desc': 'd'}},
+    'dv_rel_a': {'action': 'drop_violated', 'rule': {'type': 'Relational Check', 'col_a': 'nope', 'op': '>', 'value': 1, 'target_type': 'Value', 'desc': 'd'}},
+    'dv_rel_b': {'action': 'drop_violated', 'rule': {'type': 'Relational Check', 'col_a': 'int_col', 'op': '>', 'col_b': 'nope', 'target_type': 'Feature', 'desc': 'd'}},
+}
+
+
+@pytest.mark.parametrize("name", list(MISSING_STEPS))
+def test_missing_column_warns_and_skips_like_engine(name):
+    df = make_df()
+    recipe = [MISSING_STEPS[name], {'action': 'drop_nulls', 'column': 'float_col'}]  # later step still runs
+    out, msgs = assert_parity(recipe, df)
+    assert len(out) == int(df['float_col'].notnull().sum())
+    assert any('nope' in m for m in msgs)
+    _, _, warns = run_script(recipe, df)
+    assert any('nope' in w for w in warns)
+
+
+def test_missing_column_unchanged_frame():
+    df = make_df()
+    for step in MISSING_STEPS.values():
+        out, _, warns = run_script([step], df)
+        assert warns and any('nope' in w for w in warns)
+        assert_frame_equal(out, downcast_dtypes(df.copy()))
+
+
+@pytest.mark.parametrize("bounds", [(None, 1), (float('nan'), 1), (0, float('inf'))])
+def test_missing_column_range_check_unusable_bounds_is_silent(bounds):
+    # engine returns an all-False mask without touching the column, so neither side warns
+    step = {'action': 'drop_violated',
+            'rule': {'type': 'Range Check', 'col': 'nope', 'min': bounds[0], 'max': bounds[1], 'desc': 'd'}}
+    out, msgs = assert_parity([step], make_df())
+    _, _, warns = run_script([step], make_df())
+    assert not any('nope' in m for m in msgs)
+    assert not any('nope' in w for w in warns)
+
+
+def test_rename_then_use_old_name_warns():
+    recipe = [{'action': 'rename_column', 'column': 'text', 'value': 'txt'},
+              {'action': 'drop_nulls', 'column': 'text'}]
+    out, msgs = assert_parity(recipe, make_df())
+    assert 'txt' in out.columns and any("'text' not found" in m for m in msgs)
+
+
+def test_all_column_steps_not_treated_as_missing():
+    for action, extra in [('strip_whitespace', {}), ('replace', {'find': 'a', 'replace': 'b'}),
+                          ('normalize_text', {'value': 'lowercase'})]:
+        _, _, warns = run_script([{'action': action, 'column': 'All', **extra}], make_df())
+        assert not any('not found' in w for w in warns)
+
+
+def test_notebook_missing_column_runs():
+    import json
+    nb = json.loads(generate_notebook_code([MISSING_STEPS['drop_column']], []))
+    ns = {}
+    for cell in nb['cells']:
+        if cell['cell_type'] == 'code':
+            exec("".join(cell['source']), ns)
+    with pytest.warns(UserWarning, match="nope"):
+        ns['clean_data'](make_df())
+
+
+@pytest.mark.parametrize("rule", [
+    {'type': 'Null Check', 'col': 'nope', 'desc': 'r1'},
+    {'type': 'Range Check', 'col': 'nope', 'min': 0, 'max': 1, 'desc': 'r2'},
+    {'type': 'Relational Check', 'col_a': 'nope', 'op': '>', 'value': 1, 'target_type': 'Value', 'desc': 'r3'},
+    {'type': 'Relational Check', 'col_a': 'int_col', 'op': '>', 'col_b': 'nope', 'target_type': 'Feature', 'desc': 'r4'},
+])
+def test_validate_data_missing_column_reports_error_like_engine(rule):
+    df = make_df()
+    with pytest.raises(ValueError, match="KeyError"):
+        evaluate_rule(df, rule)
+    ns = {}
+    exec(generate_pipeline_code([], [rule]), ns)
+    report = ns['validate_data'](df)  # must not raise
+    assert isinstance(report[rule['desc']], str) and 'KeyError' in report[rule['desc']]

@@ -1,4 +1,5 @@
 import pandas as pd
+from query_guard import UnsafeQueryError, validate_query_expression, safe_query_index  # noqa: F401
 
 def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
     """
@@ -62,7 +63,7 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
         elif rule_type == "Custom Expression":
             # The query describes the VIOLATION condition — rows that match are flagged.
             # e.g., query = "age > 100 or age < 0" flags those exact rows as violations.
-            violated_indices = df.query(rule['query']).index
+            violated_indices = safe_query_index(df, rule['query'])
             mask = df.index.isin(violated_indices)
         elif rule_type == "Informational":
             # Informational rules don't have "violations", so we return an all-False mask.
