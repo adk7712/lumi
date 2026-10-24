@@ -31,16 +31,19 @@ def test_reset_intermediate_states_reseeds_original():
     assert st.session_state["intermediate_states"] == [("Original Data", sm.calculate_health(df), 3)]
 
 
-def test_handle_clear_all_reseeds_original(monkeypatch):
+def test_handle_clear_all_clears_rules_keeps_steps(monkeypatch):
     from views import rulebook
     _base()
     st.session_state["intermediate_states"].append(("x", 50, 3))
+    st.session_state["rules"] = [{"type": "Null Check", "col": "age", "desc": "age is NOT NULL"}]
+    st.session_state["cleaning_recipe"] = [{"action": "x"}]
     st.session_state["proposals"] = []
     monkeypatch.setattr(rulebook, "save_session_state", lambda: None)
     monkeypatch.setattr(rulebook, "save_db_session", lambda: None)
     rulebook.handle_clear_all()
-    assert len(st.session_state["intermediate_states"]) == 1
-    assert st.session_state["intermediate_states"][0][0] == "Original Data"
+    assert st.session_state["rules"] == []
+    assert st.session_state["cleaning_recipe"] == [{"action": "x"}]
+    assert len(st.session_state["intermediate_states"]) == 2
 
 
 def test_rename_substring_column_not_corrupted():

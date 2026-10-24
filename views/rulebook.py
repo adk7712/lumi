@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from state_manager import reset_intermediate_states, add_step, add_rule, save_session_state, save_db_session, regenerate_proposals, sync_column_rename
+from state_manager import add_step, add_rule, save_session_state, save_db_session, regenerate_proposals, sync_column_rename
+from query_guard import UnsafeQueryError, safe_query_index
 from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
 
 def _accept_proposal(p, at_end=False):
@@ -37,20 +38,35 @@ def handle_dismiss_proposal(p_idx, p):
     save_db_session()
 
 def handle_clear_all():
+    """Clear all rules. Cleaning steps are kept: they are already-applied data
+    transformations (including ones created from rules) and are undoable via Undo."""
     for r in st.session_state.rules:
         if '_source_proposal_type' in r and '_source_proposal_col' in r:
             st.session_state.scanned_columns.discard(f"{r['_source_proposal_col']}:{r['_source_proposal_type']}")
-    for s in st.session_state.cleaning_recipe:
-        if '_source_proposal_type' in s and '_source_proposal_col' in s:
-            st.session_state.scanned_columns.discard(f"{s['_source_proposal_col']}:{s['_source_proposal_type']}")
-    st.session_state.rules, st.session_state.cleaning_recipe = [], []
-    if st.session_state.raw_data is not None:
-        st.session_state.current_df = st.session_state.raw_data.copy()
-    reset_intermediate_states()
+    st.session_state.rules = []
     regenerate_proposals()
     save_session_state()
     save_db_session()
-    
+
+def _request_clear_rules():
+    st.session_state._confirm_clear_rules = True
+
+def _cancel_clear_rules():
+    st.session_state.pop("_confirm_clear_rules", None)
+
+def _confirm_clear_rules():
+    st.session_state.pop("_confirm_clear_rules", None)
+    handle_clear_all()
+    st.session_state._needs_rerun = True
+
+def render_clear_rules_confirm():
+    """Inline two-step confirmation (flag-driven so it survives reruns and is cancelable)."""
+    n = len(st.session_state.rules)
+    st.warning(f"Remove all {n} rule{'s' if n != 1 else ''}? Cleaning steps you have already applied are kept. This cannot be undone.")
+    c1, c2 = st.columns(2)
+    c1.button("Yes, Clear Rules", type="primary", use_container_width=True, key="confirm_clear_rules_btn", on_click=_confirm_clear_rules)
+    c2.button("Cancel", use_container_width=True, key="cancel_clear_rules_btn", on_click=_cancel_clear_rules)
+
 def handle_remove_rule(idx):
     r = st.session_state.rules[idx]
     if '_source_proposal_type' in r and '_source_proposal_col' in r:
@@ -95,7 +111,7 @@ def render_rulebook_tab(df):
 
             if submit_btn and q_str:
                 try:
-                    test_result = df.query(q_str)
+                    test_result = df.loc[safe_query_index(df, q_str)]
 
                     if len(df) > 0 and len(test_result) == 0:
                         st.warning("This query matches no rows on the current dataset — the rule will be added but show 0 violations. Check for typos or type mismatches.")
@@ -106,6 +122,8 @@ def render_rulebook_tab(df):
                         add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Violates: {q_str}"})
                         st.session_state._needs_rerun = True
                         
+                except UnsafeQueryError as e:
+                    st.error(f"Expression not allowed: {e}. Use column names, comparisons (>, ==, in ...), and/or/not, arithmetic, .isnull()/.notnull(), or .str.contains/startswith/endswith('text'). No '@', other function calls or double underscores.")
                 except Exception as e:
                     err_msg = str(e)
                     if "invalid syntax" in err_msg.lower():
@@ -174,9 +192,12 @@ def render_rulebook_tab(df):
                 use_container_width=True,
                 key="download_evidence_report_btn"
             )
-            btn_col2.button("Clear All", use_container_width=True, key="clear_all_rules_btn", on_click=handle_clear_all)
+            btn_col2.button("Clear Rules", use_container_width=True, key="clear_all_rules_btn", on_click=_request_clear_rules)
+            if st.session_state.get("_confirm_clear_rules"):
+                render_clear_rules_confirm()
 
         if not st.session_state.rules:
+            st.session_state.pop("_confirm_clear_rules", None)
             st.info("Add a rule from the left panel")
         else:
             with st.container(height=600, border=False):

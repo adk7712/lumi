@@ -122,7 +122,10 @@ def render_header():
         h_col1, h_col2, h_col3 = st.columns([7, 3, 2])
         with h_col1:
             st.markdown('<div class="lumi-logo-button">', unsafe_allow_html=True)
-            st.button("LUMI", key="lumi_logo", on_click=handle_reset)
+            # Logo resets the workspace, so route through the same confirmation as "Reset Workspace".
+            # (The header only renders once data is loaded; with no data the landing page stops earlier.)
+            if st.button("LUMI", key="lumi_logo"):
+                show_reset_dialog()
             st.markdown('</div>', unsafe_allow_html=True)
         with h_col2:
             st.markdown('<div class="header-actions-row">', unsafe_allow_html=True)
