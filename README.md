@@ -1,5 +1,9 @@
 # LUMI
 
+[![Tests](https://github.com/adk7712/lumi/actions/workflows/tests.yml/badge.svg)](https://github.com/adk7712/lumi/actions/workflows/tests.yml)
+
+**Live app:** [https://lumiapp.streamlit.app](https://lumiapp.streamlit.app)
+
 LUMI is a professional data cleaning and validation platform designed to transform raw datasets into high-quality, analysis-ready assets. By combining automated intelligence with intuitive visual tools, LUMI streamlines the journey from messy data to reliable insights.
 
 ## Automated Data Quality Scouting
