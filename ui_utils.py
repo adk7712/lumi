@@ -480,7 +480,21 @@ def apply_lumi_layout(fig: go.Figure) -> go.Figure:
     )
     return fig
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+# Chart caches skip hashing the DataFrame (too slow), so ``df_state_key`` must identify its
+# content: same file + same recipe always gives the same frame. A step *count* is not enough
+# (undo then a different step reuses it, and other users with the same file share the cache).
+CHART_CACHE_MAX_ENTRIES = 64
+
+
+def chart_state_key() -> str:
+    """Cache key for charts of the current working frame: file hash + recipe content hash."""
+    import json
+    recipe = st.session_state.get("cleaning_recipe", [])
+    sig = _hashlib_mod.sha1(json.dumps(recipe, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return f"{st.session_state.get('last_file_hash', 'none')}_{sig}"
+
+
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None}, max_entries=CHART_CACHE_MAX_ENTRIES)
 def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple, df_state_key: str = "default") -> go.Figure:
     """Computes features' correlation matrix and plots a filtered heatmap."""
     numeric_df = df.select_dtypes(include=[np.number])
@@ -503,7 +517,7 @@ def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple, df_state_key: s
             return apply_lumi_layout(fig)
     return None
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None}, max_entries=CHART_CACHE_MAX_ENTRIES)
 def plot_missingness_map(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Generates a binary missingness pattern map representation."""
     if df.size > 0:
@@ -554,7 +568,7 @@ def get_loading_spinner_html(text: str = "Apply Column Order") -> str:
     </div>
     """
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None}, max_entries=CHART_CACHE_MAX_ENTRIES)
 def plot_outlier_distribution(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Computes column Z-scores and plots comparative outlier box plots."""
     numeric_df = df.select_dtypes(include=[np.number])
@@ -626,7 +640,7 @@ def build_zscore_boxplot(df: pd.DataFrame, columns=None, max_columns: int = MAX_
     return fig, is_sampled
 
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None}, max_entries=CHART_CACHE_MAX_ENTRIES)
 def plot_zscore_boxes(df: pd.DataFrame, columns: tuple, df_state_key: str = "default") -> tuple:
     """Cached wrapper around build_zscore_boxplot (keyed by df_state_key like other charts)."""
     return build_zscore_boxplot(df, columns)

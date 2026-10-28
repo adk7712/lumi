@@ -4,7 +4,7 @@ import plotly.express as px
 import re
 from rule_utils import evaluate_rule
 from state_manager import add_step, calculate_health
-from ui_utils import plot_missingness_map
+from ui_utils import plot_missingness_map, chart_state_key
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
@@ -238,9 +238,7 @@ def render_overview_tab(df):
 
     # --- Missingness Pattern Map (relocated from Visual Insights) ---
     st.divider()
-    last_file_hash = st.session_state.get("last_file_hash", "none")
-    step_count = len(st.session_state.get("cleaning_recipe", []))
-    df_state_key = f"{last_file_hash}_{step_count}"
+    df_state_key = chart_state_key()
     with st.expander("Missingness Pattern Map", expanded=False):
         st.markdown("Visualizes where missing values occur across the rows of the dataset.")
         fig_null, is_null_sampled = plot_missingness_map(df, df_state_key)
