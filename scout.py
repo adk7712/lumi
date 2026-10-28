@@ -64,8 +64,10 @@ def _check_numeric_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
         # Use a mask for efficiency and clarity
         outlier_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
         outliers = outlier_mask.sum()
-        
-        if outliers > 0:
+
+        # IQR == 0 (binary flags, zero-inflated counts) collapses the bounds to one value and
+        # would flag every other value as an outlier; Drop/Cap would then destroy real data.
+        if outliers > 0 and IQR > 0 and df[col].nunique() > 2:
             proposals.append({
                 "type": "Range Check", "column": col, "reason": f"{outliers} statistical outliers detected",
                 "rule_data": {"type": "Range Check", "col": col, "min": float(lower_bound), "max": float(upper_bound), "desc": f"{col} within statistical bounds"}
