@@ -10,7 +10,8 @@ from persistence import (
 from state_manager import (
     switch_workspace,
     initialize_state,
-    delete_cached_file
+    delete_cached_file,
+    cancel_pending_saves,
 )
 
 @st.dialog("New Workspace")
@@ -45,6 +46,7 @@ def show_delete_workspace_dialog(session_id: str, project_name: str):
     col1, col2 = st.columns(2)
     if col1.button("Delete", type="primary", use_container_width=True, key=f"confirm_delete_{session_id}"):
         user_email = get_logged_in_user()
+        cancel_pending_saves(session_id)  # an in-flight save would re-insert the deleted row
         delete_session(session_id, user_email)
         delete_cached_file(session_id)
         if st.session_state.get("session_id") == session_id:

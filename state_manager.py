@@ -18,7 +18,7 @@ from lumi_state.core import (  # noqa: F401
 from lumi_state.session_io import (  # noqa: F401
     _db_executor, _update_project_cache, CACHE_DIR, calculate_file_hash, _warn_save_failure_once,
     save_session_state, cache_uploaded_file, load_cached_file, delete_cached_file,
-    process_uploaded_file, load_full_data, load_session_state, _rotated_sessions, _on_bg_done, _set_session_cookie,
+    process_uploaded_file, load_full_data, load_session_state, _rotated_sessions, _on_bg_done, _set_session_cookie, cancel_pending_saves,
     _apply_rotated_session, save_db_session, load_db_session, switch_workspace,
 )
 from lumi_state.steps import (  # noqa: F401

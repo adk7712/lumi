@@ -377,6 +377,10 @@ def _on_bg_done(fut, old_sid):
     except Exception:
         logger.error("Background save crashed", exc_info=True)
         res = False
+    _record_bg_result(res, old_sid)
+
+
+def _record_bg_result(res, old_sid):
     with _bg_lock:
         if res is False:
             logger.error("Background DB save failed for session %s", old_sid)
@@ -385,6 +389,49 @@ def _on_bg_done(fut, old_sid):
             _failed_saves.pop(old_sid, None)
             if res and res != old_sid:
                 _bounded_put(_rotated_sessions, old_sid, res)
+
+
+# Saves for one session run one at a time, newest snapshot only. Parallel workers used to
+# commit snapshots out of order (last writer wins), so a reload could restore an older recipe.
+_pending_saves: dict = {}   # sid -> latest job not yet started
+_running_saves: set = set()  # sids with a drain loop in progress
+_save_cond = threading.Condition(_bg_lock)
+
+
+def _submit_save(sid, job):
+    """Queue ``job(target_sid) -> result`` for ``sid``; a newer job replaces an unstarted one."""
+    with _save_cond:
+        _pending_saves[sid] = job
+        if sid in _running_saves:
+            return
+        _running_saves.add(sid)
+    _db_executor.submit(_drain_saves, sid)
+
+
+def _drain_saves(sid):
+    target = sid
+    while True:
+        with _save_cond:
+            job = _pending_saves.pop(sid, None)
+            if job is None:
+                _running_saves.discard(sid)
+                _save_cond.notify_all()
+                return
+        try:
+            res = job(target)
+        except Exception:
+            logger.error("Background save crashed", exc_info=True)
+            res = False
+        if res and res is not True:
+            target = res  # a rotated id: later snapshots of this session go to the new row
+        _record_bg_result(res, sid)
+
+
+def cancel_pending_saves(sid, timeout: float = 5.0) -> bool:
+    """Drop queued saves for ``sid`` and wait for a running one, so a delete is not undone."""
+    with _save_cond:
+        _pending_saves.pop(sid, None)
+        return _save_cond.wait_for(lambda: sid not in _running_saves, timeout=timeout)
 
 
 def _set_session_cookie(session_id):
@@ -474,8 +521,7 @@ def save_db_session():
     else:
         # Background thread cannot touch st.session_state safely; rotate id synchronously on the
         # main thread only when the result is already known, otherwise keep best-effort semantics.
-        fut = _db_executor.submit(_bg_save)
-        fut.add_done_callback(lambda f: _on_bg_done(f, session_id))
+        _submit_save(session_id, lambda target: _bg_save(sid=target))
 
 def load_db_session(session_id: str, file_buffer, preloaded_session: dict = None) -> bool:
     """Loads and restores the cleaning recipe and rules from the database."""
