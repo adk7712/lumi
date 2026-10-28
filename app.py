@@ -73,12 +73,16 @@ user_email = get_logged_in_user()
 if user_email:
     session_id = st.session_state.get("session_id")
     if session_id and st.session_state.get("_reconciled_session") != session_id:
-        from persistence import load_session, reconcile_session
-        db_session = load_session(session_id, user_email)
-        if db_session and db_session.get("user_id") != user_email:
-            reconcile_session(session_id, user_email)
-            st.toast("Workspace saved to your account!")
-        st.session_state["_reconciled_session"] = session_id
+        from persistence import load_session, reconcile_session, SessionLoadError
+        try:
+            db_session = load_session(session_id, user_email)
+        except SessionLoadError:
+            pass  # DB unreachable: try again next run instead of marking this session reconciled
+        else:
+            if db_session and db_session.get("user_id") != user_email:
+                reconcile_session(session_id, user_email)
+                st.toast("Workspace saved to your account!")
+            st.session_state["_reconciled_session"] = session_id
 
 # Landing page (no dataset loaded yet)
 if st.session_state.raw_data is None:

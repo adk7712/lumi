@@ -489,6 +489,8 @@ def save_db_session():
                 session_id=sid, filename=filename, recipe=recipe, rules=rules,
                 scanned_columns=scanned_columns, user_id=user_id, project_name=project_name
             )
+            if ok is None:
+                return False  # DB/serialization error: keep the id, report the failed save
             if ok is False:
                 import uuid
                 logger.warning("save_session refused for session %s (owned by another user); rotating id", sid)
@@ -497,7 +499,7 @@ def save_db_session():
                     session_id=new_sid, filename=filename, recipe=recipe, rules=rules,
                     scanned_columns=scanned_columns, user_id=user_id, project_name=project_name
                 )
-                if ok is not False:
+                if ok:
                     return new_sid
                 logger.error("Retry save under fresh session id %s also failed", new_sid)
                 return False
@@ -525,9 +527,12 @@ def save_db_session():
 
 def load_db_session(session_id: str, file_buffer, preloaded_session: dict = None) -> bool:
     """Loads and restores the cleaning recipe and rules from the database."""
-    from persistence import load_session
+    from persistence import load_session, SessionLoadError
     from ui_utils import get_logged_in_user
-    db_session = preloaded_session or load_session(session_id, get_logged_in_user())
+    try:
+        db_session = preloaded_session or load_session(session_id, get_logged_in_user())
+    except SessionLoadError:
+        return False
     if not db_session:
         return False
     
@@ -583,8 +588,12 @@ def switch_workspace(target_session_id: str) -> bool:
     save_db_session()
     
     # 2. Verify target workspace ownership
-    from persistence import load_session
-    db_session = load_session(target_session_id, user_email)
+    from persistence import load_session, SessionLoadError
+    try:
+        db_session = load_session(target_session_id, user_email)
+    except SessionLoadError:
+        st.error("Could not reach the database. Try again in a moment.")
+        return False
     if not db_session:
         st.error("Workspace not found or access denied.")
         return False

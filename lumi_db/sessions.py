@@ -82,11 +82,16 @@ def toggle_cached_project_pin(user_id: str, session_id: str):
             reverse=True
         )
 
-def save_session(session_id: str, filename: str, recipe: list, rules: list, scanned_columns: list, user_id: str = None, project_name: str = None) -> bool:
+class SessionLoadError(RuntimeError):
+    """``load_session`` could not reach or read the database (not the same as "not found")."""
+
+
+def save_session(session_id: str, filename: str, recipe: list, rules: list, scanned_columns: list, user_id: str = None, project_name: str = None):
     """Saves or updates the session details in the database.
 
     Returns True if the row was written, False if refused (the row is owned by a different
-    registered user) or if a database error occurred.
+    registered user), or None if a database or serialization error occurred. Callers rotate the
+    session id only on False: an outage must not split one workspace into two rows.
     """
     t0 = time.perf_counter()
     err = None
@@ -140,13 +145,17 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
     except Exception as e:
         err = str(e)
         logger.error("Error saving session %s: %s", session_id, e, exc_info=True)
-        return False
+        return None
     finally:
         release_db_connection(conn)
         _log_db_perf("save_session", (time.perf_counter() - t0) * 1000, {"session_id": session_id, "step_count": len(recipe), "saved": saved}, err)
 
 def load_session(session_id: str, current_user_email: str = None) -> dict:
-    """Loads a session's details from the database."""
+    """Loads a session's details from the database.
+
+    Returns None if the session does not exist or belongs to another registered user.
+    Raises ``SessionLoadError`` on a database error, so callers keep the resume cookie.
+    """
     t0 = time.perf_counter()
     err = None
     conn = None
@@ -178,7 +187,7 @@ def load_session(session_id: str, current_user_email: str = None) -> dict:
     except Exception as e:
         err = str(e)
         logger.error("Error loading session %s: %s", session_id, e, exc_info=True)
-        return None
+        raise SessionLoadError(str(e)) from e
     finally:
         release_db_connection(conn)
         _log_db_perf("load_session", (time.perf_counter() - t0) * 1000, {"session_id": session_id}, err)

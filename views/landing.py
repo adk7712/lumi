@@ -88,8 +88,14 @@ def render_landing_page():
     if active_resume_id:
         cache_key = f"_cached_resume_{active_resume_id}"
         if cache_key not in st.session_state:
-            from persistence import load_session
-            st.session_state[cache_key] = load_session(active_resume_id, get_logged_in_user())
+            from persistence import load_session, SessionLoadError
+            try:
+                st.session_state[cache_key] = load_session(active_resume_id, get_logged_in_user())
+            except SessionLoadError:
+                # Not the same as "expired": keep the cookie and the resume id, and do not cache.
+                st.error("Could not reach the database. Your saved workspace is kept. Try again in a moment.")
+                st.button("Try again", key="btn_retry_resume")
+                st.stop()
         db_session = st.session_state[cache_key]
         if db_session:
             filename = db_session.get("filename", "dataset")
@@ -194,9 +200,12 @@ def render_landing_page():
     if cookie_session_id and not is_authenticated_user() and not is_testing and not st.session_state.get("cookie_session_dismissed"):
         cookie_cache_key = f"_cached_cookie_{cookie_session_id}"
         if cookie_cache_key not in st.session_state:
-            from persistence import load_session
-            st.session_state[cookie_cache_key] = load_session(cookie_session_id, get_logged_in_user())
-        db_session = st.session_state[cookie_cache_key]
+            from persistence import load_session, SessionLoadError
+            try:
+                st.session_state[cookie_cache_key] = load_session(cookie_session_id, get_logged_in_user())
+            except SessionLoadError:
+                pass  # DB unreachable: skip the banner this run, keep the cookie, do not cache
+        db_session = st.session_state.get(cookie_cache_key)
         if db_session:
             filename = db_session.get("filename", "dataset")
             step_count = db_session.get("step_count", 0)

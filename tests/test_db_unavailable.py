@@ -38,10 +38,13 @@ def test_production_raises_and_writes_nothing(pg_down, monkeypatch):
     assert not pg_down.exists()
 
 
-def test_production_save_session_returns_false(pg_down, monkeypatch):
+def test_production_db_errors_are_not_refusals_or_misses(pg_down, monkeypatch):
     monkeypatch.setenv("LUMI_ENV", "production")
-    assert persistence.save_session("s1", "f.csv", [], [], set(), user_id="u@x.com") is False
-    assert persistence.load_session("s1", "u@x.com") is None
+    # None = error (retry later); False is reserved for "owned by another user".
+    assert persistence.save_session("s1", "f.csv", [], [], set(), user_id="u@x.com") is None
+    # A failed lookup must not look like "session not found" (callers would delete the cookie).
+    with pytest.raises(persistence.SessionLoadError):
+        persistence.load_session("s1", "u@x.com")
     assert not pg_down.exists()
 
 

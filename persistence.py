@@ -23,7 +23,7 @@ from lumi_db.schema import (  # noqa: F401
 )
 from lumi_db.sessions import (  # noqa: F401
     clear_user_projects_cache, update_cached_project, remove_cached_project,
-    toggle_cached_project_pin, save_session, load_session, get_user_projects,
+    toggle_cached_project_pin, save_session, load_session, SessionLoadError, get_user_projects,
     count_user_sessions, delete_session, rename_session, toggle_pin_session, reconcile_session,
 )
 

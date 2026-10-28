@@ -104,3 +104,14 @@ def test_maps_are_bounded(prod_mode):
     assert len(session_io._failed_saves) == cap
     assert len(session_io._rotated_sessions) == cap
     assert "f0" not in session_io._failed_saves and f"f{cap + 49}" in session_io._failed_saves
+
+
+def test_db_error_does_not_rotate_session_id(prod_mode, monkeypatch):
+    import persistence
+    calls = []
+    monkeypatch.setattr(persistence, "save_session", lambda session_id, **kw: calls.append(session_id))
+    sm.save_db_session()
+    sm._apply_rotated_session()
+    assert calls == ["sid-1"]  # no retry under a fresh uuid
+    assert st.session_state["session_id"] == "sid-1"
+    assert len(prod_mode) == 1  # still surfaced as a failed save
