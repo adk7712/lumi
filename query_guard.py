@@ -9,7 +9,6 @@ arithmetic operators, column names, literals, ``x.isnull()``-style null tests an
 ``x.str.contains/startswith/endswith(...)`` calls.  Backtick-quoted column names are supported.
 """
 import ast
-import re
 
 MAX_QUERY_LENGTH = 500
 _NULL_METHODS = {"isnull", "notnull", "isna", "notna"}
@@ -17,7 +16,6 @@ _STR_METHODS = {"contains", "startswith", "endswith"}
 _STR_KWARGS = {"case", "na", "regex"}
 _ALLOWED_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.FloorDiv)
 _ALLOWED_UNARY = (ast.Not, ast.USub, ast.UAdd)
-_BACKTICK = re.compile(r"`([^`]*)`")
 
 
 class UnsafeQueryError(ValueError):
@@ -82,6 +80,40 @@ def _check_call(node):
     raise UnsafeQueryError("only .isnull(), .notnull() and .str.contains/startswith/endswith() calls are allowed")
 
 
+def _hide_backticks(expr):
+    """Replace each backticked column name outside text literals with ``_bt_col``.
+
+    The scan follows Python's string rules (quotes, backslash escapes), as pandas does, so a
+    backtick inside a literal can never hide code that sits between two literals.
+    """
+    if "'''" in expr or '"""' in expr:
+        raise UnsafeQueryError("triple-quoted text is not allowed")
+    out, i, quote = [], 0, None
+    while i < len(expr):
+        c = expr[i]
+        if quote:
+            if c == "\\":
+                out.append(expr[i:i + 2])
+                i += 2
+                continue
+            if c == "`":
+                raise UnsafeQueryError("backticks are not allowed inside text literals")
+            if c == quote:
+                quote = None
+        elif c in "'\"":
+            quote = c
+        elif c == "`":
+            end = expr.find("`", i + 1)
+            if end < 0:
+                raise UnsafeQueryError("unbalanced backtick")
+            out.append("_bt_col")
+            i = end + 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def validate_query_expression(expr) -> str:
     """Return ``expr`` unchanged if it is a safe query, else raise ``UnsafeQueryError``."""
     if not isinstance(expr, str) or not expr.strip():
@@ -91,9 +123,7 @@ def validate_query_expression(expr) -> str:
     if "@" in expr:
         raise UnsafeQueryError("'@' variable references are not allowed")
     # Backticked column names are plain column lookups; hide them from the parser.
-    stripped = _BACKTICK.sub(lambda m: "_bt_col", expr)
-    if "`" in stripped:
-        raise UnsafeQueryError("unbalanced backtick")
+    stripped = _hide_backticks(expr)
     if "__" in stripped:
         raise UnsafeQueryError("double underscores are not allowed")
     try:

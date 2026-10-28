@@ -24,6 +24,8 @@ SAFE = [
     "name.notnull() and a > 1",
     "name.str.contains('x', case=False, na=False)",
     "name.str.startswith('A')",
+    "`it's` > 1 and name == 'a\\'b'",
+    "name == \"it's\"",
 ]
 UNSAFE = [
     "@pd.io.common.os.system('echo hi')",
@@ -41,6 +43,11 @@ UNSAFE = [
     "lambda: 1",
     "a > 1; b",
     "a > `unbalanced",
+    # Backticks inside text literals must not hide code between them from the checks.
+    "a == '`' + a.__class__ + '`'",
+    'a == "`" + a.__class__ + "`"',
+    "a == '\\'`' + a.__class__ + '`'",
+    "a == '''x' `b` 'y'''",
     "",
     "a > 1" + " and a > 1" * 100,
 ]
