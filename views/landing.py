@@ -74,8 +74,10 @@ def render_landing_page():
     from ui_utils import read_session_cookie
     cookie_session_id = read_session_cookie()
 
-    # Secondary fallback: URL query parameter
-    fallback_session_id = st.query_params.get("session")
+    # Secondary fallback: URL query parameter. It must carry the same HMAC signature as the
+    # cookie; a bare session id is a bearer token anyone could paste (session fixation).
+    from ui_utils import verify_cookie_value
+    fallback_session_id = verify_cookie_value(st.query_params.get("session"), purpose="session")
     
     # Check if we should resume
     is_testing = st.session_state.get("_is_testing", False)
