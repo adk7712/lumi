@@ -115,6 +115,20 @@ def _relational_helper_source() -> str:
     return inspect.getsource(rule_utils._relational_violations).rstrip() + "\n\n\n"
 
 
+def _fuzzy_helper_source() -> str:
+    """Exact source of engine_ops._fuzzy_dedupe_mapping (same merges in app and export)."""
+    import inspect
+    import engine_ops
+    return inspect.getsource(engine_ops._fuzzy_dedupe_mapping).rstrip() + "\n\n\n"
+
+
+def _datetime_helper_source() -> str:
+    """Exact source of engine_ops._text_to_datetime (same date parsing in app and export)."""
+    import inspect
+    import engine_ops
+    return inspect.getsource(engine_ops._text_to_datetime).rstrip() + "\n\n\n"
+
+
 def _valid_bound(v) -> bool:
     if v is None:
         return False
@@ -203,7 +217,9 @@ def _codegen_cast_type(step: dict) -> list[str]:
             f"        if _dt is not None:",
             f"            df[{c_repr}] = _dt",
             f"    else:",
-            f"        df[{c_repr}] = pd.to_datetime(df[{c_repr}], errors='coerce')"
+            f"        df[{c_repr}], _lost = _text_to_datetime(df[{c_repr}])",
+            f"        if _lost:",
+            f"            warnings.warn(str(_lost) + ' value(s) in ' + repr({c_repr}) + ' could not be read as dates and became empty (NaT).')",
         ]
     target_dtype = step['dtype']
     if target_dtype in ['int64', 'int32', 'int']:
@@ -315,14 +331,7 @@ def _normalize_text_body(method: str, target: str, indent: str, label: str) -> l
             f"{indent}if len(unique_vals) > {FUZZY_MAX_UNIQUE}:",
             f"{indent}    warnings.warn('Fuzzy deduplication skipped on ' + repr({label}) + ': too many unique values (' + str(len(unique_vals)) + ' > {FUZZY_MAX_UNIQUE}).')",
             f"{indent}else:",
-            f"{indent}    from thefuzz import process",
-            f"{indent}    mapping = {{}}",
-            f"{indent}    handled = set()",
-            f"{indent}    for v in unique_vals:",
-            f"{indent}        if v in handled: continue",
-            f"{indent}        for match, score in process.extract(v, unique_vals, limit=10):",
-            f"{indent}            if score > {FUZZY_MATCH_THRESHOLD}: mapping[match] = v; handled.add(match)",
-            f"{indent}    {target} = _s.replace(mapping).astype(_s.dtype)",
+            f"{indent}    {target} = _s.replace(_fuzzy_dedupe_mapping(_s, {FUZZY_MATCH_THRESHOLD})).astype(_s.dtype)",
         ]
     if method == "remove_punctuation":
         op = "replace(f'[{string.punctuation}]', '', regex=True)"
@@ -396,7 +405,9 @@ def _codegen_extract_datetime(step: dict) -> list[str]:
         f"    if pd.api.types.is_numeric_dtype(df[{repr(col)}]) and not pd.api.types.is_bool_dtype(df[{repr(col)}]):",
         f"        _dt = _numeric_to_datetime(df[{repr(col)}], {repr(col)})",
         f"    else:",
-        f"        _dt = pd.to_datetime(df[{repr(col)}], errors='coerce')",
+        f"        _dt, _lost = _text_to_datetime(df[{repr(col)}])",
+        f"        if _lost:",
+        f"            warnings.warn(str(_lost) + ' value(s) in ' + repr({repr(col)}) + ' could not be read as dates and became empty (NaT).')",
         f"    if _dt is not None:",
         f"        df[{repr(new_col)}] = _dt.{accessor}"
     ]
@@ -604,6 +615,12 @@ def _uses_query_guard(*line_groups) -> bool:
 def _uses_relational_helper(*line_groups) -> bool:
     return any("_relational_violations(" in ln for group in line_groups for ln in group)
 
+def _uses_datetime_helper(*line_groups) -> bool:
+    return any("_text_to_datetime(" in ln for group in line_groups for ln in group)
+
+def _uses_fuzzy_helper(*line_groups) -> bool:
+    return any("_fuzzy_dedupe_mapping(" in ln for group in line_groups for ln in group)
+
 def generate_pipeline_code(recipe: list, rules: list = None) -> str:
     """
     Generates standalone Python code for a given cleaning recipe and optional validation rules.
@@ -615,6 +632,10 @@ def generate_pipeline_code(recipe: list, rules: list = None) -> str:
         code.append(_query_guard_source())
     if _uses_relational_helper(clean_lines, validate_lines):
         code.append(_relational_helper_source())
+    if _uses_fuzzy_helper(clean_lines):
+        code.append(_fuzzy_helper_source())
+    if _uses_datetime_helper(clean_lines):
+        code.append(_datetime_helper_source())
     code.append("def clean_data(df):")
     code.extend(clean_lines)
     code.append("\n\ndef validate_data(df):")
@@ -646,6 +667,10 @@ def generate_notebook_code(recipe: list, rules: list = None) -> str:
         import_lines += ["\n"] + [f"{line}\n" for line in _query_guard_source().rstrip("\n").split("\n")]
     if _uses_relational_helper(clean_lines, validate_lines):
         import_lines += ["\n"] + [f"{line}\n" for line in _relational_helper_source().rstrip("\n").split("\n")]
+    if _uses_fuzzy_helper(clean_lines):
+        import_lines += ["\n"] + [f"{line}\n" for line in _fuzzy_helper_source().rstrip("\n").split("\n")]
+    if _uses_datetime_helper(clean_lines):
+        import_lines += ["\n"] + [f"{line}\n" for line in _datetime_helper_source().rstrip("\n").split("\n")]
 
     cells = [
         {

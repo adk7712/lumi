@@ -60,7 +60,9 @@ def test_cast_ambiguous_numeric_left_unchanged_with_warning(vals):
 def test_cast_strings_unchanged_behaviour():
     df = pd.DataFrame({'c': ['2024-01-05', 'bad', None]})
     eng, msgs, script, _ = both(df, CAST)
-    assert msgs == [] and eng['c'].iloc[0] == pd.Timestamp('2024-01-05')
+    # 'bad' still becomes NaT, but is now reported instead of disappearing silently (A39)
+    assert msgs == ["Warning: 1 value(s) in 'c' could not be read as dates and became empty (NaT)."]
+    assert eng['c'].iloc[0] == pd.Timestamp('2024-01-05') and pd.isna(eng['c'].iloc[1])
     assert_frame_equal(eng, script)
 
 

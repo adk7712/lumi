@@ -178,6 +178,30 @@ def _numeric_to_datetime(s: pd.Series, col) -> Tuple[Optional[pd.Series], Option
     strs = s.map(lambda v: None if pd.isna(v) else str(int(v)))
     return pd.to_datetime(strs, format=fmt, errors='coerce'), None
 
+def _text_to_datetime(s):
+    """Parse text dates; returns ``(series, n_unparsed)`` (export embeds this source).
+
+    pandas infers one format from the first value and turns every other format into NaT, so
+    when that loses values, parse each value on its own (``format='mixed'``) instead.
+    ``n_unparsed`` counts non-blank values that still became NaT.
+    """
+    def _unparsed(out):
+        blank = s.map(lambda v: isinstance(v, str) and not v.strip()).astype(bool)
+        return int((s.notna() & ~blank & out.isna()).sum())
+    out = pd.to_datetime(s, errors='coerce')
+    lost = _unparsed(out)
+    if lost:
+        mixed = pd.to_datetime(s, errors='coerce', format='mixed')
+        mixed_lost = _unparsed(mixed)
+        if mixed_lost < lost:
+            out, lost = mixed, mixed_lost
+    return out, lost
+
+
+def _unparsed_dates_msg(col, n):
+    return f"Warning: {n} value(s) in '{col}' could not be read as dates and became empty (NaT)."
+
+
 def _is_plain_numeric(s: pd.Series) -> bool:
     return pd.api.types.is_numeric_dtype(s) and not pd.api.types.is_bool_dtype(s)
 
@@ -198,7 +222,9 @@ def _handle_cast_type(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
                     return df, [warn]
                 df[col] = converted
             else:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
+                df[col], lost = _text_to_datetime(df[col])
+                if lost:
+                    return df, [_unparsed_dates_msg(col, lost)]
         elif target_dtype in ['string', 'object']:
             df[col] = df[col].astype(target_dtype)
         else:
@@ -263,6 +289,29 @@ def _handle_strip_whitespace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.D
         return df, []
     return df, [f"Warning: Column '{col}' not found for strip_whitespace action."]
 
+def _fuzzy_dedupe_mapping(s, threshold):
+    """``{variant: canonical}`` for near-duplicate text values in ``s`` (export embeds this source).
+
+    The most frequent spelling is canonical. Values whose digit runs differ are never merged,
+    so IDs such as 'Product 10' and 'Product 11' stay distinct.
+    """
+    import re
+    from thefuzz import process
+    counts = s[s.map(lambda v: isinstance(v, str))].value_counts()
+    vals = list(counts.index)  # most frequent first
+    mapping, handled = {}, set()
+    for v in vals:
+        if v in handled:
+            continue
+        handled.add(v)
+        digits = re.findall(r"\d+", v)
+        for match, score in process.extract(v, vals, limit=10):
+            if score > threshold and match not in handled and re.findall(r"\d+", match) == digits:
+                mapping[match] = v
+                handled.add(match)
+    return mapping
+
+
 def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     col = step.get('column')
     method = step.get('value', 'lowercase')
@@ -281,17 +330,7 @@ def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Dat
             if len(unique_vals) > 1000:
                 messages.append(f"Fuzzy deduplication skipped on '{col_name}' because it has too many unique values ({len(unique_vals)} > 1000) to prevent performance hangs.")
                 return s
-            from thefuzz import process
-            mapping = {}
-            handled = set()
-            for v in unique_vals:
-                if v in handled: continue
-                matches = process.extract(v, unique_vals, limit=10)
-                for match, score in matches:
-                    if score > FUZZY_MATCH_THRESHOLD: # Threshold for fuzzy matching
-                        mapping[match] = v
-                        handled.add(match)
-            return s.replace(mapping).astype(orig_dtype)
+            return s.replace(_fuzzy_dedupe_mapping(s, FUZZY_MATCH_THRESHOLD)).astype(orig_dtype)
         return s
 
     if col == "All":
@@ -341,6 +380,7 @@ def _handle_extract_datetime(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.D
     if not new_col:
         return df, ["Error: Target column name not specified for extract_datetime."]
         
+    messages = []
     try:
         # Coerce to datetime if not already datetime
         if _is_plain_numeric(df[col]):
@@ -348,7 +388,9 @@ def _handle_extract_datetime(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.D
             if dt_series is None:
                 return df, [warn]
         elif not pd.api.types.is_datetime64_any_dtype(df[col]):
-            dt_series = pd.to_datetime(df[col], errors='coerce')
+            dt_series, lost = _text_to_datetime(df[col])
+            if lost:
+                messages.append(_unparsed_dates_msg(col, lost))
         else:
             dt_series = df[col]
             
@@ -365,7 +407,7 @@ def _handle_extract_datetime(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.D
         else:
             return df, [f"Error: Unknown datetime component '{component}'."]
             
-        return df, []
+        return df, messages
     except Exception as e:
         return df, [f"Error: Could not extract datetime component '{component}' from '{col}': {str(e)}"]
 
