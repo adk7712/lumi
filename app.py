@@ -63,26 +63,30 @@ _storage_warning = storage_warning()
 if _storage_warning:
     st.error(_storage_warning)
 
-# Render Workspace Sidebar (for authenticated users)
-render_workspace_sidebar()
-
 # Resolve current user (used in header sign-out button)
 user_email = get_logged_in_user()
 
-# Reconciliation flow for signed-in users (evaluated only once per session)
+# Reconciliation flow for signed-in users (evaluated only once per session). Runs before the
+# sidebar so a claimed workspace is listed. st.login redirects into a fresh session with empty
+# state, so the guest workspace is found through the signed lumi_session cookie.
 if user_email:
-    session_id = st.session_state.get("session_id")
+    from ui_utils import read_session_cookie
+    session_id = st.session_state.get("session_id") or read_session_cookie()
     if session_id and st.session_state.get("_reconciled_session") != session_id:
-        from persistence import load_session, reconcile_session, SessionLoadError
+        from persistence import load_session, reconcile_session, SessionLoadError, clear_user_projects_cache
         try:
             db_session = load_session(session_id, user_email)
         except SessionLoadError:
             pass  # DB unreachable: try again next run instead of marking this session reconciled
         else:
             if db_session and db_session.get("user_id") != user_email:
-                reconcile_session(session_id, user_email)
-                st.toast("Workspace saved to your account!")
+                if reconcile_session(session_id, user_email):
+                    clear_user_projects_cache(user_email)
+                    st.toast("Workspace saved to your account!")
             st.session_state["_reconciled_session"] = session_id
+
+# Render Workspace Sidebar (for authenticated users)
+render_workspace_sidebar()
 
 # Landing page (no dataset loaded yet)
 if st.session_state.raw_data is None:
