@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import time
 import re
-from state_manager import add_step, get_column_dependencies, sync_column_rename
+from state_manager import add_step, get_column_dependencies
 from streamlit_sortables import sort_items
 from ui_utils import load_style
-from engine_ops import predict_column_renames
 
 def render_transformations_tab(df):
     all_cols = df.columns.tolist()
@@ -75,7 +74,6 @@ def render_transformations_tab(df):
             else:
                 with st.spinner("Renaming column..."):
                     add_step({"action": "rename_column", "column": target, "value": new_name})
-                    sync_column_rename(target, new_name)
     elif t_type == "Reorder Columns":
         if 'temp_col_order' not in st.session_state or set(st.session_state.temp_col_order) != set(all_cols):
             st.session_state.temp_col_order = list(all_cols)
@@ -154,8 +152,4 @@ def render_transformations_tab(df):
         if st.button("Execute Column Normalization", key="btn_norm_cols"):
             with st.spinner("Normalizing column names..."):
                 method = method_options[selected_method]
-                new_names = predict_column_renames(df.columns.tolist(), method, only_changed=True)
-                
                 add_step({"action": "normalize_column_names", "value": method})
-                for orig, val in new_names.items():
-                    sync_column_rename(orig, val)

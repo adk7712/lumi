@@ -3,8 +3,7 @@ import pandas as pd
 import plotly.express as px
 import re
 from rule_utils import evaluate_rule
-from state_manager import add_step, sync_column_rename, calculate_health
-from engine_ops import predict_column_renames
+from state_manager import add_step, calculate_health
 from ui_utils import plot_missingness_map
 
 def render_overview_tab(df):
@@ -166,11 +165,7 @@ def render_overview_tab(df):
                         width="stretch",
                         help=f"Converts column headers to snake_case (lowercase with underscores) to avoid syntax errors: {cols_preview}"
                     ):
-                        new_names = predict_column_renames(df.columns.tolist(), 'snake_case', only_changed=True)
-
                         add_step({"action": "normalize_column_names", "value": "snake_case"})
-                        for orig, val in new_names.items():
-                            sync_column_rename(orig, val)
                         st.session_state._needs_rerun = True
         else:
             st.markdown("*No quick actions recommended!*")

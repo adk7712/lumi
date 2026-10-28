@@ -70,16 +70,15 @@ def test_rulebook_accept_handler_adds_step_and_dismiss_key(monkeypatch):
     import types
     import views.rulebook as rb
     ss = types.SimpleNamespace(scanned_columns=set(), current_df=_dirty(), proposals=[])
-    steps, renames = [], []
+    steps = []
     monkeypatch.setattr(rb.st, "session_state", ss, raising=False)
+    # add_step itself syncs renamed columns (covered in tests/test_rename_sync.py)
     monkeypatch.setattr(rb, "add_step", lambda s: steps.append(s))
-    monkeypatch.setattr(rb, "sync_column_rename", lambda a, b: renames.append((a, b)))
     props = [p for p in generate_proposals(_dirty(), set()) if p["column"] == "__dataset__"]
     ss.proposals = list(props)
     for p in props:
         rb._accept_proposal(p)
     assert {s["action"] for s in steps} == {"drop_duplicates", "drop_empty_rows", "normalize_column_names"}
     assert all(s["_source_proposal_col"] == "__dataset__" for s in steps)
-    assert ("Total Salary", "total_salary") in renames
     assert "__dataset__:duplicates" in ss.scanned_columns
     assert _ds(generate_proposals(_dirty(), ss.scanned_columns)) == {}

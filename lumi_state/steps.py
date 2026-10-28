@@ -34,12 +34,34 @@ def add_rule(rule_dict: dict, at_end: bool = True):
     save_db_session()
     _update_project_cache()
 
-def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool = True):
+def step_renames(step, df_before) -> dict:
+    """``{old: new}`` column names that ``step`` renames when applied to ``df_before``."""
+    action = step.get('action')
+    if action == 'rename_column':
+        col, new = step.get('column'), step.get('value')
+        return {col: new} if df_before is not None and col in df_before.columns and new and new != col else {}
+    if action == 'normalize_column_names' and df_before is not None:
+        from engine_ops import predict_column_renames
+        return predict_column_renames(df_before.columns.tolist(), step.get('value', 'snake_case'), only_changed=True)
+    return {}
+
+
+def revert_step_renames(step, df_before):
+    """Point rules/proposals back at the pre-step names after ``step`` is undone or removed."""
+    for old, new in step_renames(step, df_before).items():
+        sync_column_rename(new, old)
+
+
+def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool = True,
+             sync_renames: bool = True):
     """Adds a cleaning step to the recipe, updates the cached state, and shows a toast.
 
     quiet=True suppresses toasts; persist=False skips disk/DB saves (caller must persist once).
     clear_redo=False (used by redo) keeps the remaining redo stack; new actions clear it.
+    sync_renames=True moves rules/proposals onto renamed columns before the save. Replays pass
+    False: their rules already use the final names, and re-syncing could chain renames wrongly.
     """
+    renames = step_renames(step, st.session_state.current_df) if sync_renames else {}
     st.session_state.cleaning_recipe.append(step)
     
     # Clear redo stack on new action (linear invalidation); redo itself preserves it
@@ -56,7 +78,9 @@ def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool =
     step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
     st.session_state.intermediate_states.append((step_desc, th, len(new_df)))
     st.session_state.current_df = new_df
-    
+    for old, new in renames.items():
+        sync_column_rename(old, new)
+
     from ui_utils import queue_event
     queue_event("cleaning_step_added", {"action": step.get("action"), "column": step.get("column")})
 
@@ -71,7 +95,7 @@ def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool =
 def replay_steps(steps):
     """Re-applies steps quietly (no toasts, no per-step saves) then persists once."""
     for step in steps:
-        add_step(step, quiet=True, persist=False)
+        add_step(step, quiet=True, persist=False, sync_renames=False)
     save_session_state()
     save_db_session()
     _update_project_cache()
@@ -169,6 +193,19 @@ def sync_column_rename(target: str, new_name: str):
     for step in st.session_state.get('cleaning_recipe', []):
         if step.get('_source_proposal_col') == target:
             step['_source_proposal_col'] = new_name
+
+    # Pending proposals were generated against the old names (Accept All applies them in order)
+    for p in st.session_state.get('proposals', []) or []:
+        if p.get('column') == target:
+            p['column'] = new_name
+        data = p.get('rule_data') or {}
+        touched = False
+        for field in ('col', 'col_a', 'col_b', 'column'):
+            if data.get(field) == target:
+                data[field] = new_name
+                touched = True
+        if touched and data.get('desc'):
+            data['desc'] = _rename_in_text(data['desc'], target, new_name)
 
     # Sync active features in diagnostics tab
     if target in st.session_state.active_features:

@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from state_manager import add_step, add_rule, save_session_state, save_db_session, regenerate_proposals, sync_column_rename
+from state_manager import add_step, add_rule, save_session_state, save_db_session, regenerate_proposals
 from query_guard import UnsafeQueryError, safe_query_index
 from rule_utils import evaluate_rule, create_resolution_step, generate_evidence_report
 
@@ -10,14 +10,8 @@ def _accept_proposal(p, at_end=False):
     data['_source_proposal_type'] = p['type']
     data['_source_proposal_col'] = p['column']
     if 'action' in data:
-        if data['action'] == 'normalize_column_names':
-            from engine_ops import predict_column_renames
-            renames = predict_column_renames(st.session_state.current_df.columns.tolist(), data.get('value', 'snake_case'), only_changed=True)
-            add_step(data)
-            for orig, new in renames.items():
-                sync_column_rename(orig, new)
-        else:
-            add_step(data)
+        # add_step moves rules and pending proposals onto renamed columns before it saves
+        add_step(data)
     else:
         add_rule(data, at_end=at_end)
 

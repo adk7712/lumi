@@ -100,6 +100,7 @@ def handle_undo():
             st.session_state.scanned_columns.discard(f"{popped_step['_source_proposal_col']}:{popped_step['_source_proposal_type']}")
         st.session_state.intermediate_states.pop()
         st.session_state.current_df = get_state_at_step(len(st.session_state.cleaning_recipe))
+        _sm.revert_step_renames(popped_step, st.session_state.current_df)
         # Push undone step onto redo stack
         if 'redo_stack' not in st.session_state:
             st.session_state.redo_stack = []
