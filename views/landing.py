@@ -1,3 +1,4 @@
+import html
 import streamlit as st
 import urllib.parse
 import os
@@ -11,8 +12,33 @@ from state_manager import (
     discard_resume_cache,
     LARGE_FILE_THRESHOLD_BYTES
 )
-from ui_utils import is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, format_timestamp, remove_cookie, SESSION_COOKIE
+from ui_utils import is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, render_sign_in_button, format_timestamp, remove_cookie, SESSION_COOKIE
 from persistence import count_user_sessions, get_user_projects
+
+def recipe_fits_headers(df_header, recipe) -> list:
+    """Problems replaying ``recipe`` on a header-only frame of the uploaded file ([] = it fits).
+
+    The saved scanned columns are post-cleaning names (renames, normalisation), so they cannot be
+    compared with the raw headers. Replaying the recipe on ``nrows=0`` checks the original names.
+    """
+    if not recipe:
+        return []
+    from engine import apply_recipe
+    _, messages = apply_recipe(df_header, recipe)
+    return [m for m in messages if "not found" in m]
+
+
+def _should_process_upload(file_hash) -> bool:
+    """False for the same file that just failed to load (its error stays on screen; no rerun loop).
+
+    Any other file is a new attempt and clears the previous error.
+    """
+    if st.session_state.get("load_error") and st.session_state.get("_load_error_hash") == file_hash:
+        return False
+    st.session_state.pop("load_error", None)
+    st.session_state.pop("_load_error_hash", None)
+    return True
+
 
 def render_iframe_dropzone_patch():
     _js = """
@@ -102,18 +128,15 @@ def render_landing_page():
         if db_session:
             filename = db_session.get("filename", "dataset")
             project_name = db_session.get("project_name", "Untitled Project")
-            expected_columns = db_session.get("scanned_columns", set())
-            expected_cols = set()
-            for item in expected_columns:
-                if ":" in item:
-                    expected_cols.add(item.split(":")[0])
-                else:
-                    expected_cols.add(item)
-            
+            # DB-derived values are user-controlled: escape before raw-HTML interpolation.
+            filename_html = html.escape(str(filename or ""))
+            project_name_html = html.escape(str(project_name or ""))
+            saved_recipe = db_session.get("cleaning_recipe") or []
+
             st.markdown(
                 f'<div style="text-align: center; margin-top: 6rem; margin-bottom: 2.5rem; position: relative; z-index: 1;">'
                 f'<h1 style="font-weight: 800; font-size: 2.8rem; letter-spacing: 0.05em; color: #ffffff; margin-bottom: 0.5rem;">RESUME WORKSPACE</h1>'
-                f'<p style="color: #a3a3a3; font-size: 1.05rem;">Project: <strong>{project_name}</strong></p>'
+                f'<p style="color: #a3a3a3; font-size: 1.05rem;">Project: <strong>{project_name_html}</strong></p>'
                 f'</div>',
                 unsafe_allow_html=True
             )
@@ -123,7 +146,7 @@ def render_landing_page():
                 st.markdown(
                     f'<div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 1.5rem; text-align: center; margin-bottom: 1.5rem;">'
                     f'<p style="color: #e5e5e5; font-size: 0.95rem; margin-bottom: 0.5rem;">Please re-upload the original file to resume:</p>'
-                    f'<strong style="color: #ff4b4b; font-size: 1.1rem;">{filename}</strong>'
+                    f'<strong style="color: #ff4b4b; font-size: 1.1rem;">{filename_html}</strong>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
@@ -138,24 +161,33 @@ def render_landing_page():
                 if resume_uploader:
                     # Mismatch detection (Requirement 7)
                     uploaded_filename = resume_uploader.name
+                    from lumi_state.core import UnsafeFileError
+                    unsafe_error = None
                     try:
                         # same reader as the upload (delimiter/encoding detection, str headers)
                         from state_manager import read_tabular
                         df_header, _ = read_tabular(resume_uploader, name=uploaded_filename, nrows=0)
-                        uploaded_columns = set(df_header.columns)
+                    except UnsafeFileError as e:
+                        unsafe_error = e
+                        df_header = None
                     except Exception:
-                        uploaded_columns = set()
- 
+                        df_header = None
+
                     mismatch = False
                     reasons = []
                     if uploaded_filename != filename:
                         mismatch = True
                         reasons.append(f"Filename mismatch: expected '{filename}', got '{uploaded_filename}'")
-                    if expected_cols and not expected_cols.issubset(uploaded_columns):
+                    # Match on the original headers: the saved recipe must replay on them.
+                    header_problems = (["The file could not be read"] if df_header is None
+                                       else recipe_fits_headers(df_header, saved_recipe))
+                    if header_problems:
                         mismatch = True
-                        reasons.append("Column headers mismatch (some expected columns are missing in the uploaded file)")
+                        reasons.append("Column headers mismatch (the saved cleaning steps refer to columns missing in the uploaded file)")
 
-                    if mismatch:
+                    if unsafe_error is not None:
+                        st.error(str(unsafe_error))
+                    elif mismatch:
                         st.warning("Warning: The uploaded file does not match the expected dataset.")
                         for reason in reasons:
                             st.write(f"- {reason}")
@@ -169,7 +201,7 @@ def render_landing_page():
                                 st.session_state.pop(cache_key, None)
                                 st.rerun()
                             else:
-                                st.error("Failed to restore session.")
+                                st.error(st.session_state.get("load_error") or "Failed to restore session.")
                         if w_c2.button("Cancel upload", key="cancel_upload_btn", use_container_width=True):
                             st.rerun()
                     else:
@@ -180,7 +212,7 @@ def render_landing_page():
                             st.session_state.pop(cache_key, None)
                             st.rerun()
                         else:
-                            st.error("Failed to restore session.")
+                            st.error(st.session_state.get("load_error") or "Failed to restore session.")
 
                 st.write("")
                 if st.button("Start a new project instead", key="btn_cancel_resume", use_container_width=True):
@@ -270,7 +302,7 @@ def render_landing_page():
     with c_hdr_r:
         if is_authenticated_user():
             u_email = get_logged_in_user()
-            u_email_safe = u_email.replace("@", "&#64;") if u_email else ""
+            u_email_safe = html.escape(u_email).replace("@", "&#64;") if u_email else ""
             st.markdown('<div class="profile-popover-container">', unsafe_allow_html=True)
             with st.popover("", icon=":material/person:", help="Account Settings"):
                 st.markdown('<div style="font-weight: 600; font-size: 0.8rem; color: #a3a3a3; letter-spacing: 0.05em; margin-bottom: 0.2rem;">ACCOUNT</div>', unsafe_allow_html=True)
@@ -280,17 +312,8 @@ def render_landing_page():
                     show_signout_dialog()
             st.markdown('</div>', unsafe_allow_html=True)
         else:
-            if is_auth_configured():
-                st.button(
-                    "Sign In", 
-                    key="landing_header_signin_btn", 
-                    use_container_width=True, 
-                    on_click=st.login, 
-                    kwargs={"provider": "google"}
-                )
-            else:
-                if st.button("Sign In", key="landing_header_signin_btn", use_container_width=True):
-                    show_auth_dialog()
+            # Straight to Google in production; the dialog (Google + dev email) when dev auth is on.
+            render_sign_in_button("landing_header_signin_btn")
 
     # Render centered uploader title & description
     st.markdown(
@@ -348,6 +371,11 @@ def render_landing_page():
         )
     st.markdown('<p class="cta-helper" style="position: relative; z-index: 1;">Free · No sign-up · Works with CSV &amp; XLSX</p>', unsafe_allow_html=True)
 
+    # Last failed upload (empty / malformed / rejected file): shown until the next upload attempt.
+    if st.session_state.get("load_error"):
+        _err_l, err_col, _err_r = st.columns([1, 2, 1])
+        err_col.error(st.session_state.load_error)
+
 
     if welcome_uploader:
         u_email = get_logged_in_user()
@@ -358,7 +386,10 @@ def render_landing_page():
             st.stop()
             
         file_hash = calculate_file_hash(welcome_uploader)
-        
+        if not _should_process_upload(file_hash):
+            render_iframe_dropzone_patch()
+            st.stop()  # same file that just failed: keep its error, do not loop through reruns
+
         is_testing = st.session_state.get("_is_testing", False)
         
         # Only offer a restore when *this* owner (signed session id for guests) saved progress

@@ -31,6 +31,7 @@ def _log_db_perf(op: str, duration_ms: float, details: dict = None, error: str =
     except Exception:
         logger.debug("Failed to write DB perf log", exc_info=True)
 
+import psycopg2
 import psycopg2.pool
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import PoolError
@@ -339,30 +340,31 @@ def _clear_pg_pool_cache():
 
 _get_pg_pool.clear = _clear_pg_pool_cache
 
+_WARM_CONNECTIONS = 2  # connections opened by the warm-up thread (one at a time)
+
 def _warm_pool_async():
-    """Asynchronously establishes initial connections to eliminate cold-start TLS latency for users."""
+    """Asynchronously opens a few pooled connections to cut cold-start TLS latency for users.
+
+    Each connection is checked out and returned immediately, so the warmer never holds more
+    than one slot and first user requests are not starved behind it (POOL_WAIT_TIMEOUT).
+    """
     def _warm():
         try:
             url = _get_db_url()
             if url:
                 pool = _get_pg_pool(url)
-                conns = []
-                try:
-                    max_to_warm = getattr(pool, "maxconn", 10)
-                    for _ in range(max_to_warm):
-                        try:
-                            c = pool.getconn(timeout=2.0)
-                            conns.append(c)
-                        except Exception:
-                            break
-                finally:
-                    for c in conns:
-                        pool.putconn(c)
+                for _ in range(min(_WARM_CONNECTIONS, getattr(pool, "maxconn", _WARM_CONNECTIONS))):
+                    try:
+                        c = pool.getconn(timeout=2.0)
+                    except Exception:
+                        break
+                    pool.putconn(c)
         except Exception:
             logger.warning("Connection pool warm-up failed", exc_info=True)
 
     t = threading.Thread(target=_warm, daemon=True, name="LumiPoolWarmer")
     t.start()
+    return t
 
 # Pre-warm connection pool in background thread on module load
 _warm_pool_async()
@@ -424,8 +426,11 @@ def get_db_connection():
         t1 = time.perf_counter()
         _log_db_perf("get_db_connection", (t1 - t0) * 1000, {"backend": backend}, err)
 
-def release_db_connection(conn):
-    """Releases a connection back to the pool or closes it depending on the driver."""
+def release_db_connection(conn, close: bool = False):
+    """Releases a connection back to the pool or closes it depending on the driver.
+
+    ``close=True`` discards a pooled connection instead of reusing it (e.g. the server dropped it).
+    """
     if conn is None:
         return
     import sqlite3
@@ -436,7 +441,7 @@ def release_db_connection(conn):
         if db_url:
             try:
                 pool = _get_pg_pool(db_url)
-                pool.putconn(conn)
+                pool.putconn(conn, close=close)
             except Exception as e:
                 logger.warning("Failed to release connection back to pool; closing it: %s", e)
                 try:
@@ -459,3 +464,29 @@ def _execute(conn, cursor, sql: str, params: tuple = ()):
     else:
         cursor.execute(sql)
 
+
+# A connection the server dropped (restart, idle timeout, network blip) surfaces only when used.
+_RETRYABLE_DB_ERRORS = (psycopg2.OperationalError, psycopg2.InterfaceError)
+
+def run_with_retry(op: str, fn):
+    """Run ``fn(conn)`` on a fresh connection; retry once on a new one if the server dropped it.
+
+    Only driver-level connection errors are retried. Results (including refusals such as a
+    rejected upsert) are returned as-is, and any other exception propagates on the first try.
+    ``fn`` must be safe to repeat (an idempotent write or a read).
+    """
+    for attempt in range(2):
+        conn = get_db_connection()  # may raise DatabaseUnavailableError
+        broken = False
+        try:
+            return fn(conn)
+        except _RETRYABLE_DB_ERRORS as e:
+            broken = True
+            if attempt:
+                raise
+            logger.warning("%s: database connection dropped (%s); retrying on a fresh connection", op, e)
+        finally:
+            if broken:
+                release_db_connection(conn, close=True)
+            else:
+                release_db_connection(conn)

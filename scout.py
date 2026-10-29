@@ -1,3 +1,5 @@
+import re
+
 import pandas as pd
 import numpy as np
 
@@ -42,7 +44,11 @@ def _check_null_values(df: pd.DataFrame, col: str) -> list[dict]:
 def _check_constant_column(df: pd.DataFrame, col: str) -> list[dict]:
     """Identify columns with no variance (all values are the same)."""
     proposals = []
-    if df[col].nunique() <= SCOUT_THRESHOLDS["CONSTANT_UNIQUE_MAX"]:
+    # A single row is trivially "constant"; and NaN counts as a distinct value, so a column of
+    # 'Y' and blanks is not zero-variance.
+    if len(df) < 2:
+        return proposals
+    if df[col].nunique(dropna=False) <= SCOUT_THRESHOLDS["CONSTANT_UNIQUE_MAX"]:
         proposals.append({
             "type": "Constant Value", "column": col, "reason": "Zero variance (all values are identical)",
             "rule_data": {"action": "drop_column", "column": col}
@@ -76,7 +82,7 @@ def _check_numeric_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
         
         # Skewness Warning
         skew = df[col].skew()
-        if abs(skew) > SCOUT_THRESHOLDS["HIGH_SKEWNESS_ABS"]:
+        if pd.notna(skew) and abs(skew) > SCOUT_THRESHOLDS["HIGH_SKEWNESS_ABS"]:
             proposals.append({
                 "type": "Distribution Warning", "column": col, "reason": f"High skewness ({skew:.2f}) detected",
                 "rule_data": {
@@ -86,6 +92,21 @@ def _check_numeric_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
             })
     return proposals
 
+_ID_NAME_HINT = re.compile(r"(^|[^a-z])(id|ids|zip|zipcode|postal|postcode|code|phone|ssn|sku|uuid)($|[^a-z])|(id|zip|code)$")
+
+
+def _looks_like_identifier(col, numeric_strs: pd.Series) -> bool:
+    """True for ID-like text columns where a float cast would destroy data (ZIPs, fixed-width codes)."""
+    if _ID_NAME_HINT.search(str(col).lower()):
+        return True
+    stripped = numeric_strs.astype(str).str.strip()
+    if stripped.str.match(r"^[+-]?0\d").any():  # leading zeros are significant
+        return True
+    digits = stripped[stripped.str.fullmatch(r"\d+")]
+    # all-digit values of one fixed length (>= 5 digits) are codes, not quantities
+    return len(digits) == len(stripped) and stripped.str.len().nunique() == 1 and stripped.str.len().iloc[0] >= 5
+
+
 def _check_string_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
     """Analyze text-based columns for mixed types, high cardinality, and whitespace."""
     proposals = []
@@ -93,10 +114,15 @@ def _check_string_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
         non_nulls = df[col].dropna()
         if len(non_nulls) > 0:
             # Mixed Type Detection
-            num_pct = pd.to_numeric(non_nulls, errors='coerce').notnull().mean()
-            if SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MIN"] <= num_pct < SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MAX"]:
+            parsed = pd.to_numeric(non_nulls, errors='coerce')
+            num_pct = parsed.notnull().mean()
+            if (SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MIN"] <= num_pct < SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MAX"]
+                    and not _looks_like_identifier(col, non_nulls[parsed.notnull()])):
+                n_lost = int(parsed.isnull().sum())
                 proposals.append({
-                    "type": "Type Cast", "column": col, "reason": f"Mixed types ({num_pct:.1%} numeric values hidden in text)",
+                    "type": "Type Cast", "column": col,
+                    "reason": (f"Mixed types ({num_pct:.1%} numeric values hidden in text); "
+                               f"casting would turn {n_lost} non-numeric cell{'s' if n_lost != 1 else ''} into NaN"),
                     "rule_data": {"action": "cast_type", "column": col, "dtype": "float64"}
                 })
             
@@ -130,7 +156,7 @@ def _check_dataset_level(df: pd.DataFrame) -> list[dict]:
     Proposals use the reserved column "__dataset__" so dismissal keys look like
     "__dataset__:duplicates". Run on the full frame (cheap vectorised checks).
     """
-    from engine_ops import predict_column_renames
+    from engine_ops import predict_column_renames, _normalize_one_name
     proposals = []
 
     dup = int(df.duplicated().sum())
@@ -150,14 +176,19 @@ def _check_dataset_level(df: pd.DataFrame) -> list[dict]:
         })
 
     cols = [str(c) for c in df.columns]
+    dup_names = sorted({c for c in cols if cols.count(c) > 1})
+    if dup_names:
+        preview = ", ".join(f"'{c}'" for c in dup_names[:3]) + ("..." if len(dup_names) > 3 else "")
+        proposals.append({
+            "type": "duplicate_columns", "column": DATASET_KEY, "title": "Duplicate Column Names",
+            "reason": (f"{len(dup_names)} column name{'s' if len(dup_names) != 1 else ''} used more than once ({preview}); "
+                       "per-column checks skip them. Normalizing names renames repeats with _2, _3 suffixes"),
+            "rule_data": {"action": "normalize_column_names", "value": "snake_case"},
+        })
     renames = predict_column_renames(cols, 'snake_case', only_changed=True)
-    # Names that would collide after normalization (all columns, not only changed ones)
-    normalized = predict_column_renames(cols, 'snake_case')
-    seen, collisions = {}, set()
-    for orig, new in normalized.items():
-        if new in seen and seen[new] != orig:
-            collisions.add(new)
-        seen.setdefault(new, orig)
+    # Names that would collide after normalization (before the _2/_3 de-duplication suffixes)
+    base = [_normalize_one_name(c, 'snake_case') for c in cols]
+    collisions = {n for n in base if base.count(n) > 1}
     if renames:
         preview = ", ".join(f"'{c}'" for c in list(renames)[:3]) + ("..." if len(renames) > 3 else "")
         reason = f"{len(renames)} column name{'s' if len(renames) != 1 else ''} not snake_case ({preview})"
@@ -207,7 +238,11 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
     if len(df) > 10000:
         df = df.sample(n=10000, random_state=42).reset_index(drop=True)
 
+    repeated = set(df.columns[df.columns.duplicated(keep=False)])
     for col in df.columns:
+        # Duplicate names make df[col] a DataFrame; they are reported at dataset level instead.
+        if col in repeated:
+            continue
         # Skip columns that have already been completely processed (backward compatibility).
         if col in scanned_columns: 
             continue

@@ -1,5 +1,7 @@
 """Versioned schema migrations and init_db."""
 import logging
+import threading
+import time
 
 from .pool import get_db_connection, release_db_connection, _commit
 
@@ -7,9 +9,24 @@ logger = logging.getLogger("lumi.persistence")
 
 def migrate_db():
     """Backward-compatible wrapper: applies any pending schema migrations (see init_db)."""
-    return _run_migrations()
+    with _MIGRATION_LOCK:
+        return _run_migrations()
 
 _DB_INITIALIZED = False
+
+# One migration run per process at a time; Postgres additionally serialises across processes
+# (several app replicas starting together) with a transaction-scoped advisory lock.
+_MIGRATION_LOCK = threading.Lock()
+_PG_MIGRATION_LOCK_KEY = 0x4C554D49  # "LUMI"
+# After a failed run against Postgres, init_db() (called on every rerun) waits this long before
+# retrying, so an outage does not add a failing round trip to every page load.
+MIGRATION_RETRY_BACKOFF = 60.0
+_migration_failed_at = None
+
+
+def _reset_migration_backoff():
+    global _migration_failed_at
+    _migration_failed_at = None
 
 # ---------------------------------------------------------------------------
 # Versioned schema migrations
@@ -102,8 +119,52 @@ def _current_schema_version(conn, cursor) -> int:
     return int(val) if val is not None else 0
 
 
+def _record_version(conn, cursor, version: int, name: str):
+    if _is_sqlite(conn):
+        cursor.execute("INSERT OR IGNORE INTO schema_version (version, name) VALUES (?, ?)", (version, name))
+    else:
+        cursor.execute(
+            "INSERT INTO schema_version (version, name) VALUES (%s, %s) ON CONFLICT (version) DO NOTHING",
+            (version, name),
+        )
+
+
+def _apply_pg_migration_locked(conn, version: int, name: str):
+    """Apply one migration on Postgres in its own transaction under a cross-process advisory lock.
+
+    The pool hands out autocommit connections, so autocommit is switched off for the duration
+    (and restored afterwards). The version is re-read under the lock: another process may have
+    applied it while we waited.
+    """
+    prev_autocommit = getattr(conn, "autocommit", False)
+    try:
+        if prev_autocommit:
+            conn.autocommit = False
+        cursor = conn.cursor()
+        cursor.execute("SELECT pg_advisory_xact_lock(%s)", (_PG_MIGRATION_LOCK_KEY,))
+        cursor.execute(_SCHEMA_VERSION_DDL)
+        if _current_schema_version(conn, cursor) < version:
+            _apply_migration(conn, cursor, version)
+            _record_version(conn, cursor, version, name)
+            logger.info("Applied schema migration %s (%s)", version, name)
+        conn.commit()  # also releases the advisory lock
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            logger.debug("Rollback after failed migration failed", exc_info=True)
+        raise
+    finally:
+        if prev_autocommit:
+            try:
+                conn.autocommit = True
+            except Exception:
+                logger.debug("Could not restore autocommit after migration", exc_info=True)
+
+
 def _run_migrations() -> bool:
     """Applies pending migrations in order. Returns True if schema is current. Never raises."""
+    global _migration_failed_at
     conn = None
     try:
         conn = get_db_connection()
@@ -111,23 +172,26 @@ def _run_migrations() -> bool:
         current = _current_schema_version(conn, cursor)
         if current >= LATEST_SCHEMA_VERSION:
             return True
-        cursor.execute(_SCHEMA_VERSION_DDL)
-        for version, name in MIGRATIONS:
-            if version <= current:
-                continue
-            _apply_migration(conn, cursor, version)
-            if _is_sqlite(conn):
-                cursor.execute("INSERT OR IGNORE INTO schema_version (version, name) VALUES (?, ?)", (version, name))
-            else:
-                cursor.execute(
-                    "INSERT INTO schema_version (version, name) VALUES (%s, %s) ON CONFLICT (version) DO NOTHING",
-                    (version, name),
-                )
-            _commit(conn)
-            logger.info("Applied schema migration %s (%s)", version, name)
+        if _is_sqlite(conn):
+            cursor.execute(_SCHEMA_VERSION_DDL)
+            for version, name in MIGRATIONS:
+                if version <= current:
+                    continue
+                _apply_migration(conn, cursor, version)
+                _record_version(conn, cursor, version, name)
+                _commit(conn)
+                logger.info("Applied schema migration %s (%s)", version, name)
+        else:
+            if not getattr(conn, "autocommit", False):
+                conn.rollback()  # end the transaction the version probe opened
+            for version, name in MIGRATIONS:
+                if version > current:
+                    _apply_pg_migration_locked(conn, version, name)
         return True
     except Exception:
         logger.error("Database migration/initialization failed", exc_info=True)
+        if conn is None or not _is_sqlite(conn):
+            _migration_failed_at = time.monotonic()  # remote DB: back off; local SQLite: retry freely
         try:
             conn.rollback()  # conn may be None if acquiring it failed; swallowed below
         except Exception:
@@ -138,9 +202,18 @@ def _run_migrations() -> bool:
 
 
 def init_db():
-    """Brings the database schema up to date (versioned migrations). Runs once per process on success."""
+    """Brings the database schema up to date (versioned migrations). Runs once per process on success.
+
+    Serialised with a lock; after a failed run against Postgres, retries wait MIGRATION_RETRY_BACKOFF.
+    """
     global _DB_INITIALIZED
     if _DB_INITIALIZED:
         return
-    if _run_migrations():
-        _DB_INITIALIZED = True
+    with _MIGRATION_LOCK:
+        if _DB_INITIALIZED:
+            return
+        if _migration_failed_at is not None and time.monotonic() - _migration_failed_at < MIGRATION_RETRY_BACKOFF:
+            return
+        if _run_migrations():
+            _reset_migration_backoff()
+            _DB_INITIALIZED = True

@@ -63,11 +63,15 @@ def test_double_undo_double_redo_and_new_action_clears():
     _invariant(at)
     _btn(at, "redo_btn").click().run()
     assert len(at.session_state.cleaning_recipe) == 1 and len(at.session_state.redo_stack) == 1
-    assert not _btn(at, "redo_btn").disabled
     _invariant(at)
     _btn(at, "redo_btn").click().run()
     assert at.session_state.cleaning_recipe == steps
-    assert at.session_state.redo_stack == [] and _btn(at, "redo_btn").disabled
+    assert at.session_state.redo_stack == []
+    _invariant(at)
+    # Buttons stay enabled (quick double clicks must not be dropped); extra clicks are no-ops
+    assert not _btn(at, "redo_btn").disabled
+    _btn(at, "redo_btn").click().run()
+    assert at.session_state.cleaning_recipe == steps and not at.exception
     _invariant(at)
     # new action after undo clears redo
     _btn(at, "undo_btn").click().run()

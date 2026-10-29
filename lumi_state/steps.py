@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 from engine import apply_recipe
 from scout import generate_proposals
+import hashlib
+import json
 import logging
 import re
 
@@ -52,9 +54,25 @@ def revert_step_renames(step, df_before):
         sync_column_rename(new, old)
 
 
+def _is_problem(msg: str) -> bool:
+    """True for a skip/warning/error message (vs. an informational one like "Removed 3 rows")."""
+    return str(msg).startswith(("Warning", "Error", "An unexpected error")) or "skipped" in str(msg)
+
+
+def _is_noop(before, after) -> bool:
+    """True when ``after`` has the same columns, dtypes and values as ``before``."""
+    try:
+        return before.equals(after) and list(before.columns) == list(after.columns)
+    except Exception:
+        return False
+
+
 def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool = True,
              sync_renames: bool = True):
     """Adds a cleaning step to the recipe, updates the cached state, and shows a toast.
+
+    Returns False (and records nothing) when an interactive step changed no data and only
+    produced skip/error messages; those are kept in ``_step_warnings`` for the Transformations tab.
 
     quiet=True suppresses toasts; persist=False skips disk/DB saves (caller must persist once).
     clear_redo=False (used by redo) keeps the remaining redo stack; new actions clear it.
@@ -62,17 +80,26 @@ def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool =
     False: their rules already use the final names, and re-syncing could chain renames wrongly.
     """
     renames = step_renames(step, st.session_state.current_df) if sync_renames else {}
-    st.session_state.cleaning_recipe.append(step)
-    
-    # Clear redo stack on new action (linear invalidation); redo itself preserves it
-    if clear_redo:
-        st.session_state.redo_stack = []
 
     # Calculate delta state from current_df and cache metadata only (no full df copy)
     new_df, messages = apply_recipe(st.session_state.current_df, [step])
     if not quiet:
+        # Persistent (rendered in the Transformations tab until the next action); a toast alone
+        # vanished before the user could read why nothing changed.
+        problems = [m for m in messages if _is_problem(m)]
+        st.session_state['_step_warnings'] = problems
         for msg in messages:
             st.toast(msg)
+        if problems and _is_noop(st.session_state.current_df, new_df):
+            # Only effect was a skip/error: recording it would add a no-op step to the recipe,
+            # audit log and exported pipeline (and wipe the redo stack for nothing).
+            return False
+
+    st.session_state.cleaning_recipe.append(step)
+
+    # Clear redo stack on new action (linear invalidation); redo itself preserves it
+    if clear_redo:
+        st.session_state.redo_stack = []
 
     th = calculate_health(new_df)
     step_desc = f"{step['action']} on {step.get('column', 'dataset')}"
@@ -90,15 +117,86 @@ def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool =
         save_session_state()
         save_db_session()
         _update_project_cache()
+    return True
 
 
-def replay_steps(steps):
-    """Re-applies steps quietly (no toasts, no per-step saves) then persists once."""
+def replay_steps(steps, persist: bool = True):
+    """Re-applies steps quietly (no toasts, no per-step saves) then persists once.
+
+    persist=False skips that save: the caller adjusts rules first and saves once itself.
+    """
     for step in steps:
         add_step(step, quiet=True, persist=False, sync_renames=False)
+    if persist:
+        save_session_state()
+        save_db_session()
+        _update_project_cache()
+
+
+def persist_all():
+    """Save session state, DB session and project cache once."""
     save_session_state()
     save_db_session()
     _update_project_cache()
+
+
+def _json_hash(obj) -> str:
+    return hashlib.sha1(json.dumps(obj, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def recipe_hash() -> str:
+    return _json_hash(st.session_state.get('cleaning_recipe', []))
+
+
+def rules_hash() -> str:
+    """Hash of rule content incl. enabled flags; ignores derived `error`/`resolved` fields."""
+    rules = [{k: v for k, v in r.items() if k not in ('error', 'resolved')}
+             for r in st.session_state.get('rules', [])]
+    return _json_hash(rules)
+
+
+def content_signature(df=None) -> str:
+    """Signature of everything rule evaluation and metrics depend on (not object identity)."""
+    shape = (tuple(df.shape), tuple(map(str, df.columns))) if df is not None else None
+    return _json_hash([
+        recipe_hash(), rules_hash(), st.session_state.get('last_file_hash'),
+        st.session_state.get('session_id'), shape,
+    ])
+
+
+def rule_uids(rules=None) -> list:
+    """Stable per-rule widget ids (hash of type/columns/desc, de-duplicated), independent of list position."""
+    rules = st.session_state.get('rules', []) if rules is None else rules
+    seen, out = {}, []
+    for r in rules:
+        base = hashlib.sha1("|".join(str(r.get(k, '')) for k in ('type', 'col', 'col_a', 'col_b', 'desc')).encode("utf-8")).hexdigest()[:10]
+        n = seen.get(base, 0)
+        seen[base] = n + 1
+        out.append(base if n == 0 else f"{base}_{n}")
+    return out
+
+
+def get_rule_masks(df) -> dict:
+    """Violation mask (or the raised exception) per enabled, non-Informational rule index.
+
+    Computed once per content signature and shared by the overview, rulebook and violation
+    browser; only the latest entry is kept. Callers must not mutate the returned masks.
+    """
+    from rule_utils import evaluate_rule
+    sig = content_signature(df)
+    cached = st.session_state.get('_rule_masks_cache')
+    if cached and cached[0] == sig:
+        return cached[1]
+    masks = {}
+    for idx, rule in enumerate(st.session_state.get('rules', [])):
+        if not rule.get('enabled', True) or rule.get('type') == "Informational":
+            continue
+        try:
+            masks[idx] = evaluate_rule(df, rule)
+        except Exception as e:
+            masks[idx] = e
+    st.session_state['_rule_masks_cache'] = (sig, masks)
+    return masks
 
 
 def get_state_at_step(n: int) -> pd.DataFrame:
@@ -247,7 +345,47 @@ def reresolve_rules(changed: list):
                 logger.debug("Could not re-evaluate rule %s", desc, exc_info=True)
 
 
+_PROPOSAL_COL_FIELDS = ('col', 'col_a', 'col_b', 'column')
+
+
+def _proposal_is_current(p, columns, rule_keys, step_keys) -> bool:
+    """True when proposal ``p`` targets existing columns and is not already a rule or a step."""
+    from scout import DATASET_KEY
+    data = p.get('rule_data') or {}
+    col = p.get('column')
+    if col != DATASET_KEY and col not in columns:
+        return False
+    for field in _PROPOSAL_COL_FIELDS:
+        ref = data.get(field)
+        if isinstance(ref, str) and ref != DATASET_KEY and ref not in columns:
+            return False
+    if 'action' in data:
+        return (data.get('action'), data.get('column')) not in step_keys
+    return (data.get('type'), data.get('col'), data.get('col_a'), data.get('col_b')) not in rule_keys
+
+
+def filter_current_proposals(proposals, df) -> list:
+    """Drop proposals on columns ``df`` no longer has, and ones already covered by an
+    active rule or an applied recipe step (e.g. after Undo/Redo or a rename)."""
+    ss = st.session_state
+    columns = set(df.columns) if df is not None else set()
+    rule_keys = {(r.get('type'), r.get('col'), r.get('col_a'), r.get('col_b'))
+                 for r in ss.get('rules', []) or []}
+    step_keys = {(s.get('action'), s.get('column')) for s in ss.get('cleaning_recipe', []) or []}
+    return [p for p in proposals or [] if _proposal_is_current(p, columns, rule_keys, step_keys)]
+
+
 def regenerate_proposals():
-    """Helper to recalculate proposals when active rules/steps are removed."""
-    if 'raw_data' in st.session_state and st.session_state.raw_data is not None:
-        st.session_state.proposals = generate_proposals(st.session_state.raw_data, st.session_state.scanned_columns)
+    """Recalculate proposals against the current (post-recipe) data after rules/steps change.
+
+    Scanning raw_data proposed rules on pre-rename column names and re-offered fixes the
+    recipe already applies. scanned_columns keys follow renames, so they match current_df.
+    """
+    ss = st.session_state
+    df = ss.get('current_df')
+    if df is None:
+        df = ss.get('raw_data')
+    if df is None:
+        return
+    proposals = generate_proposals(df, ss.get('scanned_columns', set()))
+    ss.proposals = filter_current_proposals(proposals, df)

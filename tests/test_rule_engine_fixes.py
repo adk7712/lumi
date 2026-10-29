@@ -85,7 +85,7 @@ def test_a2_relational_null_semantics_float_and_nullable_agree():
         n = pd.DataFrame({'a': pd.array([1, None, 3], dtype='Int64')})
         mf, mn = violations(r, f), violations(r, n)
         assert mf.tolist() == mn.tolist()
-        assert mf.tolist()[1] is True or bool(mf.iloc[1])  # null is always a violation
+        assert not mf.iloc[1]  # owner decision: a null is never a relational violation (Null Check's job)
 
 
 # ------------------------------------------------------------------ A3
@@ -100,7 +100,7 @@ def test_a3_one_bad_cell_flags_only_that_row():
 def test_a3_scalar_value_and_mixed_object_column():
     df = pd.DataFrame({'a': pd.Series([1, 'x', None, 20], dtype=object)})
     r = {'type': 'Relational Check', 'col_a': 'a', 'op': '>=', 'target_type': 'Value', 'value': 5, 'desc': 'd'}
-    assert violations(r, df).tolist() == [True, True, True, False]
+    assert violations(r, df).tolist() == [True, True, False, False]  # None cell is not a violation
 
 
 def test_a3_incomparable_everywhere_and_unsupported_op():

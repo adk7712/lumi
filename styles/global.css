@@ -15,7 +15,9 @@ footer,
     display: none !important;
 }
 
-/* Ensure header is transparent and behind main content — never intercepts clicks */
+/* Transparent, click-through header. It is a fixed-position stacking context, so its z-index
+   caps every control inside it (the sidebar expand button): keep it above the main content and
+   let pointer-events: none pass clicks on empty header area through to the content below. */
 header,
 [data-testid="stHeader"],
 .stAppHeader {
@@ -24,15 +26,36 @@ header,
     box-shadow: none !important;
     border: none !important;
     pointer-events: none !important;
-    z-index: 0 !important;
+    z-index: 999990 !important;
 }
 
-/* Hide sidebar and its toggle — no sidebar used in this app */
-[data-testid="stSidebar"],
-[data-testid="collapsedControl"],
-header [data-testid="collapsedControl"],
-.stAppHeader [data-testid="collapsedControl"] {
+/* Workspace sidebar is used for signed-in users; only Streamlit's page navigation is hidden. */
+[data-testid="stSidebarNav"],
+[data-testid="stSidebarNavItems"],
+[data-testid="stSidebarNavSeparator"] {
     display: none !important;
+}
+
+/* The header is click-through, so give the sidebar open/close controls their own hit area above content. */
+[data-testid="stSidebar"] {
+    z-index: 1000002 !important;
+    pointer-events: auto !important;
+}
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapseButton"] button {
+    display: flex !important;
+    pointer-events: auto !important;
+    z-index: 1000003 !important;
+}
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] {
+    position: fixed !important;
+    top: 0.75rem;
+    left: 0.75rem;
 }
 
 /* --- Circular Profile Icon Popover Button --- */
@@ -954,4 +977,11 @@ div.stMarkdown:has(.lumi-logo-button) {
 
 .st-key-redo_btn button:disabled {
     opacity: 0.35 !important;
+}
+
+/* Toasts open at the top right by default, over the Undo/Redo header buttons on narrower windows
+   (clicks then hit the toast). Show them at the bottom right instead. */
+[data-testid="stToastContainer"] {
+    top: auto !important;
+    bottom: 1.5rem !important;
 }

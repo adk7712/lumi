@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-import streamlit.components.v1 as components
+import html
 from ui_utils import inject_custom_css, inject_posthog, is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, flush_pending_events
 from state_manager import initialize_state, load_data, MAX_SAMPLE_ROWS, get_state_at_step, save_session_state, regenerate_proposals, add_step
 from views import (
@@ -15,6 +15,7 @@ from views import (
     render_workspace_sidebar
 )
 import state_manager as _sm
+from lumi_state.session_io import reset_workspace_view_state
 from scout import generate_proposals
 
 
@@ -34,6 +35,12 @@ st.set_page_config(
     page_icon="assets/lumi_logo_white.svg",
     layout="wide"
 )
+
+# Everything emitted before the tabs goes into this one fixed container. Conditional elements
+# at the top level (queued PostHog st.html, toasts, warnings) shifted the tabs' position in the
+# element tree between reruns, so the browser remounted st.tabs and it snapped to the first tab.
+_preamble = st.container()
+_preamble.__enter__()
 
 # Inject Custom CSS
 inject_custom_css(st)
@@ -88,6 +95,8 @@ if user_email:
 # Render Workspace Sidebar (for authenticated users)
 render_workspace_sidebar()
 
+_preamble.__exit__(None, None, None)
+
 # Landing page (no dataset loaded yet)
 if st.session_state.raw_data is None:
     render_landing_page()
@@ -100,8 +109,10 @@ header_placeholder = st.container()
 
 def handle_reset():
     initialize_state(from_reset=True)
+    reset_workspace_view_state()
 
 def handle_undo():
+    st.session_state.pop('_step_warnings', None)
     if len(st.session_state.cleaning_recipe) > 0:
         popped_step = st.session_state.cleaning_recipe.pop()
         if '_source_proposal_type' in popped_step and '_source_proposal_col' in popped_step:
@@ -121,13 +132,19 @@ def handle_undo():
         _sm._update_project_cache()
 
 def handle_redo():
+    st.session_state.pop('_step_warnings', None)
     if st.session_state.get('redo_stack'):
         step = st.session_state.redo_stack.pop()
         if '_source_proposal_type' in step and '_source_proposal_col' in step:
             st.session_state.scanned_columns.add(f"{step['_source_proposal_col']}:{step['_source_proposal_type']}")
         unresolved = step.pop('_unresolved_rules', [])
-        add_step(step, clear_redo=False)
+        # Persist once, after the rules' resolved flags are restored (not before)
+        add_step(step, quiet=True, clear_redo=False, persist=False)
         _sm.reresolve_rules(unresolved)
+        regenerate_proposals()
+        save_session_state()
+        _sm.save_db_session()
+        _sm._update_project_cache()
 
 @st.dialog("Reset Workspace")
 def show_reset_dialog():
@@ -152,16 +169,21 @@ def render_header():
         with h_col2:
             st.markdown('<div class="header-actions-row">', unsafe_allow_html=True)
             u_c1, u_c2 = st.columns(2)
-            if u_c1.button("Undo", key="undo_btn", width="stretch", disabled=len(st.session_state.cleaning_recipe) == 0, on_click=handle_undo):
-                st.toast("Last step undone")
-            redo_disabled = not st.session_state.get('redo_stack')
-            if u_c2.button("Redo", key="redo_btn", width="stretch", disabled=redo_disabled, on_click=handle_redo):
-                st.toast("Step re-applied")
+            # No toasts here: they covered the Redo button for seconds, so rapid clicks hit the toast.
+            # The change itself (step list, metrics) is the feedback.
+            # Never disabled: a button disabled until the previous rerun finishes drops quick
+            # Undo-Undo / Redo-Redo clicks. The handlers are no-ops when there is nothing to do.
+            n_undo = len(st.session_state.cleaning_recipe)
+            n_redo = len(st.session_state.get('redo_stack') or [])
+            u_c1.button("Undo", key="undo_btn", width="stretch", on_click=handle_undo,
+                        help=f"{n_undo} step(s) can be undone" if n_undo else "Nothing to undo")
+            u_c2.button("Redo", key="redo_btn", width="stretch", on_click=handle_redo,
+                        help=f"{n_redo} step(s) can be redone" if n_redo else "Nothing to redo")
             st.markdown('</div>', unsafe_allow_html=True)
         with h_col3:
             if is_authenticated_user():
                 u_email = get_logged_in_user()
-                u_email_safe = u_email.replace("@", "&#64;") if u_email else ""
+                u_email_safe = html.escape(u_email).replace("@", "&#64;") if u_email else ""
                 current_ws = st.session_state.get("project_name") or st.session_state.get("filename") or "Untitled Workspace"
                 st.markdown('<div class="profile-popover-container">', unsafe_allow_html=True)
                 with st.popover("", icon=":material/person:", help="Account Settings"):
@@ -176,25 +198,39 @@ def render_header():
                         show_signout_dialog()
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
-                if is_auth_configured():
-                    st.button(
-                        "Sign In", 
-                        key="header_signin_btn", 
-                        use_container_width=True, 
-                        on_click=st.login, 
-                        kwargs={"provider": "google"}
-                    )
-                else:
-                    if st.button("Sign In", key="header_signin_btn", use_container_width=True):
-                        show_auth_dialog()
+                # Straight to Google in production; the dialog (Google + dev email) when dev auth is on.
+                from ui_utils import render_sign_in_button
+                render_sign_in_button("header_signin_btn")
 
 st.divider()
 
 # --- TABS ---
 TAB_NAMES = ["Overview", "Diagnostics", "Rulebook", "Transformations", "Audit Log", "Pipeline Preview"]
 
+TAB_STATE_KEY = "main_tab"
+_TAB_MEMORY_KEY = "_main_tab_selected"
+
+
+def _on_tab_change():
+    selected = st.session_state.get(TAB_STATE_KEY)
+    if selected in TAB_NAMES:
+        st.session_state[_TAB_MEMORY_KEY] = selected
+        # Keep ?tab= in sync so a reload or shared link opens the same tab.
+        st.query_params["tab"] = selected
+
+
+# Stateful tabs: the selected tab is server state, sent back as the tab container's default on
+# every rerun, so the view stays put even if the browser remounts the element. The browser only
+# reports the tab after a click, so the selection is also remembered under a plain key and
+# re-applied each run (a tab opened from ?tab= would otherwise fall back to Overview).
+if _TAB_MEMORY_KEY not in st.session_state:
+    _requested_tab = st.query_params.get("tab")
+    st.session_state[_TAB_MEMORY_KEY] = _requested_tab if _requested_tab in TAB_NAMES else TAB_NAMES[0]
+if st.session_state.get(TAB_STATE_KEY) != st.session_state[_TAB_MEMORY_KEY]:
+    st.session_state[TAB_STATE_KEY] = st.session_state[_TAB_MEMORY_KEY]
+
 tab_overview, tab_diagnostics, tab_rulebook, tab_transformations, tab_audit, tab_pipeline = st.tabs(
-    TAB_NAMES
+    TAB_NAMES, key=TAB_STATE_KEY, on_change=_on_tab_change
 )
 
 with tab_overview:
@@ -220,62 +256,6 @@ render_violation_browser(st.session_state.current_df)
 # rendered from the old state). Consume it here with a single rerun.
 if st.session_state.pop("_needs_rerun", False):
     st.rerun()
-
-# --- Tab State Persistence Script ---
-import json
-_tab_names_json = json.dumps(TAB_NAMES)
-components.html(
-    f"""
-    <script>
-    (function() {{
-        const tabNames = {_tab_names_json};
-        const doc = window.parent.document;
-        
-        function restoreTab() {{
-            const urlParams = new URLSearchParams(window.parent.location.search);
-            const activeTab = urlParams.get('tab');
-            if (activeTab && tabNames.includes(activeTab)) {{
-                const tabs = doc.querySelectorAll('[data-baseweb="tab"]');
-                for (let tab of tabs) {{
-                    const p = tab.querySelector('p');
-                    if (p && p.innerText === activeTab) {{
-                        if (tab.getAttribute('aria-selected') !== 'true') {{
-                            p.click();
-                        }}
-                        return true;
-                    }}
-                }}
-            }}
-            return false;
-        }}
-
-        let attempts = 0;
-        const interval = setInterval(function() {{
-            attempts++;
-            if (restoreTab() || attempts > 20) clearInterval(interval);
-        }}, 50);
-
-        function attachListeners() {{
-            if (doc._lumiTabListenerAttached) return;
-            doc._lumiTabListenerAttached = true;
-            doc.addEventListener('click', function(e) {{
-                const tab = e.target.closest('[data-baseweb="tab"]');
-                if (!tab) return;
-                const p = tab.querySelector('p');
-                if (p && tabNames.includes(p.innerText)) {{
-                    const url = new URL(window.parent.location.href);
-                    url.searchParams.set('tab', p.innerText);
-                    window.parent.history.replaceState(null, '', url.toString());
-                }}
-            }}, true);
-        }}
-        attachListeners();
-    }})();
-    </script>
-    """,
-    height=0,
-    width=0
-)
 
 # --- FOOTER ---
 render_header()

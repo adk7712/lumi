@@ -1,3 +1,5 @@
+import copy
+
 import pandas as pd
 from query_guard import UnsafeQueryError, validate_query_expression, safe_query_index  # noqa: F401
 
@@ -6,8 +8,9 @@ def _relational_violations(a, b, op):
     """Boolean violation mask for a Relational Check (``a <op> b`` describes the VALID state).
 
     Semantics (the engine and the exported script share this exact source):
-      * a null (NaN / None / pd.NA / NaT) in ``a`` or in ``b`` is a violation for EVERY
-        operator, for float and nullable dtypes alike;
+      * a null (NaN / None / pd.NA / NaT) in ``a`` or in ``b`` is NOT a violation for ANY
+        operator (including ``!=``), for float and nullable dtypes alike - like Range Check,
+        missing values are the Null Check's job;
       * cells that cannot be compared (e.g. 2 < 'x') violate individually - one bad cell
         never flags the whole column;
       * an unsupported operator flags every row.
@@ -27,7 +30,7 @@ def _relational_violations(a, b, op):
     else:
         try:
             if bool(pd.isna(b)):
-                return pd.Series(True, index=a.index, dtype=bool)
+                return pd.Series(False, index=a.index, dtype=bool)
         except (TypeError, ValueError):
             pass
     try:
@@ -45,7 +48,7 @@ def _relational_violations(a, b, op):
             except (TypeError, ValueError):
                 valid.append(False)
         valid = pd.Series(valid, dtype=bool).to_numpy()
-    return pd.Series(~(valid & ~null), index=a.index, dtype=bool)
+    return pd.Series(~valid & ~null, index=a.index, dtype=bool)
 
 
 def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
@@ -92,8 +95,8 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
             b = df[rule['col_b']] if rule.get('target_type') == 'Feature' else rule['value']
             op = rule['op']
             
-            # The rule describes the valid state (e.g., "Age > 18"); nulls on either side and
-            # incomparable cells are violations (see _relational_violations).
+            # The rule describes the valid state (e.g., "Age > 18"); nulls on either side are NOT
+            # violations (Null Check's job), incomparable non-null cells are (see _relational_violations).
             mask = _relational_violations(a, b, op)
         elif rule_type == "Custom Expression":
             # The query describes the VIOLATION condition — rows that match are flagged.
@@ -114,6 +117,15 @@ def evaluate_rule(df: pd.DataFrame, rule: dict) -> pd.Series:
     return mask
 
 
+def _rule_snapshot(rule: dict) -> dict:
+    """Independent copy of a rule for a recipe step.
+
+    The live rule is edited later (e.g. sync_column_rename); a step that aliased it would be
+    silently rewritten and replay / export would stop dropping the same rows.
+    """
+    return copy.deepcopy(rule)
+
+
 def create_resolution_step(rule: dict, method: str) -> dict:
     """
     Maps a selected resolution method and rule definition to a concrete cleaning step.
@@ -132,7 +144,7 @@ def create_resolution_step(rule: dict, method: str) -> dict:
             
     elif rule_type == "Range Check":
         if method == "Drop Rows":
-            return {"action": "drop_violated", "rule": rule}
+            return {"action": "drop_violated", "rule": _rule_snapshot(rule)}
         elif method == "Log Transform":
             return {"action": "log_transform", "column": rule['col']}
         else:
@@ -142,7 +154,7 @@ def create_resolution_step(rule: dict, method: str) -> dict:
     else:
         # Default fallback for other rule types (e.g. Relational Check, Custom Expression)
         # where the only method is "Drop Violated Rows"
-        return {"action": "drop_violated", "rule": rule}
+        return {"action": "drop_violated", "rule": _rule_snapshot(rule)}
 
 
 from report import generate_evidence_report

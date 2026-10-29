@@ -1,6 +1,7 @@
 import json
 import math
 import numbers
+from query_guard import unsafe_regex_reason
 
 def _query_guard_source() -> str:
     # The exported script embeds the exact validator the app uses (query_guard.py, stdlib-only).
@@ -9,6 +10,7 @@ def _query_guard_source() -> str:
     return src[src.index("import ast"):].rstrip() + "\n\n"
 
 KNN_DEFAULT_NEIGHBORS = 5
+KNN_MAX_ROWS = 20000
 FUZZY_MATCH_THRESHOLD = 85
 FUZZY_MAX_UNIQUE = 1000
 KNN_MAX_FEATURES = 10
@@ -29,14 +31,12 @@ _TEXT_METHODS = {"lowercase": "lower", "uppercase": "upper", "titlecase": "title
 _IMPORTS = "import warnings\nimport pandas as pd\nimport numpy as np\n"
 _DOWNCAST_HELPER = (
     "def _downcast_dtypes(df):\n"
-    "    \"\"\"Downcast numeric dtypes exactly like Lumi does on upload (e.g. int8/float32).\"\"\"\n"
+    "    \"\"\"Downcast integer dtypes exactly like Lumi does on upload (e.g. int8); floats stay float64.\"\"\"\n"
     "    if df.empty:\n"
     "        return df\n"
     "    df = df.copy()\n"
     "    for col in df.columns:\n"
-    "        if pd.api.types.is_float_dtype(df[col]):\n"
-    "            df[col] = pd.to_numeric(df[col], downcast='float')\n"
-    "        elif pd.api.types.is_integer_dtype(df[col]):\n"
+    "        if pd.api.types.is_integer_dtype(df[col]):\n"
     "            df[col] = pd.to_numeric(df[col], downcast='integer')\n"
     "    return df\n"
     "\n\n"
@@ -129,6 +129,13 @@ def _datetime_helper_source() -> str:
     return inspect.getsource(engine_ops._text_to_datetime).rstrip() + "\n\n\n"
 
 
+def _dedupe_helper_source() -> str:
+    """Exact source of engine_ops._dedupe_names (same unique column names in app and export)."""
+    import inspect
+    import engine_ops
+    return inspect.getsource(engine_ops._dedupe_names).rstrip() + "\n\n\n"
+
+
 def _valid_bound(v) -> bool:
     if v is None:
         return False
@@ -160,7 +167,10 @@ def _codegen_fill_null(step: dict) -> list[str]:
         code.append(f"    # Fill nulls with the column {v} (non-numeric entries are ignored when computing it).")
         code.append(f"    _num = pd.to_numeric(df[{c_repr}], errors='coerce')")
         code.append(f"    if _num.notnull().any():")
-        code.append(f"        df[{c_repr}] = df[{c_repr}].fillna(_num.{v}())")
+        code.append(f"        _fill = _num.{v}()")
+        code.append(f"        if pd.api.types.is_integer_dtype(df[{c_repr}]) and not pd.api.types.is_bool_dtype(df[{c_repr}]):")
+        code.append(f"            _fill = int(round(_fill))  # integer columns can't hold a fractional fill")
+        code.append(f"        df[{c_repr}] = df[{c_repr}].fillna(_fill)")
         code.append(f"    else:")
         code.append(f"        warnings.warn({repr(f'Cannot calculate {v} for non-numeric column {col!r}.')})")
     elif v == "mode":
@@ -187,7 +197,12 @@ def _codegen_fill_null(step: dict) -> list[str]:
         code.append(f"            _selected = [{c_repr}] + sorted(_others, key=lambda _c: _corrs.get(_c, 0), reverse=True)[:{KNN_MAX_FEATURES}]")
         code.append(f"        else:")
         code.append(f"            _selected = numeric_cols")
-        code.append(f"        _imputed = pd.DataFrame(imputer.fit_transform(df[_selected].copy()), columns=_selected, index=df.index)")
+        code.append(f"        _num_df = df[_selected].copy()")
+        code.append(f"        if len(_num_df) > {KNN_MAX_ROWS}:")
+        code.append(f"            imputer.fit(_num_df.sample(n={KNN_MAX_ROWS}, random_state=42))")
+        code.append(f"            _imputed = pd.DataFrame(imputer.transform(_num_df), columns=_selected, index=df.index)")
+        code.append(f"        else:")
+        code.append(f"            _imputed = pd.DataFrame(imputer.fit_transform(_num_df), columns=_selected, index=df.index)")
         code.append(f"        df[{c_repr}] = _imputed[{c_repr}]")
         code.append(f"    except Exception as e:")
         code.append(f"        warnings.warn({repr(v.upper() + ' imputation on ')} + repr({c_repr}) + ' skipped: ' + str(e))")
@@ -260,9 +275,11 @@ def _rule_mask_lines(r: dict, indent: str, var: str = "mask") -> list[str] | Non
         b = f"df[{repr(r['col_b'])}]" if r.get('target_type') == 'Feature' else _lit(r.get('value'))
         op = r.get('op')
         if op not in _RELATIONAL_OPS:
-            return [f"{indent}{var} = pd.Series(True, index=df.index)  # unsupported operator {_comment(repr(op))}"]
+            # Touch the columns first so a missing one is an error, exactly as in rule_utils.evaluate_rule.
+            touch = [f"{indent}_ = {a}"] + ([f"{indent}_ = {b}"] if r.get('target_type') == 'Feature' else [])
+            return touch + [f"{indent}{var} = pd.Series(True, index=df.index)  # unsupported operator {_comment(repr(op))}"]
         return [
-            f"{indent}# Nulls and incomparable cells violate; mirrors rule_utils._relational_violations.",
+            f"{indent}# Nulls are not violations; incomparable non-null cells are; mirrors rule_utils._relational_violations.",
             f"{indent}{var} = _relational_violations({a}, {b}, {op!r})",
         ]
     if t == "Custom Expression":
@@ -292,17 +309,33 @@ def _codegen_drop_violated(step: dict) -> list[str]:
 def _codegen_replace(step: dict) -> list[str]:
     col = step.get('column')
     f_repr, r_repr = repr(step['find']), repr(step['replace'])
-    regex_param = f", regex={bool(step.get('regex', False))}"
+    if step.get('regex', False):
+        why = unsafe_regex_reason(step['find'])
+        if why:
+            # Decided at export time with the same validator the engine uses.
+            return [f"    warnings.warn({f'Replace on {col!r} skipped: unsafe regular expression ({why}).'!r})"]
+    if not step.get('regex', False):
+        call = lambda c: f"df[{c}].replace({f_repr}, {r_repr}, regex=False)"
+    else:
+        call = lambda c: f"safe_regex_replace(df[{c}], {f_repr}, {r_repr}{', deadline=_deadline' if c == 'c' else ''})"
     if col == "All":
         return [
             f"    # Replace in all object/string columns, keeping each column's dtype.",
+            *(["    _deadline = regex_deadline()  # one time budget for the whole step"]
+              if step.get('regex', False) else []),
             f"    for c in df.select_dtypes(include=['object', 'string']).columns:",
-            f"        df[c] = df[c].replace({f_repr}, {r_repr}{regex_param}).astype(df[c].dtype)"
+            f"        try:",
+            f"            df[c] = {call('c')}.astype(df[c].dtype)",
+            f"        except RegexTimeoutError as e:",
+            f"            warnings.warn(f\"Replace on {{c!r}} skipped: {{e}}; the column is unchanged.\")",
         ]
     c_repr = repr(col)
     return [
         f"    # Replace in the specified column, keeping its dtype.",
-        f"    df[{c_repr}] = df[{c_repr}].replace({f_repr}, {r_repr}{regex_param}).astype(df[{c_repr}].dtype)"
+        f"    try:",
+        f"        df[{c_repr}] = {call(c_repr)}.astype(df[{c_repr}].dtype)",
+        f"    except RegexTimeoutError as e:",
+        f"        warnings.warn(f\"Replace on {{{c_repr}!r}} skipped: {{e}}; the column is unchanged.\")",
     ]
 
 def _codegen_strip_whitespace(step: dict) -> list[str]:
@@ -463,7 +496,7 @@ def _codegen_normalize_column_names(step: dict) -> list[str]:
         body = ["    _new_cols = []", "    for _orig in df.columns:", f"        _val = {exprs[method]}"]
     code.extend(body + [
         "        _new_cols.append(_val if _val else f\"column_{_orig}\")",
-        "    df.columns = _new_cols",
+        "    df.columns = _dedupe_names(_new_cols)",
     ])
     return code
 
@@ -551,6 +584,33 @@ def _guard_missing_columns(step: dict, body: list[str]) -> list[str]:
     ]
 
 
+# Actions whose engine handler can fail on data (bad cast, incompatible fill value, ...) and is then
+# skipped with a message; the export warns and continues instead of aborting the whole script.
+_ERROR_PRONE_ACTIONS = {
+    "fill_null", "cap_range", "cast_type", "replace", "normalize_text", "extract_datetime", "drop_violated",
+    # raise on duplicate column names (df[col] is a DataFrame); the engine reports and continues
+    "drop_empty_columns", "log_transform", "strip_whitespace",
+}
+
+
+def _guard_errors(step: dict, body: list[str]) -> list[str]:
+    """Wrap a data-dependent step in try/except so a failure warns and skips it, like engine_ops."""
+    action = step.get('action')
+    if action not in _ERROR_PRONE_ACTIONS or not any(l.strip() and not l.strip().startswith('#') for l in body):
+        return body
+    if action == 'drop_violated' and (step.get('rule') or {}).get('type') == "Custom Expression":
+        return body  # already wrapped (with the rule description) by _codegen_drop_violated
+    if body[0].lstrip().startswith("warnings.warn(") and len(body) == 1:
+        return body
+    col = step.get('column')
+    label = f"{action} on {col!r}" if col is not None else action
+    inner = ["    " + line if line.strip() else line for line in body]
+    return ["    try:"] + inner + [
+        "    except Exception as e:",
+        f"        warnings.warn({('Skipped ' + label + ': ')!r} + str(e))",
+    ]
+
+
 def _generate_clean_data_lines(recipe: list) -> list[str]:
     code = [
         "    # Match the dtypes Lumi uses after upload (numeric downcasting) so results agree with the app.",
@@ -563,7 +623,7 @@ def _generate_clean_data_lines(recipe: list) -> list[str]:
             action = step.get('action')
             generator = _CODEGEN_REGISTRY.get(action)
             if generator:
-                code.extend(_guard_missing_columns(step, generator(step)))
+                code.extend(_guard_missing_columns(step, _guard_errors(step, generator(step))))
             else:
                 msg = f"Unknown action {action!r} in recipe was skipped (not supported by export)."
                 code.append(f"    # WARNING: {_comment(msg)}")
@@ -610,13 +670,16 @@ def _generate_validate_data_lines(rules: list) -> list[str]:
     return code
 
 def _uses_query_guard(*line_groups) -> bool:
-    return any("safe_query_index(" in ln for group in line_groups for ln in group)
+    return any(("safe_query_index(" in ln or "safe_regex_replace(" in ln) for group in line_groups for ln in group)
 
 def _uses_relational_helper(*line_groups) -> bool:
     return any("_relational_violations(" in ln for group in line_groups for ln in group)
 
 def _uses_datetime_helper(*line_groups) -> bool:
     return any("_text_to_datetime(" in ln for group in line_groups for ln in group)
+
+def _uses_dedupe_helper(*line_groups) -> bool:
+    return any("_dedupe_names(" in ln for group in line_groups for ln in group)
 
 def _uses_fuzzy_helper(*line_groups) -> bool:
     return any("_fuzzy_dedupe_mapping(" in ln for group in line_groups for ln in group)
@@ -632,6 +695,8 @@ def generate_pipeline_code(recipe: list, rules: list = None) -> str:
         code.append(_query_guard_source())
     if _uses_relational_helper(clean_lines, validate_lines):
         code.append(_relational_helper_source())
+    if _uses_dedupe_helper(clean_lines):
+        code.append(_dedupe_helper_source())
     if _uses_fuzzy_helper(clean_lines):
         code.append(_fuzzy_helper_source())
     if _uses_datetime_helper(clean_lines):
@@ -667,6 +732,8 @@ def generate_notebook_code(recipe: list, rules: list = None) -> str:
         import_lines += ["\n"] + [f"{line}\n" for line in _query_guard_source().rstrip("\n").split("\n")]
     if _uses_relational_helper(clean_lines, validate_lines):
         import_lines += ["\n"] + [f"{line}\n" for line in _relational_helper_source().rstrip("\n").split("\n")]
+    if _uses_dedupe_helper(clean_lines):
+        import_lines += ["\n"] + [f"{line}\n" for line in _dedupe_helper_source().rstrip("\n").split("\n")]
     if _uses_fuzzy_helper(clean_lines):
         import_lines += ["\n"] + [f"{line}\n" for line in _fuzzy_helper_source().rstrip("\n").split("\n")]
     if _uses_datetime_helper(clean_lines):

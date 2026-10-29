@@ -1,3 +1,4 @@
+import html
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -6,6 +7,11 @@ from views.insights import render_correlation_panel, render_outlier_panel
 
 def render_diagnostics_tab(df):
     all_cols = df.columns.tolist()
+    # Drop selections for columns that no longer exist (after undo / workspace switch / rename)
+    _stored = st.session_state.get("active_features") or []
+    _valid = [c for c in _stored if c in all_cols]
+    if _valid != list(_stored):
+        st.session_state.active_features = _valid
     selected_features = st.multiselect("Analyze Columns", all_cols, key="active_features")
 
     if not selected_features:
@@ -17,7 +23,7 @@ def render_diagnostics_tab(df):
                 with st.container(border=True):
                     st.subheader(col_name)
                     s1, s2, s3, s4 = st.columns(4)
-                    render_diagnostic_metric(s1, "Type", str(df[col_name].dtype))
+                    render_diagnostic_metric(s1, "Type", html.escape(str(df[col_name].dtype)))
                     render_diagnostic_metric(s2, "Nulls", f"{df[col_name].isnull().sum()}")
                     render_diagnostic_metric(s3, "Unique", f"{df[col_name].nunique()}")
                     # Differentiate plotting and metric display based on data type for relevant insights.
@@ -29,7 +35,7 @@ def render_diagnostics_tab(df):
                         fig = px.box(plot_df, x=col_name, height=DIAGNOSTIC_CHART_HEIGHT)
                     else:
                         top_val = df[col_name].mode()[0] if not df[col_name].mode().empty else "N/A"
-                        render_diagnostic_metric(s4, "Mode", str(top_val)[:10])
+                        render_diagnostic_metric(s4, "Mode", html.escape(str(top_val)[:10]))
                         counts = df[col_name].value_counts()
                         num_uniques = len(counts)
                         if num_uniques <= MAX_CATEGORIES_DISPLAY:
@@ -72,8 +78,8 @@ def render_diagnostics_tab(df):
 
                             st.markdown(f"""
                             <div style="font-size: 0.72rem; line-height: 1.4; opacity: 0.85; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-                                <div style="grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Mode:</strong> {str(top_val)[:25]}</div>
-                                <div><strong>Frequency:</strong> {freq_val if pd.notnull(freq_val) else 'N/A'}</div>
+                                <div style="grid-column: span 2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><strong>Mode:</strong> {html.escape(str(top_val)[:25])}</div>
+                                <div><strong>Frequency:</strong> {html.escape(str(freq_val)) if pd.notnull(freq_val) else 'N/A'}</div>
                                 <div><strong>Freq %:</strong> {freq_pct:.1f}%</div>
                                 <div><strong>Null Count:</strong> {null_count}</div>
                                 <div><strong>Null %:</strong> {null_pct:.1f}%</div>

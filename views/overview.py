@@ -2,31 +2,29 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import re
-from rule_utils import evaluate_rule
+from lumi_state.steps import content_signature, get_rule_masks
 from state_manager import add_step, calculate_health
 from ui_utils import plot_missingness_map, chart_state_key
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
 
-    # Memoize metrics per DataFrame shape & recipe length
-    recipe_len = len(st.session_state.cleaning_recipe)
-    rules_len = len(st.session_state.rules)
-    cache_key = f"_overview_metrics_{id(df)}_{recipe_len}_{rules_len}"
+    # Memoize metrics on a content signature (recipe + rules incl. enabled flags + file); one entry only
+    sig = content_signature(df)
+    cached = st.session_state.get("_overview_metrics")
 
-    if cache_key in st.session_state:
-        metrics = st.session_state[cache_key]
+    if cached and cached[0] == sig:
+        metrics = cached[1]
     else:
         health = calculate_health(df)
         active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
         total_violations = 0
-        for rule in active_rules_list:
-            if rule.get('type') == "Informational":
+        for result in get_rule_masks(df).values():
+            if isinstance(result, Exception):
+                if not isinstance(result, (ValueError, KeyError, TypeError)):
+                    raise result
                 continue
-            try:
-                total_violations += evaluate_rule(df, rule).sum()
-            except (ValueError, KeyError, TypeError):
-                pass
+            total_violations += result.sum()
 
         dup_count = int(df.duplicated().sum())
         mem_mb = df.memory_usage(deep=True).sum() / (1024**2)
@@ -49,7 +47,7 @@ def render_overview_tab(df):
             "empty_rows_count": empty_rows_count,
             "whitespace_cols": whitespace_cols
         }
-        st.session_state[cache_key] = metrics
+        st.session_state["_overview_metrics"] = (sig, metrics)
 
     health = metrics["health"]
     active_rules_list = metrics["active_rules_list"]
@@ -58,7 +56,7 @@ def render_overview_tab(df):
     empty_cols = metrics["empty_cols"]
     empty_cols_count = len(empty_cols)
     empty_rows_count = metrics["empty_rows_count"]
-    whitespace_cols = metrics["whitespace_cols"]
+    whitespace_cols = list(metrics["whitespace_cols"])  # never mutate the cached list
 
     m_col1.metric("Health", f"{health}%")
     sample_info = st.session_state.get("sample_info")
@@ -103,12 +101,6 @@ def render_overview_tab(df):
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
         st.subheader("Quick Actions")
-        for c in df.columns:
-            if df[c].dtype == 'object' or pd.api.types.is_string_dtype(df[c]):
-                non_null_strings = df[c].dropna().astype(str)
-                if (non_null_strings != non_null_strings.str.strip()).any():
-                    whitespace_cols.append(c)
-
         # Scan for column names containing spaces, dashes, or special characters
         unnormalized_cols = []
         for c in df.columns:

@@ -201,7 +201,7 @@ def test_multi_step_recipe_parity():
 def test_downcast_applied_in_export():
     out, _, _ = run_script([], make_df())
     assert out['int_col'].dtype == np.int8
-    assert out['float_col'].dtype == np.float32
+    assert out['float_col'].dtype == np.float64  # floats are no longer downcast (float32 display noise)
 
 
 def test_unknown_action_is_flagged():

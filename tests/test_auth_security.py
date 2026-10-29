@@ -73,8 +73,9 @@ def test_dev_email_in_session_ignored_without_flag(dev_auth_off):
 
 
 def test_guest_identity_still_works_without_flag(dev_auth_off):
-    st.session_state.dev_user_email = "guest_abc@lumi.ai"
-    assert get_logged_in_user() == "guest_abc@lumi.ai"
+    # Only the exact generated guest format counts as a guest identity
+    st.session_state.dev_user_email = "guest_" + "a" * 32 + "@lumi.ai"
+    assert get_logged_in_user() == "guest_" + "a" * 32 + "@lumi.ai"
 
 
 def test_dev_login_form_not_rendered_without_flag(dev_auth_off):

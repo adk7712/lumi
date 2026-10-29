@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from pathlib import Path
 import streamlit as st
 from rule_utils import evaluate_rule
+from lumi_db.sessions import is_guest_id
 import os
 import hmac as _hmac_mod
 import hashlib as _hashlib_mod
@@ -273,7 +274,7 @@ def get_logged_in_user() -> str:
 
     dev_email = st.session_state.get("dev_user_email")
     if dev_email:
-        if str(dev_email).startswith("guest_") or dev_enabled:
+        if is_guest_id(dev_email) or dev_enabled:
             return dev_email
         # A non-guest mock email without the dev flag is never a valid identity.
         st.session_state.pop("dev_user_email", None)
@@ -294,7 +295,7 @@ def get_logged_in_user() -> str:
 def is_authenticated_user() -> bool:
     """Check if the user is signed in with a real account (not an anonymous guest)."""
     user_email = get_logged_in_user()
-    if not user_email or user_email.startswith("guest_"):
+    if not user_email or is_guest_id(user_email):
         return False
     return True
 
@@ -309,17 +310,28 @@ def format_timestamp(iso_str: str) -> str:
     except Exception:
         return str(iso_str)[:16]
 
+_SIGNOUT_CACHE_PREFIXES = ("_cache_user_projects_", "_cached_resume_", "_cached_cookie_")
+
+
 def handle_signout():
     """Sign out the user, clearing local dev mock email, removing cookies, resetting state, and redirecting to landing page."""
     if "dev_user_email" in st.session_state:
         st.session_state.pop("dev_user_email", None)
     remove_cookie(USER_EMAIL_COOKIE)
+    # Drop the workspace session cookie and per-user caches so the next person on this browser
+    # cannot resume the previous user's workspace.
+    remove_cookie(SESSION_COOKIE)
+    for key in list(st.session_state.keys()):
+        if str(key).startswith(_SIGNOUT_CACHE_PREFIXES):
+            st.session_state.pop(key, None)
+    for key in ("_reconciled_session", "resume_session_id", "_pending_workspace_name"):
+        st.session_state.pop(key, None)
+    from state_manager import initialize_state
+    initialize_state(from_reset=True)
     try:
         st.logout()
     except Exception:
         pass
-    from state_manager import initialize_state
-    initialize_state(from_reset=True)
     st.rerun()
 
 @st.dialog("Sign Out")
@@ -336,6 +348,18 @@ def show_auth_dialog():
     _render_auth_options()
 
 
+def render_sign_in_button(key: str):
+    """Header/landing "Sign In" button.
+
+    With OIDC configured and dev auth off (production) it goes straight to Google. With dev auth
+    on it opens the auth dialog, which offers both Google and the dev email login.
+    """
+    if is_auth_configured() and not is_dev_auth_enabled():
+        st.button("Sign In", key=key, use_container_width=True, on_click=st.login, kwargs={"provider": "google"})
+    elif st.button("Sign In", key=key, use_container_width=True):
+        show_auth_dialog()
+
+
 def _render_auth_options():
     """Body of the sign-in dialog (split out so it is testable outside a dialog context)."""
     st.markdown('<p style="color: #a3a3a3; font-size: 0.95rem; text-align: center; margin-bottom: 1.5rem;">Sign in to sync and manage your cleaning workspaces.</p>', unsafe_allow_html=True)
@@ -343,7 +367,7 @@ def _render_auth_options():
     # 1. Dev / Local Email Login (passwordless mock) -- only behind an explicit dev flag
     if is_dev_auth_enabled():
         st.markdown("**Sign In with Email (dev mode)**")
-        user_email_input = st.text_input("Email address", value="user@example.com", key="auth_dev_email_input")
+        user_email_input = st.text_input("Email address", placeholder="user@example.com", key="auth_dev_email_input")
         if st.button("Sign In", key="auth_dev_email_login_btn", use_container_width=True, type="primary"):
             if not is_dev_auth_enabled():
                 st.error("Email sign-in is disabled.")
@@ -521,9 +545,11 @@ def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple, df_state_key: s
 def plot_missingness_map(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Generates a binary missingness pattern map representation."""
     if df.size > 0:
-        null_mask = df.isnull().astype(int)
-        if null_mask.sum().sum() > 0:
-            vis_df, is_sampled = downsample_for_plot(null_mask)
+        # Column-wise check, then downsample *before* building the mask: never materialise a
+        # full-frame null mask (rows x cols) just to draw at most PLOT_SAMPLE_SIZE rows.
+        if any(df[c].isna().any() for c in df.columns):
+            sampled, is_sampled = downsample_for_plot(df)
+            vis_df = sampled.isnull().astype("uint8")
 
             fig = px.imshow(
                 vis_df,
@@ -686,13 +712,17 @@ def inject_posthog(st_object):
         posthog_js = f"""
         <script>
             !function(t,e){{var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){{function g(t,e){{var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){{t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}}} (p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){{var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}},u.people.toString=function(){{return u.toString(".people")}},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing list_properties single_pageview disable_sharing_assets_checking".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])}},e.__SV=1)}}(document,window.posthog||[]);
-            posthog.init('{posthog_key}', {{
-                api_host: 'https://us.i.posthog.com',
-                person_profiles: 'identified_only'
-            }})
+            if (!window.__lumiPosthogInit) {{
+                window.__lumiPosthogInit = true;
+                posthog.init({_js_literal(posthog_key)}, {{
+                    api_host: 'https://us.i.posthog.com',
+                    person_profiles: 'identified_only'
+                }});
+            }}
         </script>
         """
-        st_object.html(posthog_js)
+        # Scripts only execute with unsafe_allow_javascript (plain st.html strips them).
+        st_object.html(posthog_js, unsafe_allow_javascript=True)
 
 def queue_event(event_name: str, properties: dict = None):
     """Queues a PostHog event to be captured on the next render pass."""
@@ -700,14 +730,26 @@ def queue_event(event_name: str, properties: dict = None):
         st.session_state.pending_posthog_events = []
     st.session_state.pending_posthog_events.append((event_name, properties or {}))
 
+def _js_literal(value) -> str:
+    """JSON-encode ``value`` for embedding inside an inline <script> ('</' can not end the tag)."""
+    import json
+    return json.dumps(value, default=str).replace("</", "<\\/")
+
+
+def build_capture_script(events) -> str:
+    """Inline <script> that captures each ``(event_name, properties)`` pair, values safely escaped."""
+    js_lines = []
+    for event_name, properties in events:
+        name, props = _js_literal(str(event_name)), _js_literal(properties or {})
+        js_lines.append(
+            f"var ph = (window.parent && window.parent.posthog) || window.posthog; "
+            f"if (ph) {{ ph.capture({name}, {props}); }}"
+        )
+    return "<script>\n" + "\n".join("(function(){" + ln + "})();" for ln in js_lines) + "\n</script>"
+
+
 def flush_pending_events():
     """Renders any queued PostHog events via JS and clears the queue."""
     if "pending_posthog_events" in st.session_state and st.session_state.pending_posthog_events:
-        import json
-        js_lines = []
-        for event_name, properties in st.session_state.pending_posthog_events:
-            props_str = json.dumps(properties)
-            js_lines.append(f"if(window.parent && window.parent.posthog) {{ window.parent.posthog.capture('{event_name}', {props_str}); }} else if(window.posthog) {{ window.posthog.capture('{event_name}', {props_str}); }}")
-        js = "<script>\n" + "\n".join(js_lines) + "\n</script>"
-        st.html(js)
+        st.html(build_capture_script(st.session_state.pending_posthog_events), unsafe_allow_javascript=True)
         st.session_state.pending_posthog_events = []

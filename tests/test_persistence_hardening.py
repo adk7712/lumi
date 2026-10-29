@@ -62,12 +62,12 @@ class TestOwnerCheck(_Base):
         self.assertEqual(self._q("SELECT filename, step_count FROM sessions")[0], ("b.csv", 1))
 
     def test_guest_to_user_claim_allowed(self):
-        persistence.save_session("s1", "a.csv", [], [], [], "guest_abc")
+        persistence.save_session("s1", "a.csv", [], [], [], "guest_" + "a" * 32 + "@lumi.ai")
         self.assertTrue(persistence.save_session("s1", "a.csv", [], [], [], "alice@x.com"))
         self.assertEqual(self._owner("s1"), "alice@x.com")
 
     def test_reconcile_guest_ok_and_foreign_refused(self):
-        persistence.save_session("g", "a.csv", [], [], [], "guest_abc")
+        persistence.save_session("g", "a.csv", [], [], [], "guest_" + "a" * 32 + "@lumi.ai")
         self.assertTrue(persistence.reconcile_session("g", "alice@x.com"))
         self.assertEqual(self._owner("g"), "alice@x.com")
         self.assertFalse(persistence.reconcile_session("g", "bob@x.com"))

@@ -3,35 +3,64 @@ import numpy as np
 import re
 from typing import TypedDict, Optional, Any, Union, List, Tuple
 from rule_utils import evaluate_rule
+from query_guard import unsafe_regex_reason, safe_regex_replace, regex_deadline, RegexTimeoutError
 
 KNN_DEFAULT_NEIGHBORS = 5
+# Above this many rows KNN/Iterative imputers are fitted on a random sample (they are O(n^2)),
+# then applied to the full frame.
+KNN_MAX_ROWS = 20000
 FUZZY_MATCH_THRESHOLD = 85
+
+
+def _normalize_one_name(orig, method: str) -> str:
+    if method == 'snake_case':
+        val = re.sub(r'[ \-.]', '_', orig.strip())
+        val = re.sub(r'[^a-zA-Z0-9_]', '', val)
+        val = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', val)
+        val = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', val)
+        val = re.sub(r'_+', '_', val).lower().strip('_')
+        if val[:1].isdigit():
+            val = 'col_' + val
+    elif method == 'lowercase':
+        val = orig.lower()
+    elif method == 'uppercase':
+        val = orig.upper()
+    elif method == 'remove_spaces':
+        val = orig.replace(' ', '')
+    else:
+        val = orig
+    if not val:
+        val = f"column_{orig}"
+    return val
+
+
+def _dedupe_names(names: list) -> list:
+    """Make names unique: later repeats get _2, _3, ... suffixes that never collide with any name in the list."""
+    reserved = set(names)
+    used = set()
+    out = []
+    for name in names:
+        if name in used:
+            n = 2
+            while f"{name}_{n}" in reserved or f"{name}_{n}" in used:
+                n += 1
+            name = f"{name}_{n}"
+        used.add(name)
+        out.append(name)
+    return out
+
+
+def normalized_column_names(columns: list, method: str) -> list:
+    """New names for *columns* (same order, always unique); duplicate results get _2, _3 suffixes."""
+    return _dedupe_names([_normalize_one_name(c, method) for c in columns])
 
 
 def predict_column_renames(columns: list, method: str, only_changed: bool = False) -> dict:
     """Predicts how column names will be changed by the normalization logic."""
     new_names = {}
-    for orig in columns:
-        if method == 'snake_case':
-            val = re.sub(r'[ \-.]', '_', orig.strip())
-            val = re.sub(r'[^a-zA-Z0-9_]', '', val)
-            val = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', val)
-            val = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', val)
-            val = re.sub(r'_+', '_', val).lower().strip('_')
-            if val[:1].isdigit():
-                val = 'col_' + val
-        elif method == 'lowercase':
-            val = orig.lower()
-        elif method == 'uppercase':
-            val = orig.upper()
-        elif method == 'remove_spaces':
-            val = orig.replace(' ', '')
-        else:
-            val = orig
-            
-        if not val:
-            val = f"column_{orig}"
-            
+    for orig, val in zip(columns, normalized_column_names(columns, method)):
+        if orig in new_names:
+            continue
         if not only_changed or val != orig:
             new_names[orig] = val
     return new_names
@@ -91,6 +120,8 @@ def _handle_fill_null(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
             if num_s.isnull().all():
                 return df, [f"Warning: Cannot calculate {val} for non-numeric column '{col}'."]
             fill_value = num_s.mean() if val == "mean" else num_s.median()
+            if pd.api.types.is_integer_dtype(df[col]) and not pd.api.types.is_bool_dtype(df[col]):
+                fill_value = int(round(fill_value))  # integer columns can't hold a fractional fill
         except Exception as e:
             return df, [f"Warning: Cannot calculate {val} for column '{col}': {e}"]
     elif val == "mode":
@@ -116,7 +147,11 @@ def _handle_fill_null(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
                 selected_cols = numeric_cols
             
             df_numeric = df[selected_cols].copy()
-            df_imputed = pd.DataFrame(imputer.fit_transform(df_numeric), columns=selected_cols, index=df.index)
+            if len(df_numeric) > KNN_MAX_ROWS:
+                imputer.fit(df_numeric.sample(n=KNN_MAX_ROWS, random_state=42))
+                df_imputed = pd.DataFrame(imputer.transform(df_numeric), columns=selected_cols, index=df.index)
+            else:
+                df_imputed = pd.DataFrame(imputer.fit_transform(df_numeric), columns=selected_cols, index=df.index)
             df[col] = df_imputed[col]
             return df, []
         except Exception as e:
@@ -248,15 +283,33 @@ def _handle_replace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame,
     col = step.get('column')
     f, r_val = step.get('find'), step.get('replace')
     use_regex = step.get('regex', False)
+    if use_regex:
+        why = unsafe_regex_reason(f)
+        if why:
+            return df, [f"Warning: Replace on '{col}' skipped: unsafe regular expression ({why})."]
     
+    deadline = regex_deadline() if use_regex else None  # one budget for the whole step
+
+    def _replace(c):
+        if use_regex:
+            return safe_regex_replace(df[c], f, r_val, deadline=deadline)
+        return df[c].replace(f, r_val, regex=False)
+
     if col == "All":
+        warnings = []
         for c in df.select_dtypes(include=['object', 'string']).columns:
             orig_dtype = df[c].dtype
-            df[c] = df[c].replace(f, r_val, regex=use_regex).astype(orig_dtype)
-        return df, []
+            try:
+                df[c] = _replace(c).astype(orig_dtype)
+            except RegexTimeoutError as e:
+                warnings.append(f"Warning: Replace on '{c}' skipped: {e}; the column is unchanged.")
+        return df, warnings
     elif col in df.columns:
         orig_dtype = df[col].dtype
-        df[col] = df[col].replace(f, r_val, regex=use_regex).astype(orig_dtype)
+        try:
+            df[col] = _replace(col).astype(orig_dtype)
+        except RegexTimeoutError as e:
+            return df, [f"Warning: Replace on '{col}' skipped: {e}; the column is unchanged."]
         return df, []
     return df, [f"Warning: Column '{col}' not found for replace action."]
 
@@ -437,8 +490,12 @@ def _handle_drop_empty_rows(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Da
 
 def _handle_normalize_column_names(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     method = step.get('value', 'snake_case')
-    new_names = predict_column_renames(df.columns.tolist(), method)
-    return df.rename(columns=new_names), []
+    if method not in ('snake_case', 'lowercase', 'uppercase', 'remove_spaces'):
+        # Same as the export: an unknown method changes nothing.
+        return df, [f"Warning: Unknown column-name normalization method '{method}': no change."]
+    df = df.copy()
+    df.columns = normalized_column_names(df.columns.tolist(), method)
+    return df, []
 
 TRANSFORM_REGISTRY = {
     "drop_column": _handle_drop_column,
