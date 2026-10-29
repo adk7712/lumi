@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from pathlib import Path
 import streamlit as st
 from rule_utils import evaluate_rule
+from lumi_db.sessions import is_guest_id
 import os
 import hmac as _hmac_mod
 import hashlib as _hashlib_mod
@@ -31,17 +32,41 @@ def _is_truthy(value) -> bool:
     return str(value).strip().lower() in _TRUTHY
 
 
+_DEV_AUTH_PROD_WARNED = False
+
+
+def _is_production_env() -> bool:
+    try:
+        import persistence
+        return persistence.get_env() == "production"
+    except Exception:
+        # Fail closed: if the environment cannot be determined, honour LUMI_ENV directly.
+        return str(os.environ.get("LUMI_ENV", "")).strip().lower() == "production"
+
+
 def is_dev_auth_enabled() -> bool:
     """Passwordless mock email login is only allowed with an explicit dev flag.
 
     Enabled by env ``LUMI_DEV_AUTH=1``, ``st.secrets["dev_auth"] = true``, or ``LUMI_TESTING=1``.
+    Always disabled in production (``persistence.get_env() == "production"``), whatever the flags.
     """
-    if _is_truthy(os.environ.get("LUMI_DEV_AUTH", "")) or _is_truthy(os.environ.get("LUMI_TESTING", "")):
-        return True
-    try:
-        return _is_truthy(st.secrets.get("dev_auth", False))
-    except Exception:
+    global _DEV_AUTH_PROD_WARNED
+    flag = _is_truthy(os.environ.get("LUMI_DEV_AUTH", "")) or _is_truthy(os.environ.get("LUMI_TESTING", ""))
+    if not flag:
+        try:
+            flag = _is_truthy(st.secrets.get("dev_auth", False))
+        except Exception:
+            flag = False
+    if flag and _is_production_env():
+        if not _DEV_AUTH_PROD_WARNED:
+            _DEV_AUTH_PROD_WARNED = True
+            import logging
+            logging.getLogger("lumi.auth").warning(
+                "A dev-auth flag (LUMI_DEV_AUTH / LUMI_TESTING / secret dev_auth) is set in production; "
+                "ignoring it and keeping passwordless dev login disabled."
+            )
         return False
+    return flag
 
 
 def _get_cookie_secret() -> bytes:
@@ -99,6 +124,9 @@ def verify_cookie_value(raw, purpose: str):
 _COOKIE_CTRL_STATE_KEY = "_lumi_cookie_ctrl"
 _COOKIE_OPS_STATE_KEY = "_lumi_cookie_ops"
 _COOKIE_REASSERT_RUNS = 3
+# Browser lifetime for Lumi cookies (the library default is 1 day). The HMAC signature
+# carries no timestamp, so this max_age is the only expiry.
+COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 
 
 def _current_run_marker():
@@ -134,33 +162,36 @@ def get_cookie_controller():
     return controller
 
 
-def _apply_cookie_op(controller, name, value):
+def _apply_cookie_op(controller, name, value, max_age=None):
     if value is None:
         try:
             controller.remove(name)
         except KeyError:
             pass  # library pops its local copy without a default; browser removal was still issued
     else:
-        controller.set(name, value)
+        controller.set(name, value, max_age=max_age if max_age is not None else COOKIE_MAX_AGE_SECONDS)
 
 
-def _queue_cookie_op(name, value):
+def _queue_cookie_op(name, value, max_age=None):
     try:
         ops = dict(st.session_state.get(_COOKIE_OPS_STATE_KEY) or {})
-        ops[name] = [value, _COOKIE_REASSERT_RUNS]
+        ops[name] = [value, _COOKIE_REASSERT_RUNS, max_age]
         st.session_state[_COOKIE_OPS_STATE_KEY] = ops
     except Exception:
         pass
 
 
-def set_cookie(name: str, value: str) -> bool:
-    """Write a cookie now and re-assert it on the next runs (survives an immediate st.rerun)."""
-    _queue_cookie_op(name, value)
+def set_cookie(name: str, value: str, max_age=None) -> bool:
+    """Write a cookie now and re-assert it on the next runs (survives an immediate st.rerun).
+
+    ``max_age`` is in seconds; defaults to COOKIE_MAX_AGE_SECONDS (30 days).
+    """
+    _queue_cookie_op(name, value, max_age)
     controller = get_cookie_controller()
     if controller is None:
         return False
     try:
-        _apply_cookie_op(controller, name, value)
+        _apply_cookie_op(controller, name, value, max_age)
         return True
     except Exception as e:
         import logging
@@ -188,13 +219,15 @@ def sync_cookies():
     if controller is None or not ops:
         return
     remaining = {}
-    for name, (value, runs_left) in list(ops.items()):
+    for name, op in list(ops.items()):
+        value, runs_left = op[0], op[1]
+        max_age = op[2] if len(op) > 2 else None
         try:
-            _apply_cookie_op(controller, name, value)
+            _apply_cookie_op(controller, name, value, max_age)
         except Exception:
             pass
         if runs_left - 1 > 0:
-            remaining[name] = [value, runs_left - 1]
+            remaining[name] = [value, runs_left - 1, max_age]
     st.session_state[_COOKIE_OPS_STATE_KEY] = remaining
 
 
@@ -241,7 +274,7 @@ def get_logged_in_user() -> str:
 
     dev_email = st.session_state.get("dev_user_email")
     if dev_email:
-        if str(dev_email).startswith("guest_") or dev_enabled:
+        if is_guest_id(dev_email) or dev_enabled:
             return dev_email
         # A non-guest mock email without the dev flag is never a valid identity.
         st.session_state.pop("dev_user_email", None)
@@ -262,7 +295,7 @@ def get_logged_in_user() -> str:
 def is_authenticated_user() -> bool:
     """Check if the user is signed in with a real account (not an anonymous guest)."""
     user_email = get_logged_in_user()
-    if not user_email or user_email.startswith("guest_"):
+    if not user_email or is_guest_id(user_email):
         return False
     return True
 
@@ -277,17 +310,28 @@ def format_timestamp(iso_str: str) -> str:
     except Exception:
         return str(iso_str)[:16]
 
+_SIGNOUT_CACHE_PREFIXES = ("_cache_user_projects_", "_cached_resume_", "_cached_cookie_")
+
+
 def handle_signout():
     """Sign out the user, clearing local dev mock email, removing cookies, resetting state, and redirecting to landing page."""
     if "dev_user_email" in st.session_state:
         st.session_state.pop("dev_user_email", None)
     remove_cookie(USER_EMAIL_COOKIE)
+    # Drop the workspace session cookie and per-user caches so the next person on this browser
+    # cannot resume the previous user's workspace.
+    remove_cookie(SESSION_COOKIE)
+    for key in list(st.session_state.keys()):
+        if str(key).startswith(_SIGNOUT_CACHE_PREFIXES):
+            st.session_state.pop(key, None)
+    for key in ("_reconciled_session", "resume_session_id", "_pending_workspace_name"):
+        st.session_state.pop(key, None)
+    from state_manager import initialize_state
+    initialize_state(from_reset=True)
     try:
         st.logout()
     except Exception:
         pass
-    from state_manager import initialize_state
-    initialize_state(from_reset=True)
     st.rerun()
 
 @st.dialog("Sign Out")
@@ -304,6 +348,18 @@ def show_auth_dialog():
     _render_auth_options()
 
 
+def render_sign_in_button(key: str):
+    """Header/landing "Sign In" button.
+
+    With OIDC configured and dev auth off (production) it goes straight to Google. With dev auth
+    on it opens the auth dialog, which offers both Google and the dev email login.
+    """
+    if is_auth_configured() and not is_dev_auth_enabled():
+        st.button("Sign In", key=key, use_container_width=True, on_click=st.login, kwargs={"provider": "google"})
+    elif st.button("Sign In", key=key, use_container_width=True):
+        show_auth_dialog()
+
+
 def _render_auth_options():
     """Body of the sign-in dialog (split out so it is testable outside a dialog context)."""
     st.markdown('<p style="color: #a3a3a3; font-size: 0.95rem; text-align: center; margin-bottom: 1.5rem;">Sign in to sync and manage your cleaning workspaces.</p>', unsafe_allow_html=True)
@@ -311,7 +367,7 @@ def _render_auth_options():
     # 1. Dev / Local Email Login (passwordless mock) -- only behind an explicit dev flag
     if is_dev_auth_enabled():
         st.markdown("**Sign In with Email (dev mode)**")
-        user_email_input = st.text_input("Email address", value="user@example.com", key="auth_dev_email_input")
+        user_email_input = st.text_input("Email address", placeholder="user@example.com", key="auth_dev_email_input")
         if st.button("Sign In", key="auth_dev_email_login_btn", use_container_width=True, type="primary"):
             if not is_dev_auth_enabled():
                 st.error("Email sign-in is disabled.")
@@ -448,7 +504,21 @@ def apply_lumi_layout(fig: go.Figure) -> go.Figure:
     )
     return fig
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+# Chart caches skip hashing the DataFrame (too slow), so ``df_state_key`` must identify its
+# content: same file + same recipe always gives the same frame. A step *count* is not enough
+# (undo then a different step reuses it, and other users with the same file share the cache).
+CHART_CACHE_MAX_ENTRIES = 64
+
+
+def chart_state_key() -> str:
+    """Cache key for charts of the current working frame: file hash + recipe content hash."""
+    import json
+    recipe = st.session_state.get("cleaning_recipe", [])
+    sig = _hashlib_mod.sha1(json.dumps(recipe, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+    return f"{st.session_state.get('last_file_hash', 'none')}_{sig}"
+
+
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None}, max_entries=CHART_CACHE_MAX_ENTRIES)
 def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple, df_state_key: str = "default") -> go.Figure:
     """Computes features' correlation matrix and plots a filtered heatmap."""
     numeric_df = df.select_dtypes(include=[np.number])
@@ -471,13 +541,15 @@ def plot_correlation_matrix(df: pd.DataFrame, corr_range: tuple, df_state_key: s
             return apply_lumi_layout(fig)
     return None
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None}, max_entries=CHART_CACHE_MAX_ENTRIES)
 def plot_missingness_map(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Generates a binary missingness pattern map representation."""
     if df.size > 0:
-        null_mask = df.isnull().astype(int)
-        if null_mask.sum().sum() > 0:
-            vis_df, is_sampled = downsample_for_plot(null_mask)
+        # Column-wise check, then downsample *before* building the mask: never materialise a
+        # full-frame null mask (rows x cols) just to draw at most PLOT_SAMPLE_SIZE rows.
+        if any(df[c].isna().any() for c in df.columns):
+            sampled, is_sampled = downsample_for_plot(df)
+            vis_df = sampled.isnull().astype("uint8")
 
             fig = px.imshow(
                 vis_df,
@@ -522,7 +594,7 @@ def get_loading_spinner_html(text: str = "Apply Column Order") -> str:
     </div>
     """
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None}, max_entries=CHART_CACHE_MAX_ENTRIES)
 def plot_outlier_distribution(df: pd.DataFrame, df_state_key: str = "default") -> tuple:
     """Computes column Z-scores and plots comparative outlier box plots."""
     numeric_df = df.select_dtypes(include=[np.number])
@@ -594,11 +666,25 @@ def build_zscore_boxplot(df: pd.DataFrame, columns=None, max_columns: int = MAX_
     return fig, is_sampled
 
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None})
+@st.cache_data(hash_funcs={pd.DataFrame: lambda _: None}, max_entries=CHART_CACHE_MAX_ENTRIES)
 def plot_zscore_boxes(df: pd.DataFrame, columns: tuple, df_state_key: str = "default") -> tuple:
     """Cached wrapper around build_zscore_boxplot (keyed by df_state_key like other charts)."""
     return build_zscore_boxplot(df, columns)
 
+
+_posthog_nested_warned = False
+
+def _find_nested_secret(sec, key):
+    """Return `key` from any nested table of `sec` (TOML puts keys below a [table] header into it)."""
+    for k in sec:
+        val = sec[k]
+        if hasattr(val, "keys"):
+            if key in val:
+                return val[key]
+            found = _find_nested_secret(val, key)
+            if found:
+                return found
+    return None
 
 def inject_posthog(st_object):
     """Injects PostHog tracking script if a key is configured in st.secrets or environment variables."""
@@ -606,9 +692,18 @@ def inject_posthog(st_object):
     try:
         if "POSTHOG_API_KEY" in st_object.secrets:
             posthog_key = st_object.secrets["POSTHOG_API_KEY"]
+        else:
+            posthog_key = _find_nested_secret(st_object.secrets, "POSTHOG_API_KEY")
+            global _posthog_nested_warned
+            if posthog_key and not _posthog_nested_warned:
+                _posthog_nested_warned = True
+                import logging
+                logging.getLogger("lumi.analytics").warning(
+                    "POSTHOG_API_KEY is nested under a [table] in secrets; move it above [auth]"
+                )
     except Exception:
         pass
-        
+
     if not posthog_key:
         import os
         posthog_key = os.getenv("POSTHOG_API_KEY")
@@ -617,13 +712,17 @@ def inject_posthog(st_object):
         posthog_js = f"""
         <script>
             !function(t,e){{var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){{function g(t,e){{var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){{t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}}} (p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){{var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}},u.people.toString=function(){{return u.toString(".people")}},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing list_properties single_pageview disable_sharing_assets_checking".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])}},e.__SV=1)}}(document,window.posthog||[]);
-            posthog.init('{posthog_key}', {{
-                api_host: 'https://us.i.posthog.com',
-                person_profiles: 'identified_only'
-            }})
+            if (!window.__lumiPosthogInit) {{
+                window.__lumiPosthogInit = true;
+                posthog.init({_js_literal(posthog_key)}, {{
+                    api_host: 'https://us.i.posthog.com',
+                    person_profiles: 'identified_only'
+                }});
+            }}
         </script>
         """
-        st_object.html(posthog_js)
+        # Scripts only execute with unsafe_allow_javascript (plain st.html strips them).
+        st_object.html(posthog_js, unsafe_allow_javascript=True)
 
 def queue_event(event_name: str, properties: dict = None):
     """Queues a PostHog event to be captured on the next render pass."""
@@ -631,14 +730,26 @@ def queue_event(event_name: str, properties: dict = None):
         st.session_state.pending_posthog_events = []
     st.session_state.pending_posthog_events.append((event_name, properties or {}))
 
+def _js_literal(value) -> str:
+    """JSON-encode ``value`` for embedding inside an inline <script> ('</' can not end the tag)."""
+    import json
+    return json.dumps(value, default=str).replace("</", "<\\/")
+
+
+def build_capture_script(events) -> str:
+    """Inline <script> that captures each ``(event_name, properties)`` pair, values safely escaped."""
+    js_lines = []
+    for event_name, properties in events:
+        name, props = _js_literal(str(event_name)), _js_literal(properties or {})
+        js_lines.append(
+            f"var ph = (window.parent && window.parent.posthog) || window.posthog; "
+            f"if (ph) {{ ph.capture({name}, {props}); }}"
+        )
+    return "<script>\n" + "\n".join("(function(){" + ln + "})();" for ln in js_lines) + "\n</script>"
+
+
 def flush_pending_events():
     """Renders any queued PostHog events via JS and clears the queue."""
     if "pending_posthog_events" in st.session_state and st.session_state.pending_posthog_events:
-        import json
-        js_lines = []
-        for event_name, properties in st.session_state.pending_posthog_events:
-            props_str = json.dumps(properties)
-            js_lines.append(f"if(window.parent && window.parent.posthog) {{ window.parent.posthog.capture('{event_name}', {props_str}); }} else if(window.posthog) {{ window.posthog.capture('{event_name}', {props_str}); }}")
-        js = "<script>\n" + "\n".join(js_lines) + "\n</script>"
-        st.html(js)
+        st.html(build_capture_script(st.session_state.pending_posthog_events), unsafe_allow_javascript=True)
         st.session_state.pending_posthog_events = []

@@ -1,3 +1,7 @@
+[server]
+# Uploads are held in RAM (~1 GB on Streamlit Cloud); the app also caps XLSX expansion.
+maxUploadSize = 50
+
 [theme]
 base = "dark"
 primaryColor = "#ff4b4b"

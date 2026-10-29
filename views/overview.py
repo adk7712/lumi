@@ -2,32 +2,29 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import re
-from rule_utils import evaluate_rule
-from state_manager import add_step, sync_column_rename, calculate_health
-from engine_ops import predict_column_renames
-from ui_utils import plot_missingness_map
+from lumi_state.steps import content_signature, get_rule_masks
+from state_manager import add_step, calculate_health
+from ui_utils import plot_missingness_map, chart_state_key
 
 def render_overview_tab(df):
     m_col1, m_col2, m_col3, m_col4, m_col5, m_col6 = st.columns(6)
 
-    # Memoize metrics per DataFrame shape & recipe length
-    recipe_len = len(st.session_state.cleaning_recipe)
-    rules_len = len(st.session_state.rules)
-    cache_key = f"_overview_metrics_{id(df)}_{recipe_len}_{rules_len}"
+    # Memoize metrics on a content signature (recipe + rules incl. enabled flags + file); one entry only
+    sig = content_signature(df)
+    cached = st.session_state.get("_overview_metrics")
 
-    if cache_key in st.session_state:
-        metrics = st.session_state[cache_key]
+    if cached and cached[0] == sig:
+        metrics = cached[1]
     else:
         health = calculate_health(df)
         active_rules_list = [r for r in st.session_state.rules if r.get('enabled', True)]
         total_violations = 0
-        for rule in active_rules_list:
-            if rule.get('type') == "Informational":
+        for result in get_rule_masks(df).values():
+            if isinstance(result, Exception):
+                if not isinstance(result, (ValueError, KeyError, TypeError)):
+                    raise result
                 continue
-            try:
-                total_violations += evaluate_rule(df, rule).sum()
-            except (ValueError, KeyError, TypeError):
-                pass
+            total_violations += result.sum()
 
         dup_count = int(df.duplicated().sum())
         mem_mb = df.memory_usage(deep=True).sum() / (1024**2)
@@ -50,7 +47,7 @@ def render_overview_tab(df):
             "empty_rows_count": empty_rows_count,
             "whitespace_cols": whitespace_cols
         }
-        st.session_state[cache_key] = metrics
+        st.session_state["_overview_metrics"] = (sig, metrics)
 
     health = metrics["health"]
     active_rules_list = metrics["active_rules_list"]
@@ -59,14 +56,36 @@ def render_overview_tab(df):
     empty_cols = metrics["empty_cols"]
     empty_cols_count = len(empty_cols)
     empty_rows_count = metrics["empty_rows_count"]
-    whitespace_cols = metrics["whitespace_cols"]
+    whitespace_cols = list(metrics["whitespace_cols"])  # never mutate the cached list
 
     m_col1.metric("Health", f"{health}%")
-    m_col2.metric("Rows", f"{len(df):,}")
+    sample_info = st.session_state.get("sample_info")
+    raw_now = st.session_state.get("raw_data")
+    # Ignore stale info (e.g. after a workspace switch that bypassed the upload path).
+    if sample_info and (raw_now is None or sample_info.get("shown") != len(raw_now)):
+        sample_info = None
+    rows_help = None
+    if sample_info and sample_info.get("total"):
+        rows_help = f"Sampled from {sample_info['total']:,} rows in the uploaded file."
+    m_col2.metric("Rows", f"{len(df):,}", help=rows_help)
     m_col3.metric("Columns", f"{len(df.columns)}")
     m_col4.metric("Duplicates", f"{duplicates_count:,}")
     m_col5.metric("Violations", f"{total_violations:,}")
     m_col6.metric("Memory", f"{metrics['mem_mb']:.1f}MB")
+    if sample_info:
+        shown = sample_info["shown"]
+        if sample_info.get("method") == "head" or not sample_info.get("total"):
+            st.info(
+                f"Showing the first {shown:,} rows of a large file (total row count not computed). "
+                "Cleaning steps and the exported script apply to the full file; "
+                "Downloads in the Pipeline tab use these rows; use 'Prepare full-file download' there to export all rows."
+            )
+        else:
+            st.info(
+                f"Showing {shown:,} of {sample_info['total']:,} rows (random sample). "
+                "Cleaning steps and the exported script apply to the full file; "
+                "Downloads in the Pipeline tab use the sample; use 'Prepare full-file download' there to export all rows."
+            )
     st.divider()
 
     o_col1, o_col2 = st.columns(2)
@@ -82,16 +101,10 @@ def render_overview_tab(df):
         st.subheader("Workspace Status")
         st.markdown(f"**Recipe Steps:** {len(st.session_state.cleaning_recipe)}  \n**Tracked Features:** {len(st.session_state.active_features)}  \n**Active Rules:** {len(active_rules_list)}")
         st.subheader("Quick Actions")
-        for c in df.columns:
-            if df[c].dtype == 'object' or pd.api.types.is_string_dtype(df[c]):
-                non_null_strings = df[c].dropna().astype(str)
-                if (non_null_strings != non_null_strings.str.strip()).any():
-                    whitespace_cols.append(c)
-
         # Scan for column names containing spaces, dashes, or special characters
         unnormalized_cols = []
         for c in df.columns:
-            if ' ' in c or '-' in c or any(not (char.isalnum() or char == '_') for char in c):
+            if ' ' in str(c) or '-' in str(c) or any(not (char.isalnum() or char == '_') for char in str(c)):
                 unnormalized_cols.append(c)
 
         has_recommended = (duplicates_count > 0 or empty_cols_count > 0 or empty_rows_count > 0 or len(whitespace_cols) > 0 or len(unnormalized_cols) > 0)
@@ -144,11 +157,7 @@ def render_overview_tab(df):
                         width="stretch",
                         help=f"Converts column headers to snake_case (lowercase with underscores) to avoid syntax errors: {cols_preview}"
                     ):
-                        new_names = predict_column_renames(df.columns.tolist(), 'snake_case', only_changed=True)
-
                         add_step({"action": "normalize_column_names", "value": "snake_case"})
-                        for orig, val in new_names.items():
-                            sync_column_rename(orig, val)
                         st.session_state._needs_rerun = True
         else:
             st.markdown("*No quick actions recommended!*")
@@ -221,9 +230,7 @@ def render_overview_tab(df):
 
     # --- Missingness Pattern Map (relocated from Visual Insights) ---
     st.divider()
-    last_file_hash = st.session_state.get("last_file_hash", "none")
-    step_count = len(st.session_state.get("cleaning_recipe", []))
-    df_state_key = f"{last_file_hash}_{step_count}"
+    df_state_key = chart_state_key()
     with st.expander("Missingness Pattern Map", expanded=False):
         st.markdown("Visualizes where missing values occur across the rows of the dataset.")
         fig_null, is_null_sampled = plot_missingness_map(df, df_state_key)

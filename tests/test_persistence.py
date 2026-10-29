@@ -146,12 +146,12 @@ class TestPersistence(unittest.TestCase):
         self.assertEqual(user_projects[0]["session_id"], session_id)
 
     def test_session_security_checks(self):
-        # 1. Guest session: should be accessible by anyone
-        save_session("session-guest-999", "file.csv", [], [], set(), user_id="guest_xyz@lumi.ai", project_name="Guest Project")
+        # 1. Guest session: readable by the same guest or a registered claimer, not anonymous callers
+        save_session("session-guest-999", "file.csv", [], [], set(), user_id="guest_" + "a" * 32 + "@lumi.ai", project_name="Guest Project")
         loaded_by_none = load_session("session-guest-999", None)
         loaded_by_other = load_session("session-guest-999", "other@example.com")
         
-        self.assertIsNotNone(loaded_by_none)
+        self.assertIsNone(loaded_by_none)
         self.assertIsNotNone(loaded_by_other)
         
         # 2. Registered user session: should restrict access
@@ -245,7 +245,7 @@ class TestCookiesAndPersistence(unittest.TestCase):
             
             # Verify cookie set was called
             from ui_utils import sign_cookie_value
-            controller_instance.set.assert_called_once_with("lumi_session", sign_cookie_value(session_id, purpose="session"))
+            controller_instance.set.assert_called_once_with("lumi_session", sign_cookie_value(session_id, purpose="session"), max_age=30 * 24 * 60 * 60)
             
             # Verify initial state saved in DB
             db_session = load_session(session_id)

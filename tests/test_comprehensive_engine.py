@@ -111,7 +111,7 @@ def test_rule_violations():
     # 3. Relational Check
     rule_rel = {'type': 'Relational Check', 'col_a': 'parent_age', 'op': '>', 'col_b': 'age', 'target_type': 'Feature'}
     mask_rel = evaluate_rule(df, rule_rel)
-    assert list(mask_rel) == [False, False, True, True] # Row 2 violates (20 > 30 is False), Row 3 violates (nan comparison)
+    assert list(mask_rel) == [False, False, True, False] # Row 2 violates (20 > 30 is False); Row 3 null is not a relational violation
     
     # 4. Custom Expression — query now describes VIOLATIONS (rows to flag directly).
     # "city != 'NYC'" flags London and Paris as violations. Expected: [False, True, True, False]

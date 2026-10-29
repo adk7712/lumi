@@ -10,8 +10,21 @@ from persistence import (
 from state_manager import (
     switch_workspace,
     initialize_state,
-    delete_cached_file
+    delete_cached_file,
+    cancel_pending_saves,
 )
+from lumi_state.session_io import reset_workspace_view_state
+
+_MENU_GEN_KEY = "_ws_menu_gen"
+
+
+def _close_workspace_menus():
+    """Close every workspace three-dot popover on the next run.
+
+    A popover's open state lives in the browser and Streamlit cannot close it from Python, but
+    a new element key remounts it closed. Called when a menu item is used.
+    """
+    st.session_state[_MENU_GEN_KEY] = st.session_state.get(_MENU_GEN_KEY, 0) + 1
 
 @st.dialog("New Workspace")
 def show_new_workspace_dialog():
@@ -21,6 +34,7 @@ def show_new_workspace_dialog():
     if col1.button("Create", type="primary", use_container_width=True, key="confirm_create_ws"):
         st.session_state._pending_workspace_name = ws_name
         initialize_state(from_reset=True)
+        reset_workspace_view_state()
         st.rerun()
     if col2.button("Cancel", use_container_width=True, key="cancel_create_ws"):
         st.rerun()
@@ -45,10 +59,12 @@ def show_delete_workspace_dialog(session_id: str, project_name: str):
     col1, col2 = st.columns(2)
     if col1.button("Delete", type="primary", use_container_width=True, key=f"confirm_delete_{session_id}"):
         user_email = get_logged_in_user()
+        cancel_pending_saves(session_id)  # an in-flight save would re-insert the deleted row
         delete_session(session_id, user_email)
         delete_cached_file(session_id)
         if st.session_state.get("session_id") == session_id:
             initialize_state(from_reset=True)
+            reset_workspace_view_state()
         st.toast(f"Deleted {project_name}")
         st.rerun()
     if col2.button("Cancel", use_container_width=True, key=f"cancel_delete_{session_id}"):
@@ -106,16 +122,19 @@ def render_workspace_sidebar():
                     switch_workspace(p_id)
 
             with col_menu:
-                with st.popover("⋮", key=f"ws_menu_{p_id}", use_container_width=True):
+                with st.popover("⋮", key=f"ws_menu_{p_id}_{st.session_state.get(_MENU_GEN_KEY, 0)}", use_container_width=True):
                     if st.button("Rename", key=f"menu_rename_{p_id}", use_container_width=True):
+                        _close_workspace_menus()  # takes effect on the full rerun after the dialog
                         show_rename_workspace_dialog(p_id, p_name)
                     
                     pin_label = "Unpin" if is_pinned else "Pin to top"
                     if st.button(pin_label, key=f"menu_pin_{p_id}", use_container_width=True):
                         toggle_pin_session(p_id, user_email)
+                        _close_workspace_menus()
                         st.rerun()
                         
                     if st.button("Delete", key=f"menu_del_{p_id}", use_container_width=True, type="primary"):
+                        _close_workspace_menus()
                         show_delete_workspace_dialog(p_id, p_name)
 
             ts_str = format_timestamp(p.get("updated_at"))

@@ -77,8 +77,8 @@ def test_rule_evaluator_edge_cases():
     # Test Relational Check with constant comparison value
     rule_const = {'type': 'Relational Check', 'col_a': 'A', 'op': '>=', 'value': 20, 'target_type': 'Value'}
     mask_const = evaluate_rule(df, rule_const)
-    # A >= 20 is [False, True, True, False] -> violators are [True, False, False, True]
-    assert list(mask_const) == [True, False, False, True]
+    # A >= 20 is [False, True, True, False] -> violators are [True, False, False, False]; the NaN row is not a violation
+    assert list(mask_const) == [True, False, False, False]
 
     # Test Custom Expression syntax error handling
     rule_bad_query = {'type': 'Custom Expression', 'query': "A >>> 50"}
