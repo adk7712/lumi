@@ -4,436 +4,540 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lumi | Interactive Data Cleaning & Validation Assistant</title>
-    
-    <!-- Meta tags for SEO -->
     <meta name="description" content="Lumi is an interactive web app that automatically scans your CSV or Excel files to flag data quality issues, lets you clean them visually, and exports your workflow as a ready-to-run Python pipeline.">
     <meta name="keywords" content="data cleaning tool, data validation, python pipeline generator, pandas code generator, csv cleaner, excel validator, data profiling">
     <meta name="author" content="adk">
-    
-    <!-- OpenGraph Meta Tags for Social Sharing -->
     <meta property="og:title" content="Lumi | Interactive Data Cleaning & Validation Assistant">
-    <meta property="og:description" content="Scout your dataset, visually build data validation rulebooks, clean formatting issues, and instantly export production-ready Python pipelines.">
+    <meta property="og:description" content="Scout your dataset, visually build data validation rulebooks, clean formatting issues, and export your cleaning steps as a Python pipeline.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://github.com/adk7712/lumi">
-    
-    <!-- Tab Favicon -->
     <link rel="icon" type="image/svg+xml" href="assets/lumi_logo_white.svg">
 
-    <!-- Fonts & Icons -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap">
 
     <style>
-        /* --- Global Reset & Scrollbar --- */
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'JetBrains Mono', monospace;
+        :root {
+          /* === PRIMITIVES === */
+          --color-ink-950: #0e1117;
+          --color-ink-900: #161a23;
+          --color-ink-850: #1a1c24;
+          --color-ink-700: #2a2f3a;
+          --color-gray-500: #6b7280;
+          --color-gray-400: #9098a6;
+          --color-gray-300: #b4bac6;
+          --color-gray-100: #f2f4f7;
+          --color-white: #ffffff;
+          --color-red-400: #ff6161;
+          --color-red-500: #ff4b4b;
+          --color-red-600: #e63e3e;
+          --color-blue-400: #4aa3f0;
+          --color-green-400: #3fb86a;
+
+          --font-family-sans: 'IBM Plex Sans', system-ui, sans-serif;
+          --font-family-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+          --font-size-xs: 0.8125rem;  /* 13px */
+          --font-size-sm: 0.875rem;   /* 14px */
+          --font-size-base: 1rem;     /* 16px */
+          --font-size-lg: 1.125rem;   /* 18px */
+          --font-size-xl: 1.25rem;    /* 20px */
+          --font-size-2xl: 1.5rem;    /* 24px */
+          --font-size-h2: clamp(1.75rem, 1.471rem + 1.143vw, 2.5rem);  /* 28px at 390, 40px at 1440 */
+          --font-size-h1: clamp(2.25rem, 1.786rem + 1.905vw, 3.5rem);  /* 36px at 390, 56px at 1440 */
+
+          --font-weight-normal: 400;
+          --font-weight-medium: 500;
+          --font-weight-semibold: 600;
+
+          --leading-tight: 1.15;
+          --leading-snug: 1.3;
+          --leading-normal: 1.6;
+          --tracking-tight: -0.02em;
+          --tracking-normal: 0;
+          --tracking-wide: 0.04em;
+
+          --space-1: 0.25rem;  /* 4 */
+          --space-2: 0.5rem;   /* 8 */
+          --space-3: 0.75rem;  /* 12 */
+          --space-4: 1rem;     /* 16 */
+          --space-5: 1.25rem;  /* 20 */
+          --space-6: 1.5rem;   /* 24 */
+          --space-8: 2rem;     /* 32 */
+          --space-10: 2.5rem;  /* 40 */
+          --space-12: 3rem;    /* 48 */
+          --space-16: 4rem;    /* 64 */
+          --space-24: 6rem;    /* 96 */
+
+          --radius-sm: 0.25rem;  /* 4 */
+          --radius-md: 0.5rem;   /* 8 */
+
+          --shadow-none: none;
+          --shadow-ring-1: 0 0 0 1px;
+
+          --size-control-sm: 2.75rem;  /* 44 */
+          --size-control-md: 3rem;     /* 48 */
+          --size-container: 75rem;     /* 1200 */
+          --size-measure: 62ch;
+
+          --duration-fast: 150ms;
+          --ease-standard: ease-in-out;
+
+          /* === SEMANTIC === */
+          --color-background: var(--color-ink-950);
+          --color-surface-raised: var(--color-ink-900);
+          --color-surface-code: var(--color-ink-850);
+          --color-foreground: var(--color-gray-100);
+          --color-foreground-secondary: var(--color-gray-300);
+          --color-foreground-muted: var(--color-gray-400);
+          --color-accent: var(--color-red-500);
+          --color-primary: var(--color-red-500);
+          --color-primary-hover: var(--color-red-400);
+          --color-primary-active: var(--color-red-600);
+          --color-primary-foreground: var(--color-ink-950);
+          --color-border-subtle: var(--color-ink-700);
+          --color-border-control: var(--color-gray-500);
+          --color-border-control-hover: var(--color-gray-400);
+          --color-ring: var(--color-white);
+          --color-syntax-keyword: var(--color-blue-400);
+          --color-syntax-string: var(--color-green-400);
+          --color-syntax-comment: var(--color-gray-400);
+
+          --font-body: var(--font-family-sans);
+          --font-data: var(--font-family-mono);
+
+          --ring-width: 2px;
+          --ring-offset: 2px;
+
+          --spacing-gutter: var(--space-4);
+          --spacing-section: var(--space-16);
+          --spacing-block: var(--space-12);
+          --spacing-grid-gap: var(--space-8);
+
+          --transition-colors: color var(--duration-fast) var(--ease-standard),
+                               background-color var(--duration-fast) var(--ease-standard),
+                               border-color var(--duration-fast) var(--ease-standard);
+
+          /* === COMPONENTS === */
+          --button-height: var(--size-control-md);
+          --button-height-sm: var(--size-control-sm);
+          --button-padding-x: var(--space-6);
+          --button-padding-x-sm: var(--space-4);
+          --button-gap: var(--space-2);
+          --button-radius: var(--radius-md);
+          --button-font: var(--font-data);
+          --button-font-size: var(--font-size-base);
+          --button-font-size-sm: var(--font-size-sm);
+          --button-font-weight: var(--font-weight-semibold);
+          --button-bg: var(--color-primary);
+          --button-fg: var(--color-primary-foreground);
+          --button-hover-bg: var(--color-primary-hover);
+          --button-active-bg: var(--color-primary-active);
+          --button-secondary-bg: transparent;
+          --button-secondary-fg: var(--color-foreground);
+          --button-secondary-border: var(--color-border-control);
+          --button-secondary-hover-bg: var(--color-surface-raised);
+          --button-secondary-hover-border: var(--color-border-control-hover);
+          --button-secondary-active-bg: var(--color-surface-code);
+
+          --nav-height: var(--space-16);
+          --nav-link-font: var(--font-data);
+          --nav-link-font-size: var(--font-size-sm);
+          --nav-link-fg: var(--color-foreground-secondary);
+          --nav-link-hover-fg: var(--color-foreground);
+          --nav-link-active-fg: var(--color-accent);
+          --nav-link-padding-x: var(--space-3);
+          --nav-link-min-height: var(--size-control-sm);
+          --wordmark-font-size: var(--font-size-lg);
+          --wordmark-font-weight: var(--font-weight-semibold);
+          --wordmark-logo-size: var(--space-6);
+
+          --link-fg: var(--color-foreground-secondary);
+          --link-hover-fg: var(--color-foreground);
+          --link-active-fg: var(--color-accent);
+
+          --eyebrow-font: var(--font-data);
+          --eyebrow-font-size: var(--font-size-xs);
+          --eyebrow-fg: var(--color-accent);
+          --eyebrow-tracking: var(--tracking-wide);
+
+          --shot-bg: var(--color-background);
+          --shot-radius: var(--radius-md);
+          --shot-frame: var(--shadow-ring-1) var(--color-border-subtle);
+
+          --caption-font-size: var(--font-size-xs);
+          --caption-font: var(--font-data);
+          --caption-fg: var(--color-foreground-muted);
+
+          --step-border: var(--color-border-subtle);
+          --step-number-font: var(--font-data);
+          --step-number-fg: var(--color-accent);
+          --step-number-font-size: var(--font-size-sm);
+
+          --code-bg: var(--color-surface-code);
+          --code-fg: var(--color-foreground);
+          --code-font: var(--font-data);
+          --code-font-size: var(--font-size-xs);
+          --code-leading: var(--leading-normal);
+          --code-padding: var(--space-5);
+          --code-radius: var(--radius-md);
+          --code-border: var(--color-border-subtle);
+
+          --row-border: var(--color-border-subtle);
+          --row-padding-y: var(--space-4);
+          --section-border: var(--color-border-subtle);
         }
 
+        @media (min-width: 768px) {
+          :root {
+            --spacing-gutter: var(--space-8);
+            --spacing-section: var(--space-24);
+            --spacing-block: var(--space-16);
+            --code-font-size: var(--font-size-sm);
+            --code-padding: var(--space-6);
+          }
+        }
+
+        /* --- Base --- */
+        *, *::before, *::after { box-sizing: border-box; }
+        html { -webkit-text-size-adjust: 100%; }
+        body, h1, h2, h3, p, ul, ol, dl, dd, figure, pre { margin: 0; }
+        ul, ol { padding: 0; list-style: none; }
         body {
-            background-color: #0e1117;
-            color: #ffffff;
-            overflow-x: hidden;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
+            background-color: var(--color-background);
+            color: var(--color-foreground);
+            font-family: var(--font-body);
+            font-size: var(--font-size-base);
+            line-height: var(--leading-normal);
+            -webkit-font-smoothing: antialiased;
         }
-
-        /* --- Custom Scrollbar --- */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0e1117;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #262730;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #31333f;
-        }
-
-        /* --- Ambient Background Animations --- */
-        @keyframes orb-float-1 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33% { transform: translate(30px, 40px) scale(1.1); }
-            66% { transform: translate(-20px, -30px) scale(0.95); }
-        }
-        @keyframes orb-float-2 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(-40px, 30px) scale(1.15); }
-        }
-        @keyframes orb-float-3 {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            33% { transform: translate(20px, -30px) scale(0.9); }
-            66% { transform: translate(-30px, 20px) scale(1.05); }
-        }
-
-        .welcome-bg {
-            position: absolute;
-            top: 0;
-            left: 0;
+        img { display: block; }
+        .container {
             width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 0;
+            max-width: calc(var(--size-container) + 2 * var(--spacing-gutter));
+            margin-inline: auto;
+            padding-inline: var(--spacing-gutter);
+        }
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
             overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
 
-        .welcome-grid-bg {
-            background-image: radial-gradient(rgba(13, 148, 136, 0.08) 1px, transparent 0);
-            background-size: 24px 24px;
-            opacity: 0.8;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+        /* --- Text styles --- */
+        h1, h2, h3 { font-family: var(--font-body); font-weight: var(--font-weight-semibold); color: var(--color-foreground); text-wrap: balance; }
+        h1 { font-size: var(--font-size-h1); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight); }
+        h2 { font-size: var(--font-size-h2); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight); }
+        h3 { font-size: var(--font-size-2xl); line-height: var(--leading-snug); }
+        .lede, .body { color: var(--color-foreground-secondary); max-width: var(--size-measure); }
+        .lede { font-size: var(--font-size-lg); }
+        .helper, .caption {
+            font-family: var(--font-data);
+            font-size: var(--font-size-xs);
+            color: var(--color-foreground-muted);
+        }
+        .caption { margin-top: var(--space-3); }
+        .eyebrow {
+            font-family: var(--eyebrow-font);
+            font-size: var(--eyebrow-font-size);
+            font-weight: var(--font-weight-medium);
+            line-height: var(--leading-snug);
+            letter-spacing: var(--eyebrow-tracking);
+            color: var(--eyebrow-fg);
+        }
+        code { font-family: var(--font-data); font-size: 0.9em; color: inherit; }
+        .grid > * { min-width: 0; }
+        .grid { display: grid; gap: var(--space-8); }
+
+        /* --- Focus, motion --- */
+        :focus-visible {
+            outline: var(--ring-width) solid var(--color-ring);
+            outline-offset: var(--ring-offset);
+        }
+        a, .btn, pre.code { transition: var(--transition-colors); }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { transition: none !important; animation: none !important; }
         }
 
-        .welcome-orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(100px);
-            opacity: 0.1;
-        }
-
-        .welcome-orb-1 {
-            width: 500px;
-            height: 500px;
-            background: #ff4b4b;
-            top: 5%;
-            left: 5%;
-            animation: orb-float-1 15s ease-in-out infinite;
-        }
-
-        .welcome-orb-2 {
-            width: 450px;
-            height: 450px;
-            background: #a88beb;
-            top: 35%;
-            right: 5%;
-            animation: orb-float-2 18s ease-in-out infinite;
-        }
-
-        .welcome-orb-3 {
-            width: 400px;
-            height: 400px;
-            background: #2ecc71;
-            bottom: 15%;
-            left: 30%;
-            animation: orb-float-3 20s ease-in-out infinite;
-        }
-
-        /* --- Header / Navigation --- */
-        header {
-            position: relative;
-            z-index: 10;
-            max-width: 1200px;
-            width: 100%;
-            margin: 0 auto;
-            padding: 2rem 1.5rem 0 1.5rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo-container {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            text-decoration: none;
-            color: #ffffff;
-            font-size: 1.5rem;
-            font-weight: 800;
-            letter-spacing: 0.05em;
-            transition: color 0.2s ease;
-        }
-
-        .logo-container:hover {
-            color: #ff4b4b;
-        }
-
-        .logo-img {
-            width: 32px;
-            height: 32px;
-        }
-
-        /* --- Hero Section Split Layout --- */
-        .welcome-hero-container {
-            display: grid;
-            grid-template-columns: 1.1fr 0.9fr;
-            gap: 4rem;
-            align-items: center;
-            max-width: 1200px;
-            margin: 3rem auto;
-            padding: 0 1.5rem;
-            position: relative;
-            z-index: 1;
-        }
-
-        @media (max-width: 900px) {
-            .welcome-hero-container {
-                grid-template-columns: 1fr;
-                text-align: center;
-                gap: 2.5rem;
-                margin: 2rem auto;
-            }
-            .welcome-hero-right {
-                display: none;
-            }
-        }
-
-        .welcome-hero-left {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        @media (max-width: 900px) {
-            .welcome-hero-left {
-                align-items: center;
-            }
-        }
-
-        .welcome-title {
-            font-size: 2.8rem;
-            font-weight: 800;
-            line-height: 1.25;
-            letter-spacing: -0.02em;
-            margin-bottom: 1.25rem;
-            color: #ffffff;
-        }
-
-        @media (max-width: 900px) {
-            .welcome-title {
-                font-size: 2.2rem;
-            }
-        }
-
-        .highlight-teal {
-            color: #ff4b4b;
-        }
-
-        .welcome-subtitle {
-            font-size: 1.05rem;
-            font-weight: 400;
-            color: #a3a3a3;
-            line-height: 1.65;
-            margin-bottom: 2rem;
-            max-width: 600px;
-        }
-
-        /* --- Launch Call to Action Button --- */
-        .launch-btn {
+        /* --- Buttons --- */
+        .btn {
             display: inline-flex;
             align-items: center;
-            gap: 0.75rem;
-            background: #ff4b4b;
-            color: #ffffff;
+            justify-content: center;
+            gap: var(--button-gap);
+            height: var(--button-height);
+            padding-inline: var(--button-padding-x);
+            border-radius: var(--button-radius);
+            font-family: var(--button-font);
+            font-size: var(--button-font-size);
+            font-weight: var(--button-font-weight);
             text-decoration: none;
-            font-weight: 600;
-            font-size: 1.1rem;
-            padding: 1rem 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(255, 75, 75, 0.3);
-            transition: all 0.25s ease;
-            position: relative;
-            overflow: hidden;
-            border: none;
+            box-shadow: var(--shadow-none);
             cursor: pointer;
         }
-
-        .launch-btn:hover {
-            background: #ff3333;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 75, 75, 0.45);
+        .btn--sm {
+            height: var(--button-height-sm);
+            padding-inline: var(--button-padding-x-sm);
+            font-size: var(--button-font-size-sm);
         }
-
-        .launch-btn:active {
-            transform: translateY(0);
+        .btn--primary, .skip-link:focus {
+            background-color: var(--button-bg);
+            color: var(--button-fg);
+            border: none;
         }
-
-        .cta-helper {
-            font-size: 0.8rem;
-            color: #737373;
-            margin-top: 0.75rem;
-            letter-spacing: 0.02em;
+        .btn--primary:hover { background-color: var(--button-hover-bg); }
+        .btn--primary:active, .skip-link:active { background-color: var(--button-active-bg); }
+        .btn--secondary {
+            background-color: var(--button-secondary-bg);
+            color: var(--button-secondary-fg);
+            border: 1px solid var(--button-secondary-border);
         }
+        .btn--secondary:hover { background-color: var(--button-secondary-hover-bg); border-color: var(--button-secondary-hover-border); }
+        .btn--secondary:active { background-color: var(--button-secondary-active-bg); border-color: var(--button-secondary-hover-border); }
+        .btn svg, .nav-link svg, .link svg { flex: none; }
+        .actions { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-8); }
+        .actions .btn { width: 100%; }
 
-        .hero-image-container {
-            position: relative;
-            border: 1px solid #1a1a1a;
-            border-radius: 12px;
-            background: rgba(10, 10, 10, 0.6);
-            padding: 0.5rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-        }
-
-        .hero-image {
-            width: 100%;
-            height: auto;
-            border-radius: 8px;
-            display: block;
-        }
-
-        /* --- Showcase Section --- */
-        .platform-experience {
-            max-width: 1200px;
-            margin: 2rem auto 4rem auto;
-            padding: 0 1.5rem;
-            position: relative;
-            z-index: 1;
-            width: 100%;
-        }
-
-        .showcase-divider {
+        .skip-link {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
             border: 0;
-            border-top: 1px solid rgba(255, 255, 255, 0.12);
-            margin: 0 0 3rem 0;
         }
-
-        .exp-body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .demo-gif-container {
-            position: relative;
-            border: 1px solid #1a1a1a;
-            border-radius: 12px;
-            background: rgba(10, 10, 10, 0.6);
-            padding: 0.5rem;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-            width: 100%;
-        }
-
-        .demo-gif-placeholder {
-            width: 100%;
-            height: auto;
-            border-radius: 8px;
-            display: block;
-        }
-
-        /* --- Features Cards Grid --- */
-        .welcome-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 1.5rem;
-            max-width: 1200px;
-            margin: 4rem auto 5rem auto;
-            padding: 0 1.5rem;
-            position: relative;
+        .skip-link:focus {
+            position: fixed;
+            top: var(--space-2);
+            left: var(--space-2);
             z-index: 1;
-            width: 100%;
-        }
-
-        @media (max-width: 992px) {
-            .welcome-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-
-        @media (max-width: 600px) {
-            .welcome-grid { grid-template-columns: 1fr; }
-        }
-
-        .welcome-card {
-            position: relative;
-            background: rgba(18, 18, 18, 0.4);
-            border: 1px solid #161616;
-            border-radius: 8px;
-            padding: 2rem 1.5rem 1.75rem 1.5rem;
-            transition: all 0.3s ease;
-        }
-
-        .welcome-card:hover {
-            transform: translateY(-4px);
-            border-color: #ff4b4b;
-            background: rgba(18, 18, 18, 0.6);
-            box-shadow: 0 10px 25px rgba(255, 75, 75, 0.03);
-        }
-
-        .welcome-card-icon {
-            color: #ff4b4b;
-            font-size: 1.5rem;
-            margin-bottom: 0.75rem;
-            display: block;
-        }
-
-        .welcome-card-title {
-            font-size: 1rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            color: #ffffff;
-            letter-spacing: -0.01em;
-        }
-
-        .welcome-card-desc {
-            font-size: 0.8rem;
-            line-height: 1.5;
-            color: #a3a3a3;
-        }
-
-        /* --- Footer Styles --- */
-        footer {
-            margin-top: auto;
-            padding: 2rem 0;
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-            text-align: center;
-            position: relative;
-            z-index: 10;
-            width: 100%;
-        }
-
-        .footer-inner {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            font-size: 0.78rem;
-            color: rgba(255, 255, 255, 0.35);
-            letter-spacing: 0.02em;
-        }
-
-        .footer-sep {
-            color: rgba(255, 255, 255, 0.15);
-        }
-
-        .footer-link {
+            width: auto;
+            height: var(--button-height-sm);
+            margin: 0;
+            padding-inline: var(--button-padding-x-sm);
+            overflow: visible;
+            clip: auto;
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
-            color: rgba(255, 255, 255, 0.4);
+            border-radius: var(--button-radius);
+            font-family: var(--button-font);
+            font-size: var(--button-font-size-sm);
+            font-weight: var(--button-font-weight);
             text-decoration: none;
-            transition: color 0.2s ease;
         }
 
-        .footer-link:hover {
-            color: rgba(255, 75, 75, 0.85);
+        /* --- Header --- */
+        header .container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: var(--nav-height);
+        }
+        nav { display: flex; align-items: center; gap: var(--space-1); }
+        .wordmark {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2);
+            min-height: var(--nav-link-min-height);
+            font-family: var(--font-data);
+            font-size: var(--wordmark-font-size);
+            font-weight: var(--wordmark-font-weight);
+            color: var(--color-foreground);
+            text-decoration: none;
+        }
+        .wordmark img { width: var(--wordmark-logo-size); height: var(--wordmark-logo-size); }
+        .wordmark:hover, .wordmark:active { color: var(--color-accent); }
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+            min-height: var(--nav-link-min-height);
+            padding-inline: var(--nav-link-padding-x);
+            font-family: var(--nav-link-font);
+            font-size: var(--nav-link-font-size);
+            color: var(--nav-link-fg);
+            text-decoration: none;
+        }
+        .nav-link:hover { color: var(--nav-link-hover-fg); text-decoration: underline; text-underline-offset: var(--ring-offset); }
+        .nav-link:active { color: var(--nav-link-active-fg); text-decoration: underline; text-underline-offset: var(--ring-offset); }
+        .nav-anchor { display: none; }
+        .nav-gh { min-width: var(--nav-link-min-height); padding-inline: 0; }
+        .nav-gh-text {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
 
-        .footer-gh-icon {
-            vertical-align: middle;
+        /* --- Sections --- */
+        .hero { padding-block: var(--space-10) var(--spacing-section); }
+        .hero-side { margin-top: var(--space-6); }
+        .hero figure { margin-top: var(--spacing-block); }
+        .hero .helper { margin-top: var(--space-4); text-wrap: balance; }
+        .nowrap { white-space: nowrap; }
+        .section-inner { border-top: 1px solid var(--section-border); padding-block: var(--spacing-section); }
+        .section-inner > h2 + p { margin-top: var(--space-4); }
+
+        /* Steps */
+        .steps { display: grid; gap: var(--space-6); margin-top: var(--spacing-block); }
+        .steps li { border-top: 1px solid var(--step-border); padding-top: var(--space-5); }
+        .step-no {
+            display: block;
+            font-family: var(--step-number-font);
+            font-size: var(--step-number-font-size);
+            color: var(--step-number-fg);
+        }
+        .steps h3 { font-size: var(--font-size-xl); margin-top: var(--space-3); }
+        .steps p { margin-top: var(--space-2); color: var(--color-foreground-secondary); }
+
+        /* Workspace blocks */
+        .block { margin-top: var(--spacing-block); }
+        .block h3 { margin-top: var(--space-2); }
+        .block .body { margin-top: var(--space-4); }
+        .block figure { margin-top: var(--space-8); }
+        .checks {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: var(--space-3) var(--space-4);
+            font-family: var(--font-data);
+            font-size: var(--font-size-sm);
+            line-height: var(--leading-snug);
+            color: var(--color-foreground-secondary);
+            overflow-wrap: anywhere;
+        }
+        .block-text .checks { margin-top: var(--space-6); }
+        .block-text .rows { margin-top: var(--space-6); }
+
+        /* Definition rows */
+        .rows > div { border-top: 1px solid var(--row-border); padding-block: var(--row-padding-y); }
+        .rows dt {
+            font-family: var(--font-data);
+            font-size: var(--font-size-sm);
+            color: var(--color-foreground);
+            overflow-wrap: anywhere;
+        }
+        .rows dd { margin-top: var(--space-1); color: var(--color-foreground-secondary); max-width: var(--size-measure); }
+        .rows--wide { margin-top: var(--space-8); }
+
+        /* Screenshots */
+        .shot {
+            position: relative;
+            overflow: hidden;
+            aspect-ratio: var(--crop-w) / var(--crop-h);
+            background: var(--shot-bg);
+            border-radius: var(--shot-radius);
+            box-shadow: var(--shot-frame);
+        }
+        .shot img {
+            position: absolute;
+            display: block;
+            max-width: none;
+            height: auto;
+            width: calc(1600 / var(--crop-w) * 100%);
+            left: calc(var(--crop-x) / var(--crop-w) * -100%);
+            top: calc(var(--crop-y) / var(--crop-h) * -100%);
+        }
+        /* Source rectangles in screenshot pixels. Compact below 768 px, wide from 768 px. */
+        .shot--overview { --crop-x: 70;  --crop-y: 280; --crop-w: 720;  --crop-h: 720; }
+        .shot--scout    { --crop-x: 80;  --crop-y: 138; --crop-w: 720;  --crop-h: 158; }
+        .shot--rules    { --crop-x: 800; --crop-y: 362; --crop-w: 720;  --crop-h: 366; }
+        .shot--audit    { --crop-x: 80;  --crop-y: 222; --crop-w: 710;  --crop-h: 302; }
+        .shot--pipeline { --crop-x: 89;  --crop-y: 549; --crop-w: 620;  --crop-h: 324; }
+
+        /* Code */
+        pre.code {
+            display: block;
+            margin-top: var(--space-8);
+            max-width: 100%;
+            overflow-x: auto;
+            white-space: pre;
+            background: var(--code-bg);
+            color: var(--code-fg);
+            font-family: var(--code-font);
+            font-size: var(--code-font-size);
+            line-height: var(--code-leading);
+            padding: var(--code-padding);
+            border-radius: var(--code-radius);
+            border: 1px solid var(--code-border);
+        }
+        pre.code code { font-size: inherit; }
+        pre.code .k { color: var(--color-syntax-keyword); }
+        pre.code .s { color: var(--color-syntax-string); }
+        pre.code .c { color: var(--color-syntax-comment); font-style: italic; }
+        .output-split { margin-top: var(--spacing-block); }
+
+        /* Footer, links */
+        .link {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-1);
+            min-height: var(--nav-link-min-height);
+            color: var(--link-fg);
+            text-decoration: underline;
+        }
+        .link:hover { color: var(--link-hover-fg); }
+        .link:active { color: var(--link-active-fg); }
+        footer { border-top: 1px solid var(--section-border); padding-block: var(--space-8); font-family: var(--font-data); font-size: var(--font-size-xs); color: var(--color-foreground-secondary); }
+        footer .container { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+        /* --- 768 and up --- */
+        @media (min-width: 768px) {
+            .shot--overview { --crop-x: 0;   --crop-y: 100; --crop-w: 1600; --crop-h: 900; }
+            .shot--scout    { --crop-x: 70;  --crop-y: 136; --crop-w: 1460; --crop-h: 162; }
+            .shot--rules    { --crop-x: 800; --crop-y: 362; --crop-w: 720;  --crop-h: 608; }
+            .shot--audit    { --crop-x: 70;  --crop-y: 160; --crop-w: 1460; --crop-h: 370; }
+            .shot--pipeline { --crop-x: 89;  --crop-y: 549; --crop-w: 1200; --crop-h: 447; }
+            .actions { flex-direction: row; flex-wrap: wrap; }
+            .actions .btn { width: auto; }
+            .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-grid-gap); }
+            .checks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .block--split .shot-wrap { max-width: 720px; }
+            .rows--wide > div { display: grid; grid-template-columns: 200px minmax(0, 1fr); column-gap: var(--space-4); }
+            .rows--wide dd { margin-top: 0; }
         }
 
-        .footer-version {
-            font-variant-numeric: tabular-nums;
+        /* --- 1024 and up --- */
+        @media (min-width: 1024px) {
+            .nav-anchor { display: inline-flex; }
+            .nav-gh { min-width: 0; padding-inline: var(--nav-link-padding-x); }
+            .nav-gh-text {
+                position: static;
+                width: auto;
+                height: auto;
+                margin: 0;
+                overflow: visible;
+                clip: auto;
+                white-space: normal;
+            }
+            .hero { padding-top: var(--space-16); }
+            .hero-grid { grid-template-columns: 7fr 5fr; gap: var(--space-16); align-items: start; }
+            .hero-side { margin-top: 0; }
+            .lede { font-size: var(--font-size-xl); }
+            .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .split { grid-template-columns: 5fr 7fr; gap: var(--space-16); }
+            .block--split { align-items: start; }
+            .checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .block--split .shot-wrap { max-width: none; }
+            .rows--limits { max-width: 800px; }
         }
     </style>
-    
+
     <!-- PostHog Analytics -->
     <script>
         !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(".people")},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing list_properties single_pageview disable_sharing_assets_checking".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
@@ -448,100 +552,221 @@
     </script>
 </head>
 <body>
+    <a class="skip-link" href="#main">Skip to content</a>
 
-    <!-- Background Orbs & Grid -->
-    <div class="welcome-bg welcome-grid-bg">
-        <div class="welcome-orb welcome-orb-1"></div>
-        <div class="welcome-orb welcome-orb-2"></div>
-        <div class="welcome-orb welcome-orb-3"></div>
-    </div>
-
-    <!-- Navigation Header -->
     <header>
-        <a href="#" class="logo-container">
-            <img src="assets/lumi_logo_white.png" class="logo-img" alt="Lumi Logo">
-            <span>LUMI</span>
-        </a>
+        <div class="container">
+            <a class="wordmark" href="#">
+                <img src="assets/lumi_logo_white.svg" width="24" height="24" alt="">
+                <span>LUMI</span>
+            </a>
+            <nav aria-label="Main">
+                <a class="nav-link nav-anchor" href="#how">How it works</a>
+                <a class="nav-link nav-anchor" href="#workspace">Workspace</a>
+                <a class="nav-link nav-anchor" href="#output">Output</a>
+                <a class="nav-link nav-anchor" href="#limits">Limits</a>
+                <a class="nav-link nav-gh" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"> <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path> </svg><span class="nav-gh-text">GitHub</span><span class="sr-only"> (opens in a new tab)</span></a>
+                <a class="btn btn--primary btn--sm" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3H3v10h10V9M9.5 3H13v3.5M13 3 7.5 8.5"/></svg><span class="sr-only"> (opens in a new tab)</span></a>
+            </nav>
+        </div>
     </header>
 
-    <!-- Hero Section -->
-    <main class="welcome-hero-container">
-        <div class="welcome-hero-left">
-            <h1 class="welcome-title">UPGRADE YOUR <span class="highlight-teal">DATA EXPLORATION AND CLEANING</span> PROCESS.</h1>
-            <p class="welcome-subtitle">Lumi scouts your dataset, recommends actions, enforces your rules, and exports your workflow as clean Python code. All in your browser. No headache, just logic.</p>
-            
-            <a href="https://lumiapp.streamlit.app" target="_blank" class="launch-btn">
-                <span>Open Workspace</span>
-                <span class="material-icons">launch</span>
-            </a>
-            <p class="cta-helper">Free · Open Source · Works with CSV &amp; XLSX</p>
-        </div>
-        <div class="welcome-hero-right">
-            <div class="hero-image-container">
-                <img id="hero-graphic" src="assets/hero_graphics/hero_1.svg" class="hero-image" alt="Data Flow Illustration">
+    <main id="main">
+        <section class="hero" aria-labelledby="hero-title">
+            <div class="container">
+                <div class="grid hero-grid">
+                    <h1 id="hero-title">Clean a messy CSV and keep the Python that did it.</h1>
+                    <div class="hero-side">
+                        <p class="lede">Upload a CSV or Excel file. Lumi flags quality problems, you decide what to do about them with rules and cleaning steps, and you download the cleaned data with a Python script that runs the same steps.</p>
+                        <div class="actions">
+                            <a class="btn btn--primary" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3H3v10h10V9M9.5 3H13v3.5M13 3 7.5 8.5"/></svg><span class="sr-only"> (opens in a new tab)</span></a>
+                            <a class="btn btn--secondary" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"> <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path> </svg>View on GitHub<span class="sr-only"> (opens in a new tab)</span></a>
+                        </div>
+                        <p class="helper">Free · Open source · <span class="nowrap">No sign-up needed</span> · CSV and XLSX up to 50 MB</p>
+                    </div>
+                </div>
+                <figure>
+                    <div class="shot shot--overview">
+                        <img src="assets/screenshots/overview.png" width="1600" height="1000" fetchpriority="high" alt="Lumi's Overview tab for a loaded file: health 97%, 500 rows, 9 columns, and a donut chart of the dataset's composition.">
+                    </div>
+                    <figcaption class="caption">The Overview tab with a 500-row file loaded.</figcaption>
+                </figure>
             </div>
-        </div>
+        </section>
+
+        <section id="how" aria-labelledby="how-title">
+            <div class="container">
+                <div class="section-inner">
+                    <h2 id="how-title">How it works</h2>
+                    <ol class="steps" role="list">
+                        <li>
+                            <span class="step-no" aria-hidden="true">01</span>
+                            <h3>Upload a file</h3>
+                            <p>A CSV or XLSX, up to 50 MB. You don't need an account.</p>
+                        </li>
+                        <li>
+                            <span class="step-no" aria-hidden="true">02</span>
+                            <h3>Review the proposals</h3>
+                            <p>Scout checks the file for nulls, duplicates, outliers, mixed types and more. Accept what you want and dismiss the rest.</p>
+                        </li>
+                        <li>
+                            <span class="step-no" aria-hidden="true">03</span>
+                            <h3>Set rules and clean</h3>
+                            <p>Add rules, choose how violations get resolved, and apply any of the 17 transforms. Each step goes in the Audit Log.</p>
+                        </li>
+                        <li>
+                            <span class="step-no" aria-hidden="true">04</span>
+                            <h3>Export</h3>
+                            <p>Download the cleaned data, plus a script or notebook that runs the same steps outside Lumi.</p>
+                        </li>
+                    </ol>
+                </div>
+            </div>
+        </section>
+
+        <section id="workspace" aria-labelledby="workspace-title">
+            <div class="container">
+                <div class="section-inner">
+                    <h2 id="workspace-title">Inside the workspace</h2>
+                    <p class="body">These are screenshots from the app, cropped to fit.</p>
+
+                    <div class="block">
+                        <div class="grid split">
+                            <div class="block-text">
+                                <p class="eyebrow">Scout</p>
+                                <h3>It reads the file before you do</h3>
+                                <p class="body">Scout lists what it finds as proposals, naming the column and the number. Accept one and it becomes a rule or a cleaning step. Dismiss it and it goes away.</p>
+                            </div>
+                            <ul class="checks">
+                                <li>Duplicate rows</li>
+                                <li>All-empty rows</li>
+                                <li>Duplicate column names</li>
+                                <li>Non-snake_case headers</li>
+                                <li>Nulls</li>
+                                <li>Redundant columns (over 90% empty)</li>
+                                <li>Constant values</li>
+                                <li>IQR outliers</li>
+                                <li>Skew</li>
+                                <li>Mixed types</li>
+                                <li>High cardinality</li>
+                                <li>Leading and trailing whitespace</li>
+                            </ul>
+                        </div>
+                        <figure>
+                            <div class="shot shot--scout">
+                                <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Scout proposal cards in Lumi, including Null Check on discount with 6.8% missing values, each with Accept and Dismiss buttons.">
+                            </div>
+                        </figure>
+                    </div>
+
+                    <div class="block">
+                        <div class="grid split block--split">
+                            <div class="block-text">
+                                <p class="eyebrow">Rulebook</p>
+                                <h3>Rules with a count next to them</h3>
+                                <p class="body">Five rule types: Null Check, Range Check, Relational Check, Custom Expression and Informational. Each active rule shows its violation count, and you choose how to resolve it.</p>
+                                <dl class="rows">
+                                    <div><dt>Null violations</dt><dd>Drop Rows, Fill with Mean, Fill with Median, KNN Imputer, Iterative Imputer</dd></div>
+                                    <div><dt>Range violations</dt><dd>Drop Rows, Cap at Bounds, Log Transform</dd></div>
+                                    <div><dt>Evidence report</dt><dd>Download a Markdown report from the Rulebook.</dd></div>
+                                </dl>
+                            </div>
+                            <figure class="shot-wrap">
+                                <div class="shot shot--rules">
+                                    <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Active Rules in Lumi's Rulebook, including a Null Check on email_address with 44 violations, a resolution method dropdown, and Ignore and Remove buttons.">
+                                </div>
+                            </figure>
+                        </div>
+                    </div>
+
+                    <div class="block">
+                        <p class="eyebrow">Audit Log</p>
+                        <h3>Every step, with what it did to the row count</h3>
+                        <p class="body">Steps are numbered and show health % and row count. In this log, <code>drop_duplicates</code> took the file from 500 rows to 490. Remove any step, or use undo and redo.</p>
+                        <figure>
+                            <div class="shot shot--audit">
+                                <img src="assets/screenshots/audit-log.png" width="1600" height="556" loading="lazy" decoding="async" alt="Lumi's Audit Log with five numbered steps, from Original Data at 500 rows to strip_whitespace on customer_name at 490 rows, each with its health score.">
+                            </div>
+                        </figure>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="output" aria-labelledby="output-title">
+            <div class="container">
+                <div class="section-inner">
+                    <h2 id="output-title">What you get out</h2>
+                    <p class="body">The script has two functions. <code>clean_data()</code> applies your steps, and <code>validate_data()</code> returns violation counts.</p>
+<pre class="code" tabindex="0" role="region" aria-label="Start of the generated clean_data function"><code><span class="k">def</span> <span class="k">clean_data</span>(df):
+    <span class="c"># Match the dtypes Lumi uses after upload (numeric downcasting) so results agree with the app.</span>
+    df = _downcast_dtypes(df)
+    <span class="c"># Remove duplicate rows from the DataFrame.</span>
+    df = df.drop_duplicates()
+    <span class="k">try</span>:
+        <span class="c"># Strip whitespace from the text cells of all object/string columns (nulls and non-text values untouched).</span>
+        <span class="k">for</span> c <span class="k">in</span> df.select_dtypes(include=[<span class="s">'object'</span>, <span class="s">'string'</span>]).columns:
+            df[c] = _apply_to_str(df[c], <span class="k">lambda</span> x: x.str.strip())
+    <span class="k">except</span> Exception <span class="k">as</span> e:
+        warnings.warn(<span class="s">"Skipped strip_whitespace on 'All': "</span> + str(e))</code></pre>
+                    <p class="caption">The start of clean_data(), generated for the audit log above.</p>
+
+                    <div class="grid split output-split">
+                        <dl class="rows">
+                            <div><dt>Cleaned CSV</dt><dd>The dataset with your steps applied.</dd></div>
+                            <div><dt>Cleaned Excel</dt><dd>The same data as an Excel file.</dd></div>
+                            <div><dt>clean_data.py</dt><dd>The Python script, with clean_data() and validate_data().</dd></div>
+                            <div><dt>clean_data.ipynb</dt><dd>The same pipeline as a Jupyter notebook.</dd></div>
+                        </dl>
+                        <figure>
+                            <div class="shot shot--pipeline">
+                                <img src="assets/screenshots/pipeline.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Generated Python in Lumi: a comment reading Normalize column names using snake_case format, followed by the loop that does it.">
+                            </div>
+                            <figcaption class="caption">The same function further down, in the Pipeline Preview tab.</figcaption>
+                        </figure>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="limits" aria-labelledby="limits-title">
+            <div class="container">
+                <div class="section-inner">
+                    <h2 id="limits-title">Good to know</h2>
+                    <dl class="rows rows--wide rows--limits">
+                        <div><dt>Upload limit</dt><dd>50 MB per file.</dd></div>
+                        <div><dt>Sampling</dt><dd>Files over 10,000 rows are analysed on a random 10,000-row sample.</dd></div>
+                        <div><dt>Full-file download</dt><dd>You can still download the whole file cleaned. Lumi replays your recipe on it.</dd></div>
+                        <div><dt>Processing</dt><dd>Your file is uploaded and processed on the server. Check your data policy before uploading anything sensitive.</dd></div>
+                        <div><dt>Sign-in</dt><dd>Optional. You can use Lumi without an account.</dd></div>
+                        <div><dt>License</dt><dd>Open source under AGPL v3.</dd></div>
+                    </dl>
+                </div>
+            </div>
+        </section>
+
+        <section aria-labelledby="cta-title">
+            <div class="container">
+                <div class="section-inner">
+                    <h2 id="cta-title">Try it on a file you're working on now.</h2>
+                    <p class="body">Free, open source, and no sign-up needed.</p>
+                    <div class="actions">
+                        <a class="btn btn--primary" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3H3v10h10V9M9.5 3H13v3.5M13 3 7.5 8.5"/></svg><span class="sr-only"> (opens in a new tab)</span></a>
+                        <a class="btn btn--secondary" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"> <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path> </svg>Read the source<span class="sr-only"> (opens in a new tab)</span></a>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
 
-    <!-- Demo Showcase -->
-    <section class="platform-experience">
-        <hr class="showcase-divider">
-        <div class="exp-body">
-            <div class="demo-gif-container">
-                <img src="https://i.giphy.com/3o7TKSjRrfIPjei1nG.gif" class="demo-gif-placeholder" alt="App Demo GIF">
-            </div>
-        </div>
-    </section>
-
-    <!-- Features Cards Grid -->
-    <section class="welcome-grid">
-        <article class="welcome-card" id="card-scout">
-            <span class="material-icons welcome-card-icon">auto_fix_high</span>
-            <h3 class="welcome-card-title">Smart Scout</h3>
-            <p class="welcome-card-desc">Drop a file and Lumi automatically scans every column for missing values, outliers, mixed types, whitespace, and zero-variance fields — then suggests one-click fixes.</p>
-        </article>
-        <article class="welcome-card" id="card-rules">
-            <span class="material-icons welcome-card-icon">rule</span>
-            <h3 class="welcome-card-title">Visual Rulebook</h3>
-            <p class="welcome-card-desc">Build null checks, range constraints, relational comparisons, and custom Pandas expressions. Resolve violations with strategies like mean fill, KNN imputation, or row drops.</p>
-        </article>
-        <article class="welcome-card" id="card-export">
-            <span class="material-icons welcome-card-icon">code</span>
-            <h3 class="welcome-card-title">Export Everything</h3>
-            <p class="welcome-card-desc">Download your cleaned dataset as CSV or Excel. Or export the entire pipeline as a standalone Python script or Jupyter Notebook with built-in validation assertions.</p>
-        </article>
-        <article class="welcome-card" id="card-audit">
-            <span class="material-icons welcome-card-icon">history</span>
-            <h3 class="welcome-card-title">Full Audit Trail</h3>
-            <p class="welcome-card-desc">Every transformation is logged with health scores and row counts. Undo any step, remove steps mid-pipeline, and download a compliance-ready evidence report.</p>
-        </article>
-    </section>
-
-    <!-- Footer -->
     <footer>
-        <div class="footer-inner">
+        <div class="container">
             <span>Built by adk</span>
-            <span class="footer-sep">·</span>
-            <a href="https://github.com/adk7712/lumi" target="_blank" class="footer-link">
-                <svg class="footer-gh-icon" height="14" viewBox="0 0 16 16" width="14" fill="currentColor">
-                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
-                </svg>
-                <span>GitHub</span>
-            </a>
-            <span class="footer-sep">·</span>
-            <span class="footer-version">v1.0.0</span>
+            <span aria-hidden="true">·</span>
+            <a class="link" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"> <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path> </svg>GitHub<span class="sr-only"> (opens in a new tab)</span></a>
+            <span aria-hidden="true">·</span>
+            <span>v1.0.0</span>
         </div>
     </footer>
-
-    <script>
-        window.addEventListener('DOMContentLoaded', () => {
-            const totalGraphics = 3;
-            const randomIndex = Math.floor(Math.random() * totalGraphics) + 1;
-            const heroImg = document.getElementById('hero-graphic');
-            if (heroImg) {
-                heroImg.src = `assets/hero_graphics/hero_${randomIndex}.svg`;
-            }
-        });
-    </script>
 </body>
 </html>
