@@ -13,535 +13,467 @@
     <meta property="og:url" content="https://github.com/adk7712/lumi">
     <link rel="icon" type="image/svg+xml" href="assets/lumi_logo_white.svg">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+    <script>document.documentElement.className += ' js';</script>
+
+    <link rel="preconnect" href="https://api.fontshare.com">
+    <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+    <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,700&display=swap" rel="stylesheet">
 
     <style>
         :root {
-          /* === PRIMITIVES === */
-          --color-ink-950: #0e1117;
-          --color-ink-900: #161a23;
-          --color-ink-850: #1a1c24;
-          --color-ink-700: #2a2f3a;
-          --color-gray-500: #6b7280;
-          --color-gray-400: #9098a6;
-          --color-gray-300: #b4bac6;
-          --color-gray-100: #f2f4f7;
-          --color-white: #ffffff;
-          --color-red-400: #ff6161;
-          --color-red-500: #ff4b4b;
-          --color-red-600: #e63e3e;
-          --color-blue-400: #4aa3f0;
-          --color-green-400: #3fb86a;
+          --bg: #0e1117;
+          --raised: #1a1c24;
+          --ink: #f2f4f7;
+          --muted: #b4bac6;
+          --accent: #ff4b4b;
+          --accent-hover: #ff6a6a;
+          --accent-press: #e63e3e;
+          --paper: #f2f4f7;
+          --paper-ink: #0e1117;
+          --rail: #3a3f4c;
+          --syn-k: #4aa3f0;
+          --syn-s: #3fb86a;
+          --syn-c: #9098a6;
 
-          --font-family-sans: 'IBM Plex Sans', system-ui, sans-serif;
-          --font-family-mono: 'JetBrains Mono', ui-monospace, monospace;
+          --margin: clamp(16px, 2vw, 28px);
+          --gap: 28px;
+          --section: clamp(96px, 11vw, 168px);
 
-          --font-size-xs: 0.8125rem;  /* 13px */
-          --font-size-sm: 0.875rem;   /* 14px */
-          --font-size-base: 1rem;     /* 16px */
-          --font-size-lg: 1.125rem;   /* 18px */
-          --font-size-xl: 1.25rem;    /* 20px */
-          --font-size-2xl: 1.5rem;    /* 24px */
-          --font-size-h2: clamp(1.75rem, 1.471rem + 1.143vw, 2.5rem);  /* 28px at 390, 40px at 1440 */
-          --font-size-h1: clamp(2.25rem, 1.786rem + 1.905vw, 3.5rem);  /* 36px at 390, 56px at 1440 */
+          --font: 'General Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+          --mono: ui-monospace, SFMono-Regular, Menlo, monospace; /* taste-skill-ignore: real code only */
 
-          --font-weight-normal: 400;
-          --font-weight-medium: 500;
-          --font-weight-semibold: 600;
+          --small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+          --body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+          --lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+          --head: clamp(2rem, 1.3rem + 3.2vw, 4rem);
+          --hero: clamp(64px, 10.5vw, 168px);
+          --phrase: clamp(56px, 9vw, 150px);
 
-          --leading-tight: 1.15;
-          --leading-snug: 1.3;
-          --leading-normal: 1.6;
-          --tracking-tight: -0.02em;
-          --tracking-normal: 0;
-          --tracking-wide: 0.04em;
-
-          --space-1: 0.25rem;  /* 4 */
-          --space-2: 0.5rem;   /* 8 */
-          --space-3: 0.75rem;  /* 12 */
-          --space-4: 1rem;     /* 16 */
-          --space-5: 1.25rem;  /* 20 */
-          --space-6: 1.5rem;   /* 24 */
-          --space-8: 2rem;     /* 32 */
-          --space-10: 2.5rem;  /* 40 */
-          --space-12: 3rem;    /* 48 */
-          --space-16: 4rem;    /* 64 */
-          --space-24: 6rem;    /* 96 */
-
-          --radius-sm: 0.25rem;  /* 4 */
-          --radius-md: 0.5rem;   /* 8 */
-
-          --shadow-none: none;
-          --shadow-ring-1: 0 0 0 1px;
-
-          --size-control-sm: 2.75rem;  /* 44 */
-          --size-control-md: 3rem;     /* 48 */
-          --size-container: 75rem;     /* 1200 */
-          --size-measure: 62ch;
-
-          --duration-fast: 150ms;
-          --ease-standard: ease-in-out;
-
-          /* === SEMANTIC === */
-          --color-background: var(--color-ink-950);
-          --color-surface-raised: var(--color-ink-900);
-          --color-surface-code: var(--color-ink-850);
-          --color-foreground: var(--color-gray-100);
-          --color-foreground-secondary: var(--color-gray-300);
-          --color-foreground-muted: var(--color-gray-400);
-          --color-accent: var(--color-red-500);
-          --color-primary: var(--color-red-500);
-          --color-primary-hover: var(--color-red-400);
-          --color-primary-active: var(--color-red-600);
-          --color-primary-foreground: var(--color-ink-950);
-          --color-border-subtle: var(--color-ink-700);
-          --color-border-control: var(--color-gray-500);
-          --color-border-control-hover: var(--color-gray-400);
-          --color-ring: var(--color-white);
-          --color-syntax-keyword: var(--color-blue-400);
-          --color-syntax-string: var(--color-green-400);
-          --color-syntax-comment: var(--color-gray-400);
-
-          --font-body: var(--font-family-sans);
-          --font-data: var(--font-family-mono);
-
-          --ring-width: 2px;
-          --ring-offset: 2px;
-
-          --spacing-gutter: var(--space-4);
-          --spacing-section: var(--space-16);
-          --spacing-block: var(--space-12);
-          --spacing-grid-gap: var(--space-8);
-
-          --transition-colors: color var(--duration-fast) var(--ease-standard),
-                               background-color var(--duration-fast) var(--ease-standard),
-                               border-color var(--duration-fast) var(--ease-standard);
-
-          /* === COMPONENTS === */
-          --button-height: var(--size-control-md);
-          --button-height-sm: var(--size-control-sm);
-          --button-padding-x: var(--space-6);
-          --button-padding-x-sm: var(--space-4);
-          --button-gap: var(--space-2);
-          --button-radius: var(--radius-md);
-          --button-font: var(--font-data);
-          --button-font-size: var(--font-size-base);
-          --button-font-size-sm: var(--font-size-sm);
-          --button-font-weight: var(--font-weight-semibold);
-          --button-bg: var(--color-primary);
-          --button-fg: var(--color-primary-foreground);
-          --button-hover-bg: var(--color-primary-hover);
-          --button-active-bg: var(--color-primary-active);
-          --button-secondary-bg: transparent;
-          --button-secondary-fg: var(--color-foreground);
-          --button-secondary-border: var(--color-border-control);
-          --button-secondary-hover-bg: var(--color-surface-raised);
-          --button-secondary-hover-border: var(--color-border-control-hover);
-          --button-secondary-active-bg: var(--color-surface-code);
-
-          --nav-height: var(--space-16);
-          --nav-link-font: var(--font-data);
-          --nav-link-font-size: var(--font-size-sm);
-          --nav-link-fg: var(--color-foreground-secondary);
-          --nav-link-hover-fg: var(--color-foreground);
-          --nav-link-active-fg: var(--color-accent);
-          --nav-link-padding-x: var(--space-3);
-          --nav-link-min-height: var(--size-control-sm);
-          --wordmark-font-size: var(--font-size-lg);
-          --wordmark-font-weight: var(--font-weight-semibold);
-          --wordmark-logo-size: var(--space-6);
-
-          --link-fg: var(--color-foreground-secondary);
-          --link-hover-fg: var(--color-foreground);
-          --link-active-fg: var(--color-accent);
-
-          --eyebrow-font: var(--font-data);
-          --eyebrow-font-size: var(--font-size-xs);
-          --eyebrow-fg: var(--color-accent);
-          --eyebrow-tracking: var(--tracking-wide);
-
-          --shot-bg: var(--color-background);
-          --shot-radius: var(--radius-md);
-          --shot-frame: var(--shadow-ring-1) var(--color-border-subtle);
-
-          --caption-font-size: var(--font-size-xs);
-          --caption-font: var(--font-data);
-          --caption-fg: var(--color-foreground-muted);
-
-          --step-border: var(--color-border-subtle);
-          --step-number-font: var(--font-data);
-          --step-number-fg: var(--color-accent);
-          --step-number-font-size: var(--font-size-sm);
-
-          --code-bg: var(--color-surface-code);
-          --code-fg: var(--color-foreground);
-          --code-font: var(--font-data);
-          --code-font-size: var(--font-size-xs);
-          --code-leading: var(--leading-normal);
-          --code-padding: var(--space-5);
-          --code-radius: var(--radius-md);
-          --code-border: var(--color-border-subtle);
-
-          --row-border: var(--color-border-subtle);
-          --row-padding-y: var(--space-4);
-          --section-border: var(--color-border-subtle);
+          --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+          --ring: var(--ink);
+          --cap: 0.718;
+        }
+        @media (max-width: 1023px) {
+          :root { --phrase: 13vw; }
+        }
+        @media (max-width: 600px) {
+          :root { --hero: 11vw; }
         }
 
-        @media (min-width: 768px) {
-          :root {
-            --spacing-gutter: var(--space-8);
-            --spacing-section: var(--space-24);
-            --spacing-block: var(--space-16);
-            --code-font-size: var(--font-size-sm);
-            --code-padding: var(--space-6);
-          }
-        }
-
-        /* --- Base --- */
-        *, *::before, *::after { box-sizing: border-box; }
-        html { -webkit-text-size-adjust: 100%; }
+        *, *::before, *::after { box-sizing: border-box; border-radius: 0; }
+        html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
         body, h1, h2, h3, p, ul, ol, dl, dd, figure, pre { margin: 0; }
         ul, ol { padding: 0; list-style: none; }
         body {
-            background-color: var(--color-background);
-            color: var(--color-foreground);
-            font-family: var(--font-body);
-            font-size: var(--font-size-base);
-            line-height: var(--leading-normal);
+            background: var(--bg);
+            color: var(--ink);
+            font-family: var(--font);
+            font-weight: 400;
+            font-size: var(--body);
+            line-height: 1.45;
+            letter-spacing: 0;
             -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
         }
         img { display: block; }
-        .container {
-            width: 100%;
-            max-width: calc(var(--size-container) + 2 * var(--spacing-gutter));
-            margin-inline: auto;
-            padding-inline: var(--spacing-gutter);
+        button, input { font: inherit; color: inherit; }
+        h1, h2, h3 { font-weight: 700; text-wrap: balance; }
+        code { font-family: var(--mono); font-size: 1em; }
+        .sr-only, .skip-link, .nav-gh-text { /* taste-skill-ignore: visually hidden text */
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
         }
-        .sr-only {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
-        }
+        small, .small, figcaption { font-size: var(--small); }
+        figcaption { margin-top: 12px; color: var(--muted); }
+        .note { font-size: var(--small); color: var(--muted); }
 
-        /* --- Text styles --- */
-        h1, h2, h3 { font-family: var(--font-body); font-weight: var(--font-weight-semibold); color: var(--color-foreground); text-wrap: balance; }
-        h1 { font-size: var(--font-size-h1); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight); }
-        h2 { font-size: var(--font-size-h2); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight); }
-        h3 { font-size: var(--font-size-2xl); line-height: var(--leading-snug); }
-        .lede, .body { color: var(--color-foreground-secondary); max-width: var(--size-measure); }
-        .lede { font-size: var(--font-size-lg); }
-        .helper, .caption {
-            font-family: var(--font-data);
-            font-size: var(--font-size-xs);
-            color: var(--color-foreground-muted);
+        /* Focus, press, links */
+        :focus-visible { outline: 3px solid var(--ring); outline-offset: 3px; }
+        .link {
+            color: inherit;
+            text-decoration: underline;
+            text-decoration-thickness: 0.08em;
+            text-underline-offset: 0.22em;
+            transition: text-decoration-thickness 0.15s ease, opacity 0.15s ease;
         }
-        .caption { margin-top: var(--space-3); }
-        .eyebrow {
-            font-family: var(--eyebrow-font);
-            font-size: var(--eyebrow-font-size);
-            font-weight: var(--font-weight-medium);
-            line-height: var(--leading-snug);
-            letter-spacing: var(--eyebrow-tracking);
-            color: var(--eyebrow-fg);
-        }
-        code { font-family: var(--font-data); font-size: 0.9em; color: inherit; }
-        .grid > * { min-width: 0; }
-        .grid { display: grid; gap: var(--space-8); }
+        .link:hover { text-decoration-thickness: 0.18em; }
+        .link:active { text-decoration-thickness: 0.3em; }
 
-        /* --- Focus, motion --- */
-        :focus-visible {
-            outline: var(--ring-width) solid var(--color-ring);
-            outline-offset: var(--ring-offset);
-        }
-        a, .btn, pre.code { transition: var(--transition-colors); }
-        @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after { transition: none !important; animation: none !important; }
-        }
-
-        /* --- Buttons --- */
         .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: var(--button-gap);
-            height: var(--button-height);
-            padding-inline: var(--button-padding-x);
-            border-radius: var(--button-radius);
-            font-family: var(--button-font);
-            font-size: var(--button-font-size);
-            font-weight: var(--button-font-weight);
-            text-decoration: none;
-            box-shadow: var(--shadow-none);
-            cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            min-height: 48px; padding: 0 24px; border: 0;
+            background: var(--accent); color: var(--bg);
+            font-family: var(--font); font-size: var(--body); font-weight: 700; line-height: 1;
+            text-decoration: none; cursor: pointer;
+            transition: background-color 0.15s ease, transform 0.12s var(--ease);
         }
-        .btn--sm {
-            height: var(--button-height-sm);
-            padding-inline: var(--button-padding-x-sm);
-            font-size: var(--button-font-size-sm);
-        }
-        .btn--primary, .skip-link:focus {
-            background-color: var(--button-bg);
-            color: var(--button-fg);
-            border: none;
-        }
-        .btn--primary:hover { background-color: var(--button-hover-bg); }
-        .btn--primary:active, .skip-link:active { background-color: var(--button-active-bg); }
-        .btn--secondary {
-            background-color: var(--button-secondary-bg);
-            color: var(--button-secondary-fg);
-            border: 1px solid var(--button-secondary-border);
-        }
-        .btn--secondary:hover { background-color: var(--button-secondary-hover-bg); border-color: var(--button-secondary-hover-border); }
-        .btn--secondary:active { background-color: var(--button-secondary-active-bg); border-color: var(--button-secondary-hover-border); }
-        .btn svg, .nav-link svg, .link svg { flex: none; }
-        .actions { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-8); }
-        .actions .btn { width: 100%; }
+        .btn:hover { background: var(--accent-hover); }
+        .btn:active { background: var(--accent-press); transform: scale(0.97); }
+        .btn svg { flex: none; }
 
-        .skip-link {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
-        }
         .skip-link:focus {
-            position: fixed;
-            top: var(--space-2);
-            left: var(--space-2);
-            z-index: 1;
-            width: auto;
-            height: var(--button-height-sm);
-            margin: 0;
-            padding-inline: var(--button-padding-x-sm);
-            overflow: visible;
-            clip: auto;
-            display: inline-flex;
-            align-items: center;
-            border-radius: var(--button-radius);
-            font-family: var(--button-font);
-            font-size: var(--button-font-size-sm);
-            font-weight: var(--button-font-weight);
-            text-decoration: none;
+            position: fixed; top: 8px; left: 8px; z-index: 10; width: auto; height: 48px; margin: 0;
+            padding: 0 20px; overflow: visible; clip: auto; display: inline-flex; align-items: center;
+            background: var(--accent); color: var(--bg); font-weight: 700; text-decoration: none;
         }
 
-        /* --- Header --- */
-        header .container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            min-height: var(--nav-height);
+        /* Entrance (script only) */
+        .js [data-r] { opacity: 0; transition: opacity 0.6s var(--ease), transform 0.7s var(--ease); }
+        .js [data-r].is-in { opacity: 1; }
+        @media (prefers-reduced-motion: no-preference) {
+          .js [data-r] { transform: translateY(24px); }
+          .js [data-r].is-in { transform: none; }
         }
-        nav { display: flex; align-items: center; gap: var(--space-1); }
+
+        /* Nav */
+        .bar {
+            display: flex; align-items: center; justify-content: space-between;
+            min-height: 64px; padding-inline: var(--margin);
+        }
         .wordmark {
-            display: inline-flex;
-            align-items: center;
-            gap: var(--space-2);
-            min-height: var(--nav-link-min-height);
-            font-family: var(--font-data);
-            font-size: var(--wordmark-font-size);
-            font-weight: var(--wordmark-font-weight);
-            color: var(--color-foreground);
-            text-decoration: none;
+            display: inline-flex; align-items: center; gap: 10px; min-height: 48px;
+            font-size: var(--lead); font-weight: 700; letter-spacing: -0.02em;
+            color: inherit; text-decoration: none; transition: opacity 0.15s ease;
         }
-        .wordmark img { width: var(--wordmark-logo-size); height: var(--wordmark-logo-size); }
-        .wordmark:hover, .wordmark:active { color: var(--color-accent); }
+        .wordmark:hover { opacity: 0.75; }
+        .wordmark img { width: 24px; height: 24px; }
+        nav { display: flex; align-items: center; gap: 4px; }
         .nav-link {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: var(--space-2);
-            min-height: var(--nav-link-min-height);
-            padding-inline: var(--nav-link-padding-x);
-            font-family: var(--nav-link-font);
-            font-size: var(--nav-link-font-size);
-            color: var(--nav-link-fg);
-            text-decoration: none;
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            min-height: 48px; padding-inline: 12px; font-size: var(--small); font-weight: 500;
+            color: var(--ink); text-decoration: underline; text-decoration-color: transparent;
+            text-decoration-thickness: 0.08em; text-underline-offset: 0.25em;
+            transition: text-decoration-color 0.15s ease, transform 0.12s var(--ease);
         }
-        .nav-link:hover { color: var(--nav-link-hover-fg); text-decoration: underline; text-underline-offset: var(--ring-offset); }
-        .nav-link:active { color: var(--nav-link-active-fg); text-decoration: underline; text-underline-offset: var(--ring-offset); }
+        .nav-link:hover { text-decoration-color: currentColor; }
+        .nav-link:active { transform: translateY(1px); }
         .nav-anchor { display: none; }
-        .nav-gh { min-width: var(--nav-link-min-height); padding-inline: 0; }
-        .nav-gh-text {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
+        .nav-gh { min-width: 48px; padding-inline: 0; }
+        header .btn { padding: 0 18px; font-size: var(--small); }
+        @media (min-width: 1024px) {
+          .nav-anchor { display: inline-flex; }
+          .nav-gh { min-width: 0; padding-inline: 12px; }
+          .nav-gh-text { position: static; width: auto; height: auto; margin: 0; overflow: visible; clip: auto; white-space: normal; }
+          header .btn { margin-left: 8px; }
         }
 
-        /* --- Sections --- */
-        .hero { padding-block: var(--space-10) var(--spacing-section); }
-        .hero-side { margin-top: var(--space-6); }
-        .hero figure { margin-top: var(--spacing-block); }
-        .hero .helper { margin-top: var(--space-4); text-wrap: balance; }
-        .nowrap { white-space: nowrap; }
-        .section-inner { border-top: 1px solid var(--section-border); padding-block: var(--spacing-section); }
-        .section-inner > h2 + p { margin-top: var(--space-4); }
-
-        /* Steps */
-        .steps { display: grid; gap: var(--space-6); margin-top: var(--spacing-block); }
-        .steps li { border-top: 1px solid var(--step-border); padding-top: var(--space-5); }
-        .step-no {
-            display: block;
-            font-family: var(--step-number-font);
-            font-size: var(--step-number-font-size);
-            color: var(--step-number-fg);
+        /* Hero */
+        .hero { padding: 16px var(--margin) 0; margin-bottom: var(--section); }
+        .hero-title {
+            font-size: var(--hero); line-height: 0.9; letter-spacing: -0.04em; font-weight: 700;
         }
-        .steps h3 { font-size: var(--font-size-xl); margin-top: var(--space-3); }
-        .steps p { margin-top: var(--space-2); color: var(--color-foreground-secondary); }
-
-        /* Workspace blocks */
-        .block { margin-top: var(--spacing-block); }
-        .block h3 { margin-top: var(--space-2); }
-        .block .body { margin-top: var(--space-4); }
-        .block figure { margin-top: var(--space-8); }
-        .checks {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: var(--space-3) var(--space-4);
-            font-family: var(--font-data);
-            font-size: var(--font-size-sm);
-            line-height: var(--leading-snug);
-            color: var(--color-foreground-secondary);
-            overflow-wrap: anywhere;
+        .h1-l { display: block; white-space: nowrap; }
+        .frame {
+            position: relative; display: inline-block; vertical-align: baseline; overflow: hidden;
+            width: 2.4em; height: calc(var(--cap) * 1em); margin-left: 0.06em; background: var(--raised);
         }
-        .block-text .checks { margin-top: var(--space-6); }
-        .block-text .rows { margin-top: var(--space-6); }
-
-        /* Definition rows */
-        .rows > div { border-top: 1px solid var(--row-border); padding-block: var(--row-padding-y); }
-        .rows dt {
-            font-family: var(--font-data);
-            font-size: var(--font-size-sm);
-            color: var(--color-foreground);
-            overflow-wrap: anywhere;
+        .frame img {
+            position: absolute; left: calc(-84 / 620 * 100%); top: 0;
+            width: calc(1600 / 620 * 100%); max-width: none; height: auto;
+            transform: translateY(-39.9%);
         }
-        .rows dd { margin-top: var(--space-1); color: var(--color-foreground-secondary); max-width: var(--size-measure); }
-        .rows--wide { margin-top: var(--space-8); }
+        @media (prefers-reduced-motion: no-preference) {
+          .frame img { animation: drift 11s ease-in-out infinite alternate; will-change: transform; }
+          @keyframes drift { from { transform: translateY(-39.9%); } to { transform: translateY(-59%); } }
+        }
+        @media (max-width: 600px) {
+          .frame { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; margin: 0.14em 0; }
+          .frame img { top: calc(-143 / 413 * 100%); transform: none; animation: none; }
+        }
+        .hero-row { display: grid; gap: 24px; margin-top: 40px; }
+        .hero-row .lead { font-size: var(--lead); line-height: 1.35; max-width: 60ch; }
+        .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; }
+        .hero-actions .note { flex-basis: 100%; }
+        @media (min-width: 900px) {
+          .hero-row { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); column-gap: var(--gap); align-items: start; }
+          .hero-actions { padding-top: 6px; }
+        }
+        .hero-fig { margin-top: 32px; }
+        @media (max-width: 600px) { .hero-actions .btn { flex: 1 1 100%; } }
 
         /* Screenshots */
         .shot {
-            position: relative;
-            overflow: hidden;
+            position: relative; overflow: hidden; background: var(--raised);
             aspect-ratio: var(--crop-w) / var(--crop-h);
-            background: var(--shot-bg);
-            border-radius: var(--shot-radius);
-            box-shadow: var(--shot-frame);
         }
         .shot img {
-            position: absolute;
-            display: block;
-            max-width: none;
-            height: auto;
+            position: absolute; display: block; max-width: none; height: auto;
             width: calc(1600 / var(--crop-w) * 100%);
             left: calc(var(--crop-x) / var(--crop-w) * -100%);
             top: calc(var(--crop-y) / var(--crop-h) * -100%);
         }
-        /* Source rectangles in screenshot pixels. Compact below 768 px, wide from 768 px. */
-        .shot--overview { --crop-x: 70;  --crop-y: 280; --crop-w: 720;  --crop-h: 720; }
-        .shot--scout    { --crop-x: 80;  --crop-y: 138; --crop-w: 720;  --crop-h: 158; }
-        .shot--rules    { --crop-x: 800; --crop-y: 362; --crop-w: 720;  --crop-h: 366; }
-        .shot--audit    { --crop-x: 80;  --crop-y: 222; --crop-w: 710;  --crop-h: 302; }
-        .shot--pipeline { --crop-x: 89;  --crop-y: 549; --crop-w: 620;  --crop-h: 324; }
-
-        /* Code */
-        pre.code {
-            display: block;
-            margin-top: var(--space-8);
-            max-width: 100%;
-            overflow-x: auto;
-            white-space: pre;
-            background: var(--code-bg);
-            color: var(--code-fg);
-            font-family: var(--code-font);
-            font-size: var(--code-font-size);
-            line-height: var(--code-leading);
-            padding: var(--code-padding);
-            border-radius: var(--code-radius);
-            border: 1px solid var(--code-border);
+        .shot { --img-h: 1000; }
+        .shot--audit { --img-h: 556; }
+        @supports (object-view-box: inset(0)) {
+          .shot img {
+            position: static; width: 100%; height: 100%; left: auto; top: auto; object-fit: fill;
+            object-view-box: inset(
+              calc(var(--crop-y) / var(--img-h) * 100%)
+              calc((1600 - var(--crop-x) - var(--crop-w)) / 1600 * 100%)
+              calc((var(--img-h) - var(--crop-y) - var(--crop-h)) / var(--img-h) * 100%)
+              calc(var(--crop-x) / 1600 * 100%));
+          }
         }
-        pre.code code { font-size: inherit; }
-        pre.code .k { color: var(--color-syntax-keyword); }
-        pre.code .s { color: var(--color-syntax-string); }
-        pre.code .c { color: var(--color-syntax-comment); font-style: italic; }
-        .output-split { margin-top: var(--spacing-block); }
-
-        /* Footer, links */
-        .link {
-            display: inline-flex;
-            align-items: center;
-            gap: var(--space-1);
-            min-height: var(--nav-link-min-height);
-            color: var(--link-fg);
-            text-decoration: underline;
-        }
-        .link:hover { color: var(--link-hover-fg); }
-        .link:active { color: var(--link-active-fg); }
-        footer { border-top: 1px solid var(--section-border); padding-block: var(--space-8); font-family: var(--font-data); font-size: var(--font-size-xs); color: var(--color-foreground-secondary); }
-        footer .container { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-
-        /* --- 768 and up --- */
+        .shot--overview  { --crop-x: 70;  --crop-y: 280; --crop-w: 720;  --crop-h: 720; }
+        .shot--scout     { --crop-x: 80;  --crop-y: 138; --crop-w: 720;  --crop-h: 158; }
+        .shot--rules     { --crop-x: 800; --crop-y: 362; --crop-w: 720;  --crop-h: 366; }
+        .shot--audit     { --crop-x: 80;  --crop-y: 222; --crop-w: 710;  --crop-h: 302; }
+        .shot--pipeline  { --crop-x: 89;  --crop-y: 549; --crop-w: 620;  --crop-h: 324; }
+        .shot--status    { --crop-x: 800; --crop-y: 480; --crop-w: 720;  --crop-h: 460; }
+        .shot--proposals { --crop-x: 80;  --crop-y: 0;   --crop-w: 720;  --crop-h: 296; }
         @media (min-width: 768px) {
-            .shot--overview { --crop-x: 0;   --crop-y: 100; --crop-w: 1600; --crop-h: 900; }
-            .shot--scout    { --crop-x: 70;  --crop-y: 136; --crop-w: 1460; --crop-h: 162; }
-            .shot--rules    { --crop-x: 800; --crop-y: 362; --crop-w: 720;  --crop-h: 608; }
-            .shot--audit    { --crop-x: 70;  --crop-y: 160; --crop-w: 1460; --crop-h: 370; }
-            .shot--pipeline { --crop-x: 89;  --crop-y: 549; --crop-w: 1200; --crop-h: 447; }
-            .actions { flex-direction: row; flex-wrap: wrap; }
-            .actions .btn { width: auto; }
-            .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--spacing-grid-gap); }
-            .checks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-            .block--split .shot-wrap { max-width: 720px; }
-            .rows--wide > div { display: grid; grid-template-columns: 200px minmax(0, 1fr); column-gap: var(--space-4); }
-            .rows--wide dd { margin-top: 0; }
+          .shot--overview { --crop-x: 0;   --crop-y: 100; --crop-w: 1600; --crop-h: 900; }
+          .shot--scout    { --crop-x: 70;  --crop-y: 136; --crop-w: 1460; --crop-h: 162; }
+          .shot--rules    { --crop-x: 800; --crop-y: 362; --crop-w: 720;  --crop-h: 608; }
+          .shot--audit    { --crop-x: 70;  --crop-y: 160; --crop-w: 1460; --crop-h: 370; }
+          .shot--pipeline { --crop-x: 89;  --crop-y: 549; --crop-w: 1200; --crop-h: 447; }
+        }
+        /* Compact crops for the narrower slots */
+        .shot--c.shot--scout    { --crop-x: 80;  --crop-y: 138; --crop-w: 720; --crop-h: 158; }
+        .shot--c.shot--rules    { --crop-x: 800; --crop-y: 362; --crop-w: 720; --crop-h: 366; }
+        .shot--c.shot--audit    { --crop-x: 80;  --crop-y: 222; --crop-w: 710; --crop-h: 302; }
+        .shot--c.shot--pipeline { --crop-x: 89;  --crop-y: 549; --crop-w: 620; --crop-h: 324; }
+
+        /* Image shutter: the one loud move */
+        @media (prefers-reduced-motion: no-preference) {
+          .js .shutter { clip-path: inset(0 0 100% 0); transition: clip-path 1100ms cubic-bezier(0.65, 0, 0.35, 1); }
+          .js .shutter img { transform: scale(1.12); transition: transform 1500ms cubic-bezier(0.22, 0.8, 0.2, 1); }
+          .js .shutter.is-in { clip-path: inset(0); }
+          .js .shutter.is-in img { transform: none; }
         }
 
-        /* --- 1024 and up --- */
+        /* How it works */
+        .how { padding: var(--section) var(--margin); }
+        .how-h { font-size: var(--head); line-height: 1; letter-spacing: -0.03em; }
+        .stage { margin-top: 64px; }
+        .stage-clause { font-size: var(--lead); font-weight: 700; }
+        .stage-body { margin-top: 8px; max-width: 40ch; }
+        .stage-pic { margin-top: 20px; max-width: 720px; }
+        .how-track, .how-names { display: none; }
+
+        .js .how {
+            padding: 0; display: grid; background: var(--bg); min-height: 88svh;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-rows: auto 1fr auto auto;
+        }
+        .js .how-h {
+            grid-column: 1; grid-row: 1; z-index: 1; background: var(--paper); color: var(--paper-ink);
+            padding: var(--margin) var(--margin) 0;
+        }
+        .how-clause { display: inline-block; }
+        .how-swap { display: inline-block; transition: opacity 200ms ease; }
+        .how-swap.is-swap { opacity: 0; }
+        .js .stage { display: contents; margin: 0; }
+        .js .stage-clause { display: none; }
+        .js .stage-text {
+            grid-column: 1; grid-row: 2; z-index: 1; display: flex; flex-direction: column; justify-content: flex-end;
+            background: var(--paper); color: var(--paper-ink); padding: 24px var(--margin) var(--margin);
+            visibility: hidden; transition: visibility 0s linear 200ms;
+        }
+        .js .stage-body { margin: 0; font-size: var(--lead); line-height: 1.3; max-width: 30ch; font-weight: 500; opacity: 0; transition: opacity 200ms ease; }
+        .js .stage-pic {
+            grid-column: 2; grid-row: 1 / 3; z-index: 1; display: flex; align-items: center; justify-content: center;
+            background: var(--raised); margin: 0; padding: 40px var(--margin);
+            visibility: hidden; transition: visibility 0s linear 200ms;
+        }
+        .js .stage-pic .shot { width: 100%; max-width: 760px; opacity: 0; transition: opacity 200ms ease; }
+        .js .stage.is-active .stage-text, .js .stage.is-active .stage-pic { visibility: visible; transition: none; }
+        .js .stage.is-active .stage-body, .js .stage.is-active .stage-pic .shot { opacity: 1; }
+
+        .js .how-track { display: block; grid-column: 1 / -1; grid-row: 3; padding: 28px var(--margin) 0; }
+        .js .how-names {
+            display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 var(--gap);
+            grid-column: 1 / -1; grid-row: 4; padding: 4px var(--margin) 20px;
+        }
+        .track { --thumb: 32px; position: relative; height: var(--thumb); }
+        .track-rail, .track-fill {
+            position: absolute; left: 0; right: 0; top: calc((var(--thumb) - 8px) / 2); height: 8px;
+        }
+        .track-rail { background: var(--rail); }
+        .track-fill { background: var(--ink); transform-origin: 0 50%; transform: scaleX(0); transition: transform 200ms var(--ease); }
+        .how-range {
+            position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0;
+            background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer;
+        }
+        .how-range::-webkit-slider-runnable-track { height: var(--thumb); background: transparent; }
+        .how-range::-moz-range-track { height: var(--thumb); background: transparent; }
+        .how-range::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: var(--thumb); height: var(--thumb);
+            background: var(--accent); border: 0; border-radius: 0; transition: transform 0.12s var(--ease), background-color 0.15s ease;
+        }
+        .how-range::-moz-range-thumb { width: var(--thumb); height: var(--thumb); background: var(--accent); border: 0; border-radius: 0; }
+        .how-range:hover::-webkit-slider-thumb { background: var(--accent-hover); }
+        .how-range:active::-webkit-slider-thumb { transform: scale(0.9); background: var(--accent-press); }
+        .how-names button {
+            min-height: 48px; padding: 0; background: none; border: 0; text-align: left; cursor: pointer;
+            font-size: var(--body); font-weight: 500; color: var(--muted);
+            text-decoration: underline; text-decoration-color: transparent; text-decoration-thickness: 0.08em; text-underline-offset: 0.25em;
+            transition: color 0.15s ease, text-decoration-color 0.15s ease, transform 0.12s var(--ease);
+        }
+        .how-names button:hover { color: var(--ink); text-decoration-color: currentColor; }
+        .how-names button:active { transform: scale(0.97); }
+        .how-names button[aria-pressed="true"] { color: var(--ink); font-weight: 700; }
+
+        @media (max-width: 1023.98px) {
+          .js .how { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(46svh, auto) auto auto auto auto; min-height: 0; }
+          .js .stage-pic { grid-column: 1; grid-row: 1; padding-block: var(--margin); }
+          .js .how-track { grid-row: 2; padding: 0 var(--margin); }
+          .js .how-h { grid-column: 1; grid-row: 3; padding-top: 40px; }
+          .js .stage-text { grid-column: 1; grid-row: 4; justify-content: flex-start; padding-top: 20px; }
+          .js .how-names {
+              grid-column: 1; grid-row: 5; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px var(--margin) 32px;
+              background: var(--paper); color: var(--paper-ink);
+          }
+          .js .how-names button { color: var(--paper-ink); opacity: 0.62; }
+          .js .how-names button:hover, .js .how-names button[aria-pressed="true"] { opacity: 1; color: var(--paper-ink); }
+          .track { --thumb: 40px; }
+        }
+
+        /* Workspace fields */
+        .field {
+            display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr;
+            gap: 56px; min-height: 64svh; padding: 48px var(--margin) var(--margin);
+        }
+        .field--dark  { background: var(--raised); color: var(--ink); --ring: var(--ink); }
+        .field--paper { background: var(--paper); color: var(--paper-ink); --ring: var(--paper-ink); }
+        .field--paper figcaption { color: var(--paper-ink); }
+        .ws-text { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+        .ws-proof, .ws-wide { min-width: 0; }
+        .ws-text > p { max-width: 38ch; }
+        .phrase {
+            align-self: end; max-width: 6.6em; font-size: var(--phrase); line-height: 0.9; letter-spacing: -0.03em;
+            font-weight: 700; text-wrap: balance;
+        }
+        .list { columns: 1; column-gap: var(--gap); }
+        .list li { padding: 4px 0; break-inside: avoid; }
+        .defs { display: grid; gap: 18px 28px; }
+        .defs dt { font-weight: 700; }
+        .defs dd { margin-top: 2px; max-width: 46ch; }
+                .code {
+            display: block; max-width: 100%; overflow-x: auto; white-space: pre;
+            background: var(--raised); color: var(--ink); font-family: var(--mono); font-size: var(--small);
+            line-height: 1.6; padding: 20px;
+        }
+        .code code { font-size: inherit; }
+        .code-cap { margin-top: 12px; font-size: var(--small); }
+        .code .k { color: var(--syn-k); }
+        .code .s { color: var(--syn-s); }
+        .code .c { color: var(--syn-c); font-style: italic; }
+        @media (min-width: 600px) {
+          .list { columns: 2; }
+          .defs--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
         @media (min-width: 1024px) {
-            .nav-anchor { display: inline-flex; }
-            .nav-gh { min-width: 0; padding-inline: var(--nav-link-padding-x); }
-            .nav-gh-text {
-                position: static;
-                width: auto;
-                height: auto;
-                margin: 0;
-                overflow: visible;
-                clip: auto;
-                white-space: normal;
-            }
-            .hero { padding-top: var(--space-16); }
-            .hero-grid { grid-template-columns: 7fr 5fr; gap: var(--space-16); align-items: start; }
-            .hero-side { margin-top: 0; }
-            .lede { font-size: var(--font-size-xl); }
-            .steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-            .split { grid-template-columns: 5fr 7fr; gap: var(--space-16); }
-            .block--split { align-items: start; }
-            .checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .block--split .shot-wrap { max-width: none; }
-            .rows--limits { max-width: 800px; }
+          .field { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gap); min-height: 80svh; padding-top: 56px; }
+          .ws-text { grid-row: 1; grid-column: 1 / 7; }
+          .ws-proof { grid-row: 1; grid-column: 7 / -1; align-self: start; }
+          .field--mirror .ws-text { grid-column: 7 / -1; }
+          .field--mirror .ws-proof { grid-column: 1 / 7; }
+          .ws-wide { grid-row: 2; grid-column: 1 / -1; }
+          .phrase { grid-row: 2; grid-column: 1 / -1; justify-self: start; }
+          .field--code { grid-template-rows: auto auto 1fr; }
+          .field--code .phrase { grid-row: 3; }
+          .field--mirror .phrase { justify-self: end; text-align: right; }
+        }
+
+        /* Try it */
+        .try { padding: var(--section) var(--margin); }
+        .try h2 { font-size: var(--head); line-height: 1; letter-spacing: -0.03em; }
+        .try-input { display: none; margin-top: 24px; }
+        .js .try-input { display: block; }
+        .try-input input {
+            display: block; width: 100%; padding: 0.04em 0 0.08em; margin: 0; border: 0; background: none;
+            font-family: var(--font); font-weight: 700; font-size: clamp(48px, 8vw, 132px); line-height: 1.1;
+            letter-spacing: -0.03em; color: var(--ink); caret-color: var(--accent); caret-shape: block;
+            text-overflow: clip; white-space: nowrap; overflow-x: auto; border-radius: 0;
+        }
+        .try-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 48px; }
+        .answer { background: var(--raised); padding: 24px; max-width: 560px; width: 100%; min-width: 0; }
+        .try:not(.has-js) .answer { margin-top: 0; }
+        .answer dl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+        .answer dl > div { min-width: 0; }
+        .answer dt { font-size: var(--small); color: var(--muted); margin-bottom: 4px; }
+        .answer dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+                .answer pre { font-family: var(--mono); font-size: var(--small); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .examples { display: none; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
+        .js .examples { display: flex; }
+        .example {
+            min-height: 48px; padding: 0 16px; background: var(--raised); border: 0; cursor: pointer;
+            font-size: var(--body); font-weight: 500; color: var(--ink); white-space: pre; text-align: left;
+            transition: background-color 0.15s ease, transform 0.12s var(--ease);
+        }
+        .example:hover { background: var(--rail); }
+        .example:active { transform: scale(0.97); }
+        @media (min-width: 900px) {
+          .try-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gap); }
+          .answer { grid-column: 1 / 7; }
+          .examples { grid-column: 8 / -1; flex-direction: column; align-items: flex-start; gap: 4px; justify-self: stretch; }
+          .example { background: none; padding: 0; font-size: var(--lead); min-height: 48px; text-decoration: underline; text-decoration-color: transparent; text-decoration-thickness: 0.08em; text-underline-offset: 0.22em; transition: text-decoration-color 0.15s ease, transform 0.12s var(--ease); }
+          .example:hover { background: none; text-decoration-color: currentColor; }
+        }
+        @media (max-width: 600px) {
+          .try-input input { font-size: 11vw; }
+          .example { min-height: 44px; }
+        }
+
+        /* Limits */
+        .limits { padding: var(--section) var(--margin); }
+        .faq-row { display: grid; gap: 12px; align-items: baseline; }
+        .faq-row + .faq-row { margin-top: 56px; }
+        .limits h2, .limits h3 { font-size: var(--head); line-height: 1.05; letter-spacing: -0.03em; font-weight: 500; }
+        .limits h2 { color: var(--muted); }
+        .faq-row p { max-width: 40ch; line-height: 1.55; }
+        @media (min-width: 900px) {
+          .faq-row { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: var(--gap); }
+          .faq-row + .faq-row { margin-top: 80px; }
+          .faq-row > :first-child { grid-column: 1 / 7; }
+          .faq-row > p { grid-column: 8 / -1; }
+        }
+
+        /* Closing sentence */
+        .cta { padding: 0 var(--margin) var(--section); }
+        .cta-line { font-size: 10vw; font-weight: 700; line-height: 1.25; letter-spacing: -0.03em; }
+        .cta-line h2 { display: inline; font: inherit; letter-spacing: inherit; }
+        .cta-block { display: inline-block; background: var(--raised); padding: 0 0.22em; line-height: 1.1; }
+        .cta-btn {
+            font-size: inherit; line-height: 1.1; min-height: max(48px, 1.1em); padding: 0 0.4em;
+            letter-spacing: inherit; margin-left: 0.12em; vertical-align: baseline;
+        }
+        .cta-note { margin-top: 40px; }
+        @media (min-width: 601px) { .cta-line { font-size: 6vw; } }
+
+        /* Footer */
+        .foot {
+            display: flex; flex-direction: column; min-height: 70svh; padding: var(--margin);
+            background: var(--accent); color: var(--bg); --ring: var(--bg);
+        }
+        .foot-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px; }
+        .foot-top .wordmark img { filter: brightness(0); }
+        .foot-top .back { margin-left: auto; display: inline-flex; align-items: center; min-height: 48px; }
+        .foot-big {
+            display: block; margin-top: auto; padding-top: 64px; color: inherit; text-decoration: underline;
+            text-decoration-color: transparent; text-decoration-thickness: 0.06em; text-underline-offset: 0.1em;
+            font-size: 8.5vw; font-weight: 700; line-height: 1; letter-spacing: -0.04em; white-space: nowrap;
+            transition: text-decoration-color 0.15s ease, transform 0.2s var(--ease);
+        }
+        .foot-big:hover { text-decoration-color: currentColor; }
+        .foot-big:active { transform: scale(0.99); transform-origin: 0 50%; }
+        .foot-bot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 28px; margin-top: 28px; font-size: 14px; }
+        .foot-bot .link { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; }
+        .foot-bot p { display: inline-flex; align-items: center; min-height: 48px; }
+        @media (max-width: 1023px) {
+          .foot-big { font-size: 13vw; white-space: normal; }
+          .foot-big .u1 { display: block; }
+        }
+        @media (max-width: 600px) {
+          .foot-big { font-size: 12vw; }
         }
     </style>
 
     <!-- PostHog Analytics -->
     <script>
         !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(".people")},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing list_properties single_pageview disable_sharing_assets_checking".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
-        
+
         var posthogKey = 'YOUR_POSTHOG_API_KEY';
         if (posthogKey && posthogKey !== 'YOUR_POSTHOG_API_KEY') {
             posthog.init(posthogKey, {
@@ -554,150 +486,186 @@
 <body>
     <a class="skip-link" href="#main">Skip to content</a>
 
-    <header>
-        <div class="container">
+    <header id="top">
+        <div class="bar">
             <a class="wordmark" href="#">
                 <img src="assets/lumi_logo_white.svg" width="24" height="24" alt="">
-                <span>LUMI</span>
+                <span>Lumi</span>
             </a>
             <nav aria-label="Main">
                 <a class="nav-link nav-anchor" href="#how">How it works</a>
                 <a class="nav-link nav-anchor" href="#workspace">Workspace</a>
-                <a class="nav-link nav-anchor" href="#output">Output</a>
+                <a class="nav-link nav-anchor" href="#try">Try it</a>
                 <a class="nav-link nav-anchor" href="#limits">Limits</a>
                 <a class="nav-link nav-gh" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"> <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path> </svg><span class="nav-gh-text">GitHub</span><span class="sr-only"> (opens in a new tab)</span></a>
-                <a class="btn btn--primary btn--sm" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3H3v10h10V9M9.5 3H13v3.5M13 3 7.5 8.5"/></svg><span class="sr-only"> (opens in a new tab)</span></a>
+                <a class="btn" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi<span class="sr-only"> (opens in a new tab)</span></a>
             </nav>
         </div>
     </header>
 
     <main id="main">
         <section class="hero" aria-labelledby="hero-title">
-            <div class="container">
-                <div class="grid hero-grid">
-                    <h1 id="hero-title">Clean a messy CSV and keep the Python that did it.</h1>
-                    <div class="hero-side">
-                        <p class="lede">Upload a CSV or Excel file. Lumi flags quality problems, you decide what to do about them with rules and cleaning steps, and you download the cleaned data with a Python script that runs the same steps.</p>
-                        <div class="actions">
-                            <a class="btn btn--primary" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3H3v10h10V9M9.5 3H13v3.5M13 3 7.5 8.5"/></svg><span class="sr-only"> (opens in a new tab)</span></a>
-                            <a class="btn btn--secondary" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"> <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path> </svg>View on GitHub<span class="sr-only"> (opens in a new tab)</span></a>
-                        </div>
-                        <p class="helper">Free · Open source · <span class="nowrap">No sign-up needed</span> · CSV and XLSX up to 50 MB</p>
-                    </div>
+            <h1 id="hero-title" class="hero-title"><span class="h1-l">Messy CSV <span class="frame" aria-hidden="true"><img src="assets/screenshots/audit-log.png" width="1600" height="556" alt="" decoding="async"></span></span> <span class="h1-l">to clean Python.</span></h1>
+            <div class="hero-row">
+                <p class="lead" data-r>Upload a CSV or Excel file. Lumi flags the problems, you choose the fixes, and you download the cleaned data with a Python script that runs the same steps.</p>
+                <div class="hero-actions" data-r>
+                    <a class="btn" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3H3v10h10V9M9.5 3H13v3.5M13 3 7.5 8.5"/></svg><span class="sr-only"> (opens in a new tab)</span></a>
+                    <a class="link" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener">View on GitHub<span class="sr-only"> (opens in a new tab)</span></a>
+                    <p class="note">Free, open source, no sign-up. CSV and XLSX up to 50 MB.</p>
                 </div>
-                <figure>
-                    <div class="shot shot--overview">
-                        <img src="assets/screenshots/overview.png" width="1600" height="1000" fetchpriority="high" alt="Lumi's Overview tab for a loaded file: health 97%, 500 rows, 9 columns, and a donut chart of the dataset's composition.">
+            </div>
+            <figure class="hero-fig">
+                <div class="shot shot--overview shutter">
+                    <img src="assets/screenshots/overview.png" width="1600" height="1000" fetchpriority="high" alt="Lumi's Overview tab for a loaded file: health 97%, 500 rows, 9 columns, and a donut chart of the dataset's composition.">
+                </div>
+                <figcaption>The Overview tab with a 500-row file loaded.</figcaption>
+            </figure>
+        </section>
+
+        <section id="how" class="how" aria-labelledby="how-h">
+            <h2 id="how-h" class="how-h" aria-live="polite"><span class="how-clause"><span class="how-swap">How it works</span></span></h2>
+
+            <div class="stage is-active" data-name="Upload">
+                <div class="stage-text">
+                    <p class="stage-clause">First, upload a file</p>
+                    <p class="stage-body">A CSV or XLSX, up to 50 MB. You don't need an account.</p>
+                </div>
+                <figure class="stage-pic">
+                    <div class="shot shot--status">
+                        <img src="assets/screenshots/overview.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Lumi's Workspace Status and Quick Actions: recipe steps, tracked features and active rules at 0, and buttons such as Remove 10 Duplicate Rows and Strip Column Whitespace.">
                     </div>
-                    <figcaption class="caption">The Overview tab with a 500-row file loaded.</figcaption>
                 </figure>
             </div>
-        </section>
-
-        <section id="how" aria-labelledby="how-title">
-            <div class="container">
-                <div class="section-inner">
-                    <h2 id="how-title">How it works</h2>
-                    <ol class="steps" role="list">
-                        <li>
-                            <span class="step-no" aria-hidden="true">01</span>
-                            <h3>Upload a file</h3>
-                            <p>A CSV or XLSX, up to 50 MB. You don't need an account.</p>
-                        </li>
-                        <li>
-                            <span class="step-no" aria-hidden="true">02</span>
-                            <h3>Review the proposals</h3>
-                            <p>Scout checks the file for nulls, duplicates, outliers, mixed types and more. Accept what you want and dismiss the rest.</p>
-                        </li>
-                        <li>
-                            <span class="step-no" aria-hidden="true">03</span>
-                            <h3>Set rules and clean</h3>
-                            <p>Add rules, choose how violations get resolved, and apply any of the 17 transforms. Each step goes in the Audit Log.</p>
-                        </li>
-                        <li>
-                            <span class="step-no" aria-hidden="true">04</span>
-                            <h3>Export</h3>
-                            <p>Download the cleaned data, plus a script or notebook that runs the same steps outside Lumi.</p>
-                        </li>
-                    </ol>
+            <div class="stage" data-name="Review">
+                <div class="stage-text">
+                    <p class="stage-clause">Then, review the proposals</p>
+                    <p class="stage-body">Scout checks the file for nulls, duplicates, outliers, mixed types and more. Accept what you want and dismiss the rest.</p>
                 </div>
+                <figure class="stage-pic">
+                    <div class="shot shot--proposals">
+                        <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Scout proposal cards in Lumi, including Null Check on discount with 6.8% missing values, each with Accept and Dismiss buttons.">
+                    </div>
+                </figure>
+            </div>
+            <div class="stage" data-name="Clean">
+                <div class="stage-text">
+                    <p class="stage-clause">Next, set rules and clean</p>
+                    <p class="stage-body">Add rules, choose how violations get resolved, and apply any of the 17 transforms. Each step goes in the Audit Log.</p>
+                </div>
+                <figure class="stage-pic">
+                    <div class="shot shot--rules">
+                        <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Active Rules in Lumi's Rulebook, including a Null Check on email_address with 44 violations, a resolution method dropdown, and Ignore and Remove buttons.">
+                    </div>
+                </figure>
+            </div>
+            <div class="stage" data-name="Export">
+                <div class="stage-text">
+                    <p class="stage-clause">Last, export the script</p>
+                    <p class="stage-body">Download the cleaned data, plus a script or notebook that runs the same steps outside Lumi.</p>
+                </div>
+                <figure class="stage-pic">
+                    <div class="shot shot--pipeline shot--c">
+                        <img src="assets/screenshots/pipeline.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Generated Python in Lumi: a comment reading Normalize column names using snake_case format, followed by the loop that does it.">
+                    </div>
+                </figure>
+            </div>
+
+            <div class="how-track" data-r>
+                <div class="track">
+                    <span class="track-rail"></span>
+                    <span class="track-fill"></span>
+                    <input class="how-range" type="range" min="0" max="3" step="1" value="0" aria-label="Stage" aria-valuetext="Upload">
+                </div>
+            </div>
+            <div class="how-names" role="group" aria-label="Stages">
+                <button type="button" aria-pressed="true">Upload</button>
+                <button type="button" aria-pressed="false">Review</button>
+                <button type="button" aria-pressed="false">Clean</button>
+                <button type="button" aria-pressed="false">Export</button>
             </div>
         </section>
 
-        <section id="workspace" aria-labelledby="workspace-title">
-            <div class="container">
-                <div class="section-inner">
-                    <h2 id="workspace-title">Inside the workspace</h2>
-                    <p class="body">These are screenshots from the app, cropped to fit.</p>
-
-                    <div class="block">
-                        <div class="grid split">
-                            <div class="block-text">
-                                <p class="eyebrow">Scout</p>
-                                <h3>It reads the file before you do</h3>
-                                <p class="body">Scout lists what it finds as proposals, naming the column and the number. Accept one and it becomes a rule or a cleaning step. Dismiss it and it goes away.</p>
-                            </div>
-                            <ul class="checks">
-                                <li>Duplicate rows</li>
-                                <li>All-empty rows</li>
-                                <li>Duplicate column names</li>
-                                <li>Non-snake_case headers</li>
-                                <li>Nulls</li>
-                                <li>Redundant columns (over 90% empty)</li>
-                                <li>Constant values</li>
-                                <li>IQR outliers</li>
-                                <li>Skew</li>
-                                <li>Mixed types</li>
-                                <li>High cardinality</li>
-                                <li>Leading and trailing whitespace</li>
-                            </ul>
-                        </div>
-                        <figure>
-                            <div class="shot shot--scout">
-                                <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Scout proposal cards in Lumi, including Null Check on discount with 6.8% missing values, each with Accept and Dismiss buttons.">
-                            </div>
-                        </figure>
-                    </div>
-
-                    <div class="block">
-                        <div class="grid split block--split">
-                            <div class="block-text">
-                                <p class="eyebrow">Rulebook</p>
-                                <h3>Rules with a count next to them</h3>
-                                <p class="body">Five rule types: Null Check, Range Check, Relational Check, Custom Expression and Informational. Each active rule shows its violation count, and you choose how to resolve it.</p>
-                                <dl class="rows">
-                                    <div><dt>Null violations</dt><dd>Drop Rows, Fill with Mean, Fill with Median, KNN Imputer, Iterative Imputer</dd></div>
-                                    <div><dt>Range violations</dt><dd>Drop Rows, Cap at Bounds, Log Transform</dd></div>
-                                    <div><dt>Evidence report</dt><dd>Download a Markdown report from the Rulebook.</dd></div>
-                                </dl>
-                            </div>
-                            <figure class="shot-wrap">
-                                <div class="shot shot--rules">
-                                    <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Active Rules in Lumi's Rulebook, including a Null Check on email_address with 44 violations, a resolution method dropdown, and Ignore and Remove buttons.">
-                                </div>
-                            </figure>
-                        </div>
-                    </div>
-
-                    <div class="block">
-                        <p class="eyebrow">Audit Log</p>
-                        <h3>Every step, with what it did to the row count</h3>
-                        <p class="body">Steps are numbered and show health % and row count. In this log, <code>drop_duplicates</code> took the file from 500 rows to 490. Remove any step, or use undo and redo.</p>
-                        <figure>
-                            <div class="shot shot--audit">
-                                <img src="assets/screenshots/audit-log.png" width="1600" height="556" loading="lazy" decoding="async" alt="Lumi's Audit Log with five numbered steps, from Original Data at 500 rows to strip_whitespace on customer_name at 490 rows, each with its health score.">
-                            </div>
-                        </figure>
-                    </div>
-                </div>
+        <section id="workspace" class="field field--dark" aria-labelledby="ws-1">
+            <div class="ws-text">
+                <p data-r>Scout lists what it finds as proposals, naming the column and the number. Accept one and it becomes a rule or a cleaning step. Dismiss it and it goes away.</p>
+                <ul class="list" data-r>
+                    <li>Duplicate rows</li>
+                    <li>All-empty rows</li>
+                    <li>Duplicate column names</li>
+                    <li>Non-snake_case headers</li>
+                    <li>Nulls</li>
+                    <li>Redundant columns (over 90% empty)</li>
+                    <li>Constant values</li>
+                    <li>IQR outliers</li>
+                    <li>Skew</li>
+                    <li>Mixed types</li>
+                    <li>High cardinality</li>
+                    <li>Leading and trailing whitespace</li>
+                </ul>
             </div>
+            <div class="ws-proof">
+                <figure data-r>
+                    <div class="shot shot--proposals">
+                        <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Scout proposal cards in Lumi, including Null Check on discount with 6.8% missing values, each with Accept and Dismiss buttons.">
+                    </div>
+                </figure>
+            </div>
+            <h2 id="ws-1" class="phrase" data-r>It reads first.</h2>
         </section>
 
-        <section id="output" aria-labelledby="output-title">
-            <div class="container">
-                <div class="section-inner">
-                    <h2 id="output-title">What you get out</h2>
-                    <p class="body">The script has two functions. <code>clean_data()</code> applies your steps, and <code>validate_data()</code> returns violation counts.</p>
+        <section class="field field--paper field--mirror" aria-labelledby="ws-2">
+            <div class="ws-text">
+                <p data-r>Five rule types: Null Check, Range Check, Relational Check, Custom Expression and Informational. Each active rule shows its violation count, and you choose how to resolve it.</p>
+                <dl class="defs" data-r>
+                    <div><dt>Null violations</dt><dd>Drop Rows, Fill with Mean, Fill with Median, KNN Imputer, Iterative Imputer</dd></div>
+                    <div><dt>Range violations</dt><dd>Drop Rows, Cap at Bounds, Log Transform</dd></div>
+                    <div><dt>Evidence report</dt><dd>Download a Markdown report from the Rulebook.</dd></div>
+                </dl>
+            </div>
+            <div class="ws-proof">
+                <figure data-r>
+                    <div class="shot shot--rules">
+                        <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Active Rules in Lumi's Rulebook, including a Null Check on email_address with 44 violations, a resolution method dropdown, and Ignore and Remove buttons.">
+                    </div>
+                </figure>
+            </div>
+            <h2 id="ws-2" class="phrase" data-r>Rules that count.</h2>
+        </section>
+
+        <section class="field field--dark" aria-labelledby="ws-3">
+            <div class="ws-text">
+                <p data-r>Steps are numbered and show health % and row count. In this log, <code>drop_duplicates</code> took the file from 500 rows to 490. Remove any step, or use undo and redo.</p>
+            </div>
+            <div class="ws-proof">
+                <figure data-r>
+                    <div class="shot shot--audit shot--c">
+                        <img src="assets/screenshots/audit-log.png" width="1600" height="556" loading="lazy" decoding="async" alt="Lumi's Audit Log with five numbered steps, from Original Data at 500 rows to strip_whitespace on customer_name at 490 rows, each with its health score.">
+                    </div>
+                </figure>
+            </div>
+            <h2 id="ws-3" class="phrase" data-r>Every step logged.</h2>
+        </section>
+
+        <section id="output" class="field field--paper field--mirror field--code" aria-labelledby="ws-4">
+            <div class="ws-text">
+                <p data-r>The script has two functions. <code>clean_data()</code> applies your steps, and <code>validate_data()</code> returns violation counts.</p>
+                <dl class="defs defs--two" data-r>
+                    <div><dt>Cleaned CSV</dt><dd>The dataset with your steps applied.</dd></div>
+                    <div><dt>Cleaned Excel</dt><dd>The same data as an Excel file.</dd></div>
+                    <div><dt><code>clean_data.py</code></dt><dd>The Python script, with clean_data() and validate_data().</dd></div>
+                    <div><dt><code>clean_data.ipynb</code></dt><dd>The same pipeline as a Jupyter notebook.</dd></div>
+                </dl>
+            </div>
+            <div class="ws-proof">
+                <figure data-r>
+                    <div class="shot shot--pipeline shot--c">
+                        <img src="assets/screenshots/pipeline.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Generated Python in Lumi: a comment reading Normalize column names using snake_case format, followed by the loop that does it.">
+                    </div>
+                    <figcaption>The same function further down, in the Pipeline Preview tab.</figcaption>
+                </figure>
+            </div>
+            <div class="ws-wide">
+                <div data-r>
 <pre class="code" tabindex="0" role="region" aria-label="Start of the generated clean_data function"><code><span class="k">def</span> <span class="k">clean_data</span>(df):
     <span class="c"># Match the dtypes Lumi uses after upload (numeric downcasting) so results agree with the app.</span>
     df = _downcast_dtypes(df)
@@ -709,64 +677,171 @@
             df[c] = _apply_to_str(df[c], <span class="k">lambda</span> x: x.str.strip())
     <span class="k">except</span> Exception <span class="k">as</span> e:
         warnings.warn(<span class="s">"Skipped strip_whitespace on 'All': "</span> + str(e))</code></pre>
-                    <p class="caption">The start of clean_data(), generated for the audit log above.</p>
-
-                    <div class="grid split output-split">
-                        <dl class="rows">
-                            <div><dt>Cleaned CSV</dt><dd>The dataset with your steps applied.</dd></div>
-                            <div><dt>Cleaned Excel</dt><dd>The same data as an Excel file.</dd></div>
-                            <div><dt>clean_data.py</dt><dd>The Python script, with clean_data() and validate_data().</dd></div>
-                            <div><dt>clean_data.ipynb</dt><dd>The same pipeline as a Jupyter notebook.</dd></div>
-                        </dl>
-                        <figure>
-                            <div class="shot shot--pipeline">
-                                <img src="assets/screenshots/pipeline.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Generated Python in Lumi: a comment reading Normalize column names using snake_case format, followed by the loop that does it.">
-                            </div>
-                            <figcaption class="caption">The same function further down, in the Pipeline Preview tab.</figcaption>
-                        </figure>
-                    </div>
+                    <p class="code-cap">The start of clean_data(), generated for the audit log above.</p>
                 </div>
             </div>
+            <h2 id="ws-4" class="phrase" data-r>Python you keep.</h2>
         </section>
 
-        <section id="limits" aria-labelledby="limits-title">
-            <div class="container">
-                <div class="section-inner">
-                    <h2 id="limits-title">Good to know</h2>
-                    <dl class="rows rows--wide rows--limits">
-                        <div><dt>Upload limit</dt><dd>50 MB per file.</dd></div>
-                        <div><dt>Sampling</dt><dd>Files over 10,000 rows are analysed on a random 10,000-row sample.</dd></div>
-                        <div><dt>Full-file download</dt><dd>You can still download the whole file cleaned. Lumi replays your recipe on it.</dd></div>
-                        <div><dt>Processing</dt><dd>Your file is uploaded and processed on the server. Check your data policy before uploading anything sensitive.</dd></div>
-                        <div><dt>Sign-in</dt><dd>Optional. You can use Lumi without an account.</dd></div>
-                        <div><dt>License</dt><dd>Open source under AGPL v3.</dd></div>
+        <section id="try" class="try" aria-labelledby="try-h">
+            <h2 id="try-h" data-r>Type a messy column name.</h2>
+            <div class="try-input" data-ui data-r>
+                <input id="col" type="text" value="Order Total ($)" aria-label="Column name" autocomplete="off" autocapitalize="off" spellcheck="false">
+            </div>
+            <div class="try-grid">
+                <div class="answer" data-ui aria-live="polite" data-r>
+                    <dl>
+                        <div><dt>Scout says</dt><dd id="o-scout">Column Names: 1 column name not snake_case ('Order Total ($)')</dd></div>
+                        <div><dt>Lumi renames it to</dt><dd><code id="o-name">order_total</code></dd></div>
+                        <div><dt>Your script runs</dt><dd><pre><code># Normalize column names using snake_case format.
+df.columns = _dedupe_names(_new_cols)</code></pre></dd></div>
                     </dl>
                 </div>
+                <div class="examples" role="group" aria-label="Examples" data-r>
+                    <button class="example" type="button" data-v="customerEmailAddress">customerEmailAddress</button>
+                    <button class="example" type="button" data-v="  e-mail.Address ">  e-mail.Address </button>
+                    <button class="example" type="button" data-v="2024 Revenue">2024 Revenue</button>
+                </div>
             </div>
         </section>
 
-        <section aria-labelledby="cta-title">
-            <div class="container">
-                <div class="section-inner">
-                    <h2 id="cta-title">Try it on a file you're working on now.</h2>
-                    <p class="body">Free, open source, and no sign-up needed.</p>
-                    <div class="actions">
-                        <a class="btn btn--primary" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3H3v10h10V9M9.5 3H13v3.5M13 3 7.5 8.5"/></svg><span class="sr-only"> (opens in a new tab)</span></a>
-                        <a class="btn btn--secondary" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"> <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path> </svg>Read the source<span class="sr-only"> (opens in a new tab)</span></a>
-                    </div>
-                </div>
-            </div>
+        <section id="limits" class="limits" aria-labelledby="limits-h">
+            <div class="faq-row"><h2 id="limits-h" data-r>Good to know</h2></div>
+            <div class="faq-row"><h3 data-r>How big can a file be?</h3><p data-r>50 MB per file.</p></div>
+            <div class="faq-row"><h3 data-r>What happens with long files?</h3><p data-r>Files over 10,000 rows are analysed on a random 10,000-row sample.</p></div>
+            <div class="faq-row"><h3 data-r>Can I still get the whole file?</h3><p data-r>Yes. You can download the whole file cleaned. Lumi replays your recipe on it.</p></div>
+            <div class="faq-row"><h3 data-r>Where is my file processed?</h3><p data-r>Your file is uploaded and processed on the server. Check your data policy before uploading anything sensitive.</p></div>
+            <div class="faq-row"><h3 data-r>Do I need an account?</h3><p data-r>No. Sign-in is optional.</p></div>
+            <div class="faq-row"><h3 data-r>What's the license?</h3><p data-r>Open source under AGPL v3.</p></div>
+        </section>
+
+        <section class="cta" aria-labelledby="cta-h">
+            <div class="cta-line" data-r><h2 id="cta-h">Try it on <span class="cta-block">your_file.csv</span></h2> <a class="btn cta-btn" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener">Open Lumi<span class="sr-only"> (opens in a new tab)</span></a></div>
+            <p class="cta-note" data-r>Free, open source, and no sign-up needed. <a class="link" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener">Read the source<span class="sr-only"> (opens in a new tab)</span></a></p>
         </section>
     </main>
 
-    <footer>
-        <div class="container">
-            <span>Built by adk</span>
-            <span aria-hidden="true">·</span>
+    <footer class="foot">
+        <div class="foot-top">
+            <a class="wordmark" href="#"><img src="assets/lumi_logo_white.svg" width="24" height="24" alt=""><span>Lumi</span></a>
+            <p>Built by adk</p>
+            <p>v1.0.0</p>
+            <a class="link back" href="#top">Back to top</a>
+        </div>
+        <a class="foot-big" href="https://lumiapp.streamlit.app" target="_blank" rel="noopener"><span class="u1">lumiapp.</span><wbr><span>streamlit.app</span><span class="sr-only"> (opens in a new tab)</span></a>
+        <div class="foot-bot">
             <a class="link" href="https://github.com/adk7712/lumi" target="_blank" rel="noopener"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"> <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.57-.18-3.23-.79-3.23-3.51 0-.78.28-1.41.74-1.92-.07-.18-.32-1.02.07-2.13 0 0 .6-.19 1.98.74a6.84 6.84 0 013.62 0c1.38-.94 1.98-.74 1.98-.74.39 1.11.14 1.95.08 2.13.46.51.74 1.14.74 1.92 0 2.74-1.67 3.33-3.23 3.51.26.22.49.65.49 1.31 0 .95-.01 1.72-.01 1.95 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path> </svg>GitHub<span class="sr-only"> (opens in a new tab)</span></a>
-            <span aria-hidden="true">·</span>
-            <span>v1.0.0</span>
+            <p>Open source under AGPL v3</p>
         </div>
     </footer>
+
+    <script>
+    (function () {
+        var d = document;
+
+        /* Image shutter */
+        var shutters = d.querySelectorAll('.shutter');
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                for (var i = 0; i < shutters.length; i++) shutters[i].classList.add('is-in');
+            });
+        });
+
+        /* Entrances, once, staggered within a batch */
+        var parts = [].slice.call(d.querySelectorAll('[data-r]'));
+        if ('IntersectionObserver' in window) {
+            var io = new IntersectionObserver(function (entries) {
+                var hit = entries.filter(function (e) { return e.isIntersecting; });
+                hit.sort(function (a, b) {
+                    return (a.target.compareDocumentPosition(b.target) & 4) ? -1 : 1;
+                });
+                hit.forEach(function (e, i) {
+                    e.target.style.transitionDelay = Math.min(i, 6) * 75 + 'ms';
+                    e.target.classList.add('is-in');
+                    io.unobserve(e.target);
+                });
+            }, { rootMargin: '0px 0px -4% 0px', threshold: 0.01 });
+            parts.forEach(function (el) { io.observe(el); });
+        } else {
+            parts.forEach(function (el) { el.classList.add('is-in'); });
+        }
+
+        /* Drag through the stages */
+        var how = d.getElementById('how');
+        var stages = [].slice.call(how.querySelectorAll('.stage'));
+        var range = how.querySelector('.how-range');
+        var names = [].slice.call(how.querySelectorAll('.how-names button'));
+        var clause = how.querySelector('.how-swap');
+        var fill = how.querySelector('.track-fill');
+        var track = how.querySelector('.track');
+        var current = -1, swapTimer = 0;
+
+        function fillTo(i) {
+            var w = fill.offsetWidth || 1;
+            var thumb = parseFloat(getComputedStyle(track).getPropertyValue('--thumb')) || 32;
+            var x = thumb / 2 + (i / 3) * (w - thumb);
+            fill.style.transform = 'scaleX(' + (x / w).toFixed(4) + ')';
+        }
+        function show(i) {
+            if (i === current) return;
+            var first = current < 0;
+            current = i;
+            stages.forEach(function (s, k) {
+                var on = k === i;
+                s.classList.toggle('is-active', on);
+                if (on) s.removeAttribute('inert'); else s.setAttribute('inert', '');
+            });
+            names.forEach(function (b, k) { b.setAttribute('aria-pressed', k === i ? 'true' : 'false'); });
+            var name = stages[i].getAttribute('data-name');
+            range.value = i;
+            range.setAttribute('aria-valuetext', name);
+            fillTo(i);
+            var text = stages[i].querySelector('.stage-clause').textContent;
+            clearTimeout(swapTimer);
+            if (first) { clause.textContent = text; return; }
+            clause.classList.add('is-swap');
+            swapTimer = setTimeout(function () {
+                clause.textContent = text;
+                clause.classList.remove('is-swap');
+            }, 100);
+        }
+        range.addEventListener('input', function () { show(parseInt(range.value, 10)); });
+        names.forEach(function (b, k) { b.addEventListener('click', function () { show(k); }); });
+        window.addEventListener('resize', function () { if (current >= 0) fillTo(current); });
+        show(0);
+        if (d.fonts && d.fonts.ready) d.fonts.ready.then(function () { fillTo(current); });
+
+        /* Type a messy column name: a port of Lumi's normalize_column_names */
+        function normalize(orig) {
+            var val = orig.replace(/^\s+|\s+$/g, '').replace(/[ \-.]/g, '_');
+            val = val.replace(/[^a-zA-Z0-9_]/g, '');
+            val = val.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+            val = val.replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2');
+            val = val.replace(/_+/g, '_').toLowerCase().replace(/^_+|_+$/g, '');
+            if (/^[0-9]/.test(val)) val = 'col_' + val;
+            if (!val) val = 'column_' + orig;
+            return val;
+        }
+        var input = d.getElementById('col');
+        var oScout = d.getElementById('o-scout');
+        var oName = d.getElementById('o-name');
+        function render() {
+            var orig = input.value, val = normalize(orig);
+            oScout.textContent = val === orig
+                ? 'Nothing to flag. Already snake_case.'
+                : "Column Names: 1 column name not snake_case ('" + orig + "')";
+            oName.textContent = val;
+        }
+        input.addEventListener('input', render);
+        [].forEach.call(d.querySelectorAll('.example'), function (b) {
+            b.addEventListener('click', function () {
+                input.value = b.getAttribute('data-v');
+                input.scrollLeft = 0;
+                render();
+            });
+        });
+        render();
+    })();
+    </script>
 </body>
 </html>
