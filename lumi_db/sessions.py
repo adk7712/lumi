@@ -10,6 +10,15 @@ from .pool import get_db_connection, release_db_connection, run_with_retry, _exe
 
 logger = logging.getLogger("lumi.persistence")
 
+MAX_WORKSPACES = 5          # per registered user
+MAX_WORKSPACE_NAME = 100    # characters, after strip
+_refusal = threading.local()
+
+
+def last_save_refusal():
+    """Why this thread's latest ``save_session`` returned False: "limit", "owner", or None."""
+    return getattr(_refusal, "reason", None)
+
 # Exact shape of ids minted by ui_utils for anonymous guests: f"guest_{uuid4().hex}@lumi.ai".
 # Only these rows are claimable by a registered user; a real account whose email merely starts
 # with "guest_" is a registered owner like any other.
@@ -23,8 +32,18 @@ def is_guest_id(user_id) -> bool:
 
 
 def _is_registered(user_id) -> bool:
-    """A signed-in account (mirrors ui_utils.is_authenticated_user: any "guest_" prefix is not)."""
+    """May claim guest rows (guest -> account). Deliberately strict: any "guest_" prefix is excluded,
+    mirroring ui_utils.is_authenticated_user. Not used to lock accounts out (see ``_is_guest_owner``)."""
     return bool(user_id) and not str(user_id).startswith("guest_")
+
+
+def _is_guest_owner(user_id) -> bool:
+    """Anonymous guest identity: the exact generated id, or any ``guest_*@lumi.ai`` (an app-owned
+    domain no real account can use). A real account like ``guest_jane@gmail.com`` is not a guest."""
+    if not user_id:
+        return False
+    uid = str(user_id)
+    return is_guest_id(uid) or (uid.startswith("guest_") and uid.endswith("@lumi.ai"))
 
 
 def _guest_owner_sql(conn, col: str) -> str:
@@ -32,6 +51,27 @@ def _guest_owner_sql(conn, col: str) -> str:
     if "sqlite" in type(conn).__module__:
         return f"{col} GLOB '{_GUEST_GLOB}'"
     return f"{col} ~ '^guest_[0-9a-f]{{32}}@lumi\\.ai$'"
+
+
+def json_default(o):
+    """``json.dumps(default=...)`` encoder: numpy scalars -> Python, datetimes -> ISO, sets -> sorted list."""
+    import datetime as _dt
+    try:
+        import numpy as np
+        if isinstance(o, np.generic):
+            return o.item()
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+    except ImportError:  # pragma: no cover
+        pass
+    if isinstance(o, (_dt.datetime, _dt.date, _dt.time)):  # includes pandas.Timestamp
+        return o.isoformat()
+    if isinstance(o, (set, frozenset)):
+        try:
+            return sorted(o)
+        except TypeError:
+            return sorted(o, key=str)
+    return str(o)
 
 
 def _iso(value):
@@ -75,7 +115,7 @@ def clear_user_projects_cache(user_id: str = None):
 
 def update_cached_project(user_id: str, session_id: str, **updates):
     """Optimistically updates a project in the session_state cache in-place without triggering WAN refetch."""
-    if not user_id or user_id.startswith("guest_"):
+    if not user_id or _is_guest_owner(user_id):
         return
     import streamlit as st
     if not hasattr(st, "session_state") or not _owns_session_state():
@@ -103,7 +143,7 @@ def update_cached_project(user_id: str, session_id: str, **updates):
 
 def remove_cached_project(user_id: str, session_id: str):
     """Optimistically removes a project from the session_state cache in-place."""
-    if not user_id or user_id.startswith("guest_"):
+    if not user_id or _is_guest_owner(user_id):
         return
     import streamlit as st
     if not hasattr(st, "session_state") or not _owns_session_state():
@@ -116,7 +156,7 @@ def remove_cached_project(user_id: str, session_id: str):
 
 def toggle_cached_project_pin(user_id: str, session_id: str):
     """Optimistically toggles pinned status and re-sorts cache in-place."""
-    if not user_id or user_id.startswith("guest_"):
+    if not user_id or _is_guest_owner(user_id):
         return
     import streamlit as st
     if not hasattr(st, "session_state") or not _owns_session_state():
@@ -149,15 +189,29 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
     saved = False
     try:
         # Serialize fields to JSON
-        recipe_json = json.dumps(recipe)
-        rules_json = json.dumps(rules)
-        scanned_columns_json = json.dumps(list(scanned_columns))
+        _refusal.reason = None
+        recipe_json = json.dumps(recipe, default=json_default)
+        rules_json = json.dumps(rules, default=json_default)
+        scanned_columns_json = json.dumps(list(scanned_columns), default=json_default)
         step_count = len(recipe)
         now = datetime.now().isoformat()
         caller_registered = 1 if _is_registered(user_id) else 0
 
         def _upsert(conn):
             cursor = conn.cursor()
+            if user_id and not _is_guest_owner(user_id):
+                # Workspace cap: only a brand-new row counts; updating an existing one is allowed.
+                _execute(conn, cursor, "SELECT 1 FROM sessions WHERE session_id = ?", (session_id,))
+                if cursor.fetchone() is None:
+                    _execute(conn, cursor, "SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?", (user_id,))
+                    row = cursor.fetchone()
+                    try:
+                        n = int(row["n"])
+                    except (KeyError, IndexError, TypeError):
+                        n = int(row[0])
+                    if n >= MAX_WORKSPACES:
+                        _refusal.reason = "limit"
+                        return False
             # Single atomic UPSERT. DO UPDATE only applies when the row is unowned, owned by the
             # caller, or owned by an app-generated guest and the caller is a registered user
             # (the guest -> account claim). Another guest or an anonymous caller cannot overwrite
@@ -185,7 +239,11 @@ def save_session(session_id: str, filename: str, recipe: list, rules: list, scan
 
         saved = run_with_retry("save_session", _upsert)
         if not saved:
-            logger.warning("Refused to overwrite session %s: owned by a different user", session_id)
+            if _refusal.reason == "limit":
+                logger.warning("Refused to create session %s: workspace limit (%d) reached for user", session_id, MAX_WORKSPACES)
+            else:
+                _refusal.reason = "owner"
+                logger.warning("Refused to overwrite session %s: owned by a different user", session_id)
             return False
         # No-op on the background save thread (see _owns_session_state); save_db_session updates
         # the cache on the script thread instead.
@@ -249,7 +307,7 @@ def load_session(session_id: str, current_user_email: str = None) -> dict:
 
 def get_user_projects(user_id: str) -> list:
     """Retrieves all sessions/projects belonging to a specific user ordered by pinned status and last update."""
-    if not user_id or user_id.startswith("guest_"):
+    if not user_id or _is_guest_owner(user_id):
         return []
         
     import streamlit as st
@@ -304,7 +362,7 @@ def count_user_sessions(user_id: str) -> int:
     Used to enforce the workspace limit, so it never trusts the per-rerun project cache (which
     can miss a workspace whose background save has not been reflected yet).
     """
-    if not user_id or user_id.startswith("guest_"):
+    if not user_id or _is_guest_owner(user_id):
         return 0
 
     def _count(conn):
@@ -328,7 +386,7 @@ def count_user_sessions(user_id: str) -> int:
 
 def delete_session(session_id: str, user_id: str) -> bool:
     """Deletes a workspace session if owned by user_id."""
-    if not session_id or not user_id or user_id.startswith("guest_"):
+    if not session_id or not user_id or _is_guest_owner(user_id):
         return False
     t0 = time.perf_counter()
     err = None
@@ -352,7 +410,10 @@ def delete_session(session_id: str, user_id: str) -> bool:
 
 def rename_session(session_id: str, new_name: str, user_id: str) -> bool:
     """Renames a workspace session if owned by user_id."""
-    if not session_id or not new_name or not user_id or user_id.startswith("guest_"):
+    if not session_id or not new_name or not user_id or _is_guest_owner(user_id):
+        return False
+    new_name = new_name.strip()
+    if not new_name or len(new_name) > MAX_WORKSPACE_NAME:
         return False
     t0 = time.perf_counter()
     err = None
@@ -377,7 +438,7 @@ def rename_session(session_id: str, new_name: str, user_id: str) -> bool:
 
 def toggle_pin_session(session_id: str, user_id: str) -> bool:
     """Toggles the pinned status of a workspace session if owned by user_id in a single atomic update."""
-    if not session_id or not user_id or user_id.startswith("guest_"):
+    if not session_id or not user_id or _is_guest_owner(user_id):
         return False
     t0 = time.perf_counter()
     err = None

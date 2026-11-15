@@ -12,9 +12,29 @@ DB_PATH = Path(__file__).parent.parent / "lumi.db"
 DB_PERF_LOG = Path(__file__).parent.parent / ".lumi_cache" / "db_perf_log.jsonl"
 _perf_lock = threading.Lock()
 
+_PERF_LOG_MAX_BYTES = 5 * 1024 * 1024
+_PERF_ID_KEYS = ("user_id", "session_id")
+
+
+def _anon_id(value) -> str:
+    """Short stable digest so perf logs can correlate rows without storing emails/session ids."""
+    import hashlib
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:12]
+
+
+def _rotate_perf_log():
+    """Move an oversized log to ``<name>.1`` (replacing any older one)."""
+    try:
+        if DB_PERF_LOG.exists() and DB_PERF_LOG.stat().st_size > _PERF_LOG_MAX_BYTES:
+            DB_PERF_LOG.replace(DB_PERF_LOG.with_name(DB_PERF_LOG.name + ".1"))
+    except OSError:
+        logger.debug("Could not rotate DB perf log", exc_info=True)
+
+
 def _log_db_perf(op: str, duration_ms: float, details: dict = None, error: str = None):
     try:
         DB_PERF_LOG.parent.mkdir(exist_ok=True)
+        details = {k: (_anon_id(v) if k in _PERF_ID_KEYS and v is not None else v) for k, v in (details or {}).items()}
         rec = {
             "timestamp": time.time(),
             "iso": datetime.now().isoformat(),
@@ -22,10 +42,11 @@ def _log_db_perf(op: str, duration_ms: float, details: dict = None, error: str =
             "duration_ms": round(duration_ms, 2),
             "thread": threading.current_thread().name,
             "is_main_thread": threading.current_thread() is threading.main_thread(),
-            "details": details or {},
+            "details": details,
             "error": str(error) if error else None
         }
         with _perf_lock:
+            _rotate_perf_log()
             with open(DB_PERF_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec) + "\n")
     except Exception:

@@ -2,6 +2,8 @@
 import streamlit as st
 from pathlib import Path
 import json
+import os
+import re
 import hashlib
 from engine import apply_recipe
 from scout import generate_proposals
@@ -35,6 +37,15 @@ def _update_project_cache():
 
 
 CACHE_DIR = Path(".lumi_cache")
+_SAFE_SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
+
+
+def _dat_path(session_id):
+    """``.lumi_cache/<session_id>.dat``, or None when the id is not a safe file stem."""
+    if not isinstance(session_id, str) or not _SAFE_SESSION_ID.fullmatch(session_id):
+        logger.warning("Refusing cache path for unsafe session id")
+        return None
+    return CACHE_DIR / f"{session_id}.dat"
 
 def calculate_file_hash(file_buffer) -> str:
     """Generates a unique hash for a file by reading its full content.
@@ -159,8 +170,16 @@ def save_session_state():
             'scanned_columns': scanned_cols
         }
         
-        with open(cache_path, 'w') as f:
-            json.dump(data, f)
+        from lumi_db.sessions import json_default
+        payload = json.dumps(data, default=json_default)  # serialize first: no partial file on error
+        tmp_path = cache_path.with_name(f"{cache_path.name}.{threading.get_ident()}.tmp")
+        try:
+            with open(tmp_path, 'w') as f:
+                f.write(payload)
+            os.replace(tmp_path, cache_path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
     except Exception:
         logger.error("Failed to save local session cache", exc_info=True)
         _warn_save_failure_once("Could not save progress to local cache.")
@@ -172,8 +191,10 @@ def cache_uploaded_file(session_id: str, file_buffer):
     if not is_authenticated_user() or st.session_state.get("_is_testing", False) or not session_id:
         return  # Skip guests and test suite to prevent disk leaks
         
+    cache_path = _dat_path(session_id)
+    if cache_path is None:
+        return
     CACHE_DIR.mkdir(exist_ok=True)
-    cache_path = CACHE_DIR / f"{session_id}.dat"
     try:
         pos = file_buffer.tell() if hasattr(file_buffer, 'tell') else 0
         file_buffer.seek(0)
@@ -184,8 +205,8 @@ def cache_uploaded_file(session_id: str, file_buffer):
 
 def load_cached_file(session_id: str, filename: str):
     """Loads raw file buffer wrapped as CachedFileWrapper."""
-    cache_path = CACHE_DIR / f"{session_id}.dat"
-    if not cache_path.exists():
+    cache_path = _dat_path(session_id)
+    if cache_path is None or not cache_path.exists():
         return None
     try:
         return CachedFileWrapper(cache_path.read_bytes(), filename)
@@ -195,8 +216,8 @@ def load_cached_file(session_id: str, filename: str):
 
 def delete_cached_file(session_id: str):
     """Deletes cached .dat file for a session."""
-    cache_path = CACHE_DIR / f"{session_id}.dat"
-    if cache_path.exists():
+    cache_path = _dat_path(session_id)
+    if cache_path is not None and cache_path.exists():
         try:
             cache_path.unlink()
         except Exception:
@@ -212,7 +233,8 @@ def _capture_full_source(file_buffer):
             file_buffer.seek(0)
         if isinstance(raw, str):
             raw = raw.encode("utf-8")
-        return {"name": getattr(file_buffer, 'name', 'dataset.csv'), "bytes": bytes(raw)}
+        return {"name": getattr(file_buffer, 'name', 'dataset.csv'), "bytes": bytes(raw),
+                "sheet": getattr(file_buffer, 'lumi_sheet', None)}  # XLSX sheet the sample was read from
     except Exception:
         logger.warning("Could not retain uploaded bytes for full-file export", exc_info=True)
         return None
@@ -231,7 +253,7 @@ def load_full_data():
         raise ValueError("The original upload is no longer available; re-upload the file to export all rows.")
     from lumi_state.core import read_tabular, UnsafeFileError
     try:
-        df, _notices = read_tabular(src["bytes"], src.get("name") or "")
+        df, _notices = read_tabular(src["bytes"], src.get("name") or "", sheet=src.get("sheet") or 0)
     except UnsafeFileError as e:
         raise ValueError(str(e)) from e  # same failure path as missing bytes: caller shows st.error
     return downcast_dtypes(df)
@@ -594,12 +616,18 @@ def save_db_session():
         from persistence import save_session
         refused = False
         try:
+            from lumi_db import sessions as _sessions_mod
+            _sessions_mod._refusal.reason = None
             ok = save_session(
                 session_id=sid, filename=filename, recipe=recipe, rules=rules,
                 scanned_columns=scanned_columns, user_id=user_id, project_name=project_name
             )
             if ok is None:
                 return None  # DB/serialization error: keep the id; the worker retries, then reports
+            if ok is False and _sessions_mod.last_save_refusal() == "limit":
+                # Workspace cap on a new row: a fresh id would be a new row too, so do not rotate.
+                logger.warning("save_session refused for session %s: workspace limit reached", sid)
+                return False
             if ok is False:
                 refused = True
                 import uuid
