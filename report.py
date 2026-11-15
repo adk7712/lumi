@@ -1,5 +1,70 @@
+import re
 import pandas as pd
 import datetime
+
+
+def _code(value, in_table: bool = False) -> str:
+    """Markdown inline-code span for arbitrary text: backticks inside the value are handled by
+    using a longer fence, and (in a table cell) ``|`` and line breaks are escaped."""
+    text = " ".join(str(value).splitlines())
+    if in_table:
+        text = text.replace("|", "\\|")
+    runs = [len(m) for m in re.findall(r"`+", text)]
+    fence = "`" * (max(runs) + 1 if runs else 1)
+    pad = " " if runs else ""
+    return f"{fence}{pad}{text}{pad}{fence}"
+
+
+def _cell(value) -> str:
+    """Plain text safe for a markdown table cell."""
+    return " ".join(str(value).splitlines()).replace("|", "\\|")
+
+
+def _describe_step(idx: int, step: dict) -> str:
+    act = step.get('action')
+    col = step.get('column', 'Dataset')
+    c = _code(col)
+
+    if act == "drop_column":
+        desc = f"Dropped column {c}"
+    elif act == "rename_column":
+        desc = f"Renamed column {c} to {_code(step.get('value'))}"
+    elif act == "strip_whitespace":
+        desc = f"Stripped leading/trailing whitespace in column {c}"
+    elif act == "normalize_text":
+        desc = f"Normalized text in column {c} using method: {_code(step.get('value'))}"
+    elif act == "cast_type":
+        desc = f"Casted column {c} to data type: {_code(step.get('dtype'))}"
+    elif act == "fill_null":
+        desc = f"Filled missing values in column {c} with strategy/value: {_code(step.get('value'))}"
+    elif act == "cap_range":
+        desc = f"Capped values in column {c} within bounds: {_code('[' + str(step.get('min')) + ', ' + str(step.get('max')) + ']')}"
+    elif act == "extract_datetime":
+        desc = f"Extracted {_code(step.get('component'))} component from column {c} into new column {_code(step.get('new_column'))}"
+    elif act == "drop_violated":
+        rule_desc = (step.get('rule') or {}).get('desc', 'custom check')
+        desc = f"Dropped rows violating validation constraint: {_code(rule_desc)}"
+    elif act == "reorder_columns":
+        desc = f"Reordered columns to custom order: {_code(step.get('value'))}"
+    elif act == "replace":
+        desc = f"Replaced values matching {_code(step.get('find'))} with {_code(step.get('replace'))} (Regex: {_code(step.get('regex'))})"
+    elif act == "drop_nulls":
+        desc = f"Dropped rows with missing values in column {c}"
+    elif act == "drop_duplicates":
+        desc = "Removed fully duplicate rows from the dataset"
+    elif act == "drop_empty_columns":
+        desc = "Dropped columns that contain only missing values"
+    elif act == "drop_empty_rows":
+        desc = "Dropped rows in which every value is missing"
+    elif act == "log_transform":
+        desc = f"Applied log(1 + x) transform to numeric column {c} (negative values clipped to 0)"
+    elif act == "normalize_column_names":
+        desc = f"Normalized all column names using method: {_code(step.get('value', 'snake_case'))}"
+    else:
+        desc = f"Applied custom action {_code(act)} on column {c}"
+
+    return f"{idx}. **{str(act).replace('_', ' ').title()}**: {desc}"
+
 
 def generate_evidence_report(
     df: pd.DataFrame, 
@@ -48,66 +113,24 @@ def generate_evidence_report(
     # 2. Gather Data Lineage / Audit Log
     lineage_block = []
     has_lineage = False
-    try:
-        if cleaning_recipe and len(cleaning_recipe) > 0:
-            lineage_block.append("## Data Lineage & Audit Log\n")
-            lineage_block.append("The following cleaning sequence was successfully executed to build the cleaned dataset:\n")
-            for idx, step in enumerate(cleaning_recipe, 1):
-                act = step.get('action')
-                col = step.get('column', 'Dataset')
-                
-                # Render readable description
-                if act == "drop_column":
-                    desc = f"Dropped column `{col}`"
-                elif act == "rename_column":
-                    desc = f"Renamed column `{col}` to `{step.get('value')}`"
-                elif act == "strip_whitespace":
-                    desc = f"Stripped leading/trailing whitespace in column `{col}`"
-                elif act == "normalize_text":
-                    desc = f"Normalized text in column `{col}` using method: `{step.get('value')}`"
-                elif act == "cast_type":
-                    desc = f"Casted column `{col}` to data type: `{step.get('dtype')}`"
-                elif act == "fill_null":
-                    desc = f"Filled missing values in column `{col}` with strategy/value: `{step.get('value')}`"
-                elif act == "cap_range":
-                    desc = f"Capped values in column `{col}` within bounds: `[{step.get('min')}, {step.get('max')}]`"
-                elif act == "extract_datetime":
-                    desc = f"Extracted `{step.get('component')}` component from column `{col}` into new column `{step.get('new_column')}`"
-                elif act == "drop_violated":
-                    rule_desc = step.get('rule', {}).get('desc', 'custom check')
-                    desc = f"Dropped rows violating validation constraint: `{rule_desc}`"
-                elif act == "reorder_columns":
-                    desc = f"Reordered columns to custom order: `{step.get('value')}`"
-                elif act == "replace":
-                    desc = f"Replaced values matching `{step.get('find')}` with `{step.get('replace')}` (Regex: `{step.get('regex')}`)"
-                elif act == "drop_nulls":
-                    desc = f"Dropped rows with missing values in column `{col}`"
-                elif act == "drop_duplicates":
-                    desc = "Removed fully duplicate rows from the dataset"
-                elif act == "drop_empty_columns":
-                    desc = "Dropped columns that contain only missing values"
-                elif act == "drop_empty_rows":
-                    desc = "Dropped rows in which every value is missing"
-                elif act == "log_transform":
-                    desc = f"Applied log(1 + x) transform to numeric column `{col}` (negative values clipped to 0)"
-                elif act == "normalize_column_names":
-                    desc = f"Normalized all column names using method: `{step.get('value', 'snake_case')}`"
-                else:
-                    desc = f"Applied custom action `{act}` on column `{col}`"
-                    
-                lineage_block.append(f"{idx}. **{act.replace('_', ' ').title()}**: {desc}")
-            lineage_block.append("\n")
-            has_lineage = True
-    except Exception:
-        pass
+    if cleaning_recipe and len(cleaning_recipe) > 0:
+        lineage_block.append("## Data Lineage & Audit Log\n")
+        lineage_block.append("The following steps were applied in order to build the cleaned dataset; steps that were skipped or produced warnings are noted in the audit log:\n")
+        for idx, step in enumerate(cleaning_recipe, 1):
+            try:
+                lineage_block.append(_describe_step(idx, step))
+            except Exception as e:
+                lineage_block.append(f"{idx}. Could not describe step {idx} ({type(e).__name__}).")
+        lineage_block.append("\n")
+        has_lineage = True
 
     # 3. Pre-evaluate rules and calculate violations
     violations_summary = []
     total_violations = 0
     
     for r in active_rules:
-        r_type = r['type']
-        desc = r['desc']
+        r_type = r.get('type') or 'Unknown'
+        desc = r.get('desc') or r.get('type') or '(no description)'
         status = "PASSED"
         count = 0
         indices = []
@@ -154,7 +177,7 @@ def generate_evidence_report(
     report.append("| Rule Type | Description | Status | Violation Count |")
     report.append("| :--- | :--- | :--- | :--- |")
     for s in violations_summary:
-        report.append(f"| {s['type']} | `{s['desc']}` | {s['status']} | {s['count'] if s['type'] != 'Informational' else 'N/A'} |")
+        report.append(f"| {_cell(s['type'])} | {_code(s['desc'], in_table=True)} | {s['status']} | {s['count'] if s['type'] != 'Informational' else 'N/A'} |")
     report.append("\n")
     
     # Detail violations
@@ -165,7 +188,7 @@ def generate_evidence_report(
             if s['type'] == "Informational":
                 continue
             if s['status'] == "FAILED":
-                report.append(f"### ❌ {s['type']}: `{s['desc']}`")
+                report.append(f"### ❌ {s['type']}: {_code(s['desc'])}")
                 report.append(f"* **Violation Count:** {s['count']}")
                 idx_str = ", ".join(map(str, s['indices']))
                 if s['count'] > 100:
@@ -173,9 +196,9 @@ def generate_evidence_report(
                 report.append(f"* **Violating Row Indices:** `[{idx_str}]`")
                 report.append("")
             elif s['status'] == "ERROR":
-                report.append(f"### ⚠️ {s['type']}: `{s['desc']}`")
+                report.append(f"### ⚠️ {s['type']}: {_code(s['desc'])}")
                 report.append(f"* **Status:** Evaluation Error")
-                report.append(f"* **Error Message:** `{s['error']}`")
+                report.append(f"* **Error Message:** {_code(s['error'])}")
                 report.append("")
                 
     return "\n".join(report)

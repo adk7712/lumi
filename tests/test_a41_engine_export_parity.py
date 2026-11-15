@@ -56,7 +56,7 @@ def test_fill_int_column_fractional_stat_is_safe(how):
 def test_export_wraps_data_dependent_steps_but_not_trivial_ones():
     code = generate_pipeline_code([
         {'action': 'replace', 'column': 'a', 'find': 'x', 'replace': 'y'},
-        {'action': 'drop_duplicates'},
+        {'action': 'drop_empty_rows'},
     ], [])
     assert code.count('except Exception') == 1
 

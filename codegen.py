@@ -6,13 +6,20 @@ from query_guard import unsafe_regex_reason
 def _query_guard_source() -> str:
     # The exported script embeds the exact validator the app uses (query_guard.py, stdlib-only).
     from pathlib import Path
-    src = Path(__file__).with_name("query_guard.py").read_text(encoding="utf-8")
+    try:
+        src = Path(__file__).with_name("query_guard.py").read_text(encoding="utf-8")
+    except OSError as e:
+        raise RuntimeError(
+            "Cannot build the export: Lumi's query_guard.py source file is unavailable "
+            f"({e}); the export embeds it, so Lumi must be deployed with its source files."
+        ) from e
     return src[src.index("import ast"):].rstrip() + "\n\n"
 
 KNN_DEFAULT_NEIGHBORS = 5
 KNN_MAX_ROWS = 20000
 FUZZY_MATCH_THRESHOLD = 85
 FUZZY_MAX_UNIQUE = 1000
+FUZZY_TOTAL_BUDGET = 3000
 KNN_MAX_FEATURES = 10
 
 _RELATIONAL_OPS = (">", "<", "==", "!=", ">=", "<=")
@@ -41,13 +48,16 @@ _DOWNCAST_HELPER = (
     "    return df\n"
     "\n\n"
     "def _cap_series(s, lo, hi):\n"
-    "    \"\"\"Clip to [lo, hi]; integer columns stay integer when both bounds are integral.\"\"\"\n"
+    "    \"\"\"Clip to [lo, hi]; integer columns stay integer (lower bound rounded up, upper bound down).\"\"\"\n"
     "    if pd.api.types.is_integer_dtype(s) and not pd.api.types.is_bool_dtype(s):\n"
-    "        if all(b is None or float(b) == int(b) for b in (lo, hi)):\n"
+    "        import math\n"
+    "        lo_i = None if lo is None or not math.isfinite(float(lo)) else math.ceil(lo)\n"
+    "        hi_i = None if hi is None or not math.isfinite(float(hi)) else math.floor(hi)\n"
+    "        if lo_i is None or hi_i is None or lo_i <= hi_i:\n"
     "            info = np.iinfo(s.dtype.numpy_dtype if hasattr(s.dtype, 'numpy_dtype') else s.dtype)\n"
-    "            lo = None if lo is None else max(int(lo), int(info.min))\n"
-    "            hi = None if hi is None else min(int(hi), int(info.max))\n"
-    "            return s.clip(lower=lo, upper=hi)\n"
+    "            lo_i = None if lo_i is None else max(int(lo_i), int(info.min))\n"
+    "            hi_i = None if hi_i is None else min(int(hi_i), int(info.max))\n"
+    "            return s.clip(lower=lo_i, upper=hi_i)\n"
     "        s = s.astype('float64')\n"
     "    return s.clip(lower=lo, upper=hi)\n"
     "\n\n"
@@ -85,6 +95,15 @@ def _lit(v) -> str:
     """Python literal for a scalar bound/value; keeps int vs float like the engine."""
     if isinstance(v, bool) or v is None or isinstance(v, str):
         return repr(v)
+    import datetime
+    import numpy as np
+    import pandas as pd
+    if v is pd.NaT:
+        return "pd.NaT"
+    if isinstance(v, (datetime.datetime, datetime.date, np.datetime64)):
+        return f"pd.Timestamp({pd.Timestamp(v).isoformat()!r})"
+    if isinstance(v, np.bool_):
+        return repr(bool(v))
     if isinstance(v, numbers.Integral):
         return repr(int(v))
     if isinstance(v, numbers.Real):
@@ -94,7 +113,14 @@ def _lit(v) -> str:
         if math.isinf(f):
             return "float('inf')" if f > 0 else "float('-inf')"
         return repr(f)
-    return repr(v)
+    if isinstance(v, (list, tuple, dict)):
+        import ast
+        try:
+            if ast.literal_eval(repr(v)) == v:  # plain literals round-trip safely
+                return repr(v)
+        except (ValueError, SyntaxError):
+            pass
+    raise ValueError(f"Cannot export a value of type {type(v).__name__} as a Python literal: {v!r}")
 
 
 def _comment(text) -> str:
@@ -108,32 +134,48 @@ def _comment(text) -> str:
     return "".join(ch for ch in t if ch == "\t" or ch.isprintable())
 
 
+def _getsource(obj) -> str:
+    """Source text of a helper that is embedded in the export (needs the .py files, not just bytecode)."""
+    import inspect
+    try:
+        return inspect.getsource(obj).rstrip() + "\n\n\n"
+    except (OSError, TypeError) as e:
+        raise RuntimeError(
+            "Cannot build the export: the source code of Lumi's helper "
+            f"{getattr(obj, '__name__', obj)!r} is unavailable ({e}). The pipeline export embeds helper "
+            "functions from Lumi's .py source files, so Lumi must be deployed with its source files "
+            "(not bytecode-only .pyc files)."
+        ) from e
+
+
 def _relational_helper_source() -> str:
     """Exact source of rule_utils._relational_violations, so export == engine by construction."""
-    import inspect
     import rule_utils
-    return inspect.getsource(rule_utils._relational_violations).rstrip() + "\n\n\n"
+    return _getsource(rule_utils._relational_violations)
 
 
 def _fuzzy_helper_source() -> str:
     """Exact source of engine_ops._fuzzy_dedupe_mapping (same merges in app and export)."""
-    import inspect
     import engine_ops
-    return inspect.getsource(engine_ops._fuzzy_dedupe_mapping).rstrip() + "\n\n\n"
+    return _getsource(engine_ops._fuzzy_dedupe_mapping)
 
 
 def _datetime_helper_source() -> str:
     """Exact source of engine_ops._text_to_datetime (same date parsing in app and export)."""
-    import inspect
     import engine_ops
-    return inspect.getsource(engine_ops._text_to_datetime).rstrip() + "\n\n\n"
+    return _getsource(engine_ops._text_to_datetime)
 
 
 def _dedupe_helper_source() -> str:
     """Exact source of engine_ops._dedupe_names (same unique column names in app and export)."""
-    import inspect
     import engine_ops
-    return inspect.getsource(engine_ops._dedupe_names).rstrip() + "\n\n\n"
+    return _getsource(engine_ops._dedupe_names)
+
+
+def _replace_helper_source() -> str:
+    """Exact source of engine_ops._replace_operands (same numeric find/replace handling in app and export)."""
+    import engine_ops
+    return _getsource(engine_ops._replace_operands)
 
 
 def _valid_bound(v) -> bool:
@@ -166,6 +208,8 @@ def _codegen_fill_null(step: dict) -> list[str]:
     if v in ["mean", "median"]:
         code.append(f"    # Fill nulls with the column {v} (non-numeric entries are ignored when computing it).")
         code.append(f"    _num = pd.to_numeric(df[{c_repr}], errors='coerce')")
+        code.append(f"    if pd.api.types.is_float_dtype(_num):")
+        code.append(f"        _num = _num.replace([np.inf, -np.inf], np.nan)  # +/-inf must not poison the {v}")
         code.append(f"    if _num.notnull().any():")
         code.append(f"        _fill = _num.{v}()")
         code.append(f"        if pd.api.types.is_integer_dtype(df[{c_repr}]) and not pd.api.types.is_bool_dtype(df[{c_repr}]):")
@@ -177,7 +221,7 @@ def _codegen_fill_null(step: dict) -> list[str]:
         code.append(f"    # Fill nulls with the most frequent value (skipped if the column has no mode).")
         code.append(f"    _mode = df[{c_repr}].mode()")
         code.append(f"    if not _mode.empty:")
-        code.append(f"        df[{c_repr}] = df[{c_repr}].fillna(_mode[0])")
+        code.append(f"        df[{c_repr}] = df[{c_repr}].fillna(_mode.iloc[0])")
     elif v in ["knn", "iterative"]:
         code.append(f"    # Advanced imputation using scikit-learn on the target plus its {KNN_MAX_FEATURES} most-correlated numeric columns.")
         code.append(f"    try:")
@@ -191,6 +235,13 @@ def _codegen_fill_null(step: dict) -> list[str]:
         code.append(f"        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()")
         code.append(f"        if {c_repr} not in numeric_cols:")
         code.append(f"            raise TypeError({repr(v.upper() + ' imputation requires a numeric column. ')} + repr({c_repr}) + ' is ' + str(df[{c_repr}].dtype) + '.')")
+        code.append(f"        if df[{c_repr}].isna().all():")
+        code.append(f"            raise ValueError('the column is entirely empty')")
+        code.append(f"        # All-empty and +/-inf columns make the imputers fail; leave them out of the feature set.")
+        code.append(f"        def _usable_feature(_c):")
+        code.append(f"            _f = df[_c].astype('float64')")
+        code.append(f"            return bool(_f.notna().any()) and not bool(np.isinf(_f).any())")
+        code.append(f"        numeric_cols = [_c for _c in numeric_cols if _c == {c_repr} or _usable_feature(_c)]")
         code.append(f"        _others = [_c for _c in numeric_cols if _c != {c_repr}]")
         code.append(f"        if len(_others) > {KNN_MAX_FEATURES}:")
         code.append(f"            _corrs = df[numeric_cols].corrwith(df[{c_repr}]).abs().fillna(0)")
@@ -227,12 +278,16 @@ def _codegen_cast_type(step: dict) -> list[str]:
         return [
             f"    # Convert column to datetime, coercing errors to NaT.",
             f"    # Numeric columns are read as years / YYYYMMDD (never as nanoseconds); otherwise left unchanged with a warning.",
-            f"    if pd.api.types.is_numeric_dtype(df[{c_repr}]) and not pd.api.types.is_bool_dtype(df[{c_repr}]):",
+            f"    if pd.api.types.is_bool_dtype(df[{c_repr}]):",
+            f"        warnings.warn('Column ' + repr({c_repr}) + ' is boolean; not converted to datetime. Column left unchanged.')",
+            f"    elif pd.api.types.is_numeric_dtype(df[{c_repr}]):",
             f"        _dt = _numeric_to_datetime(df[{c_repr}], {c_repr})",
             f"        if _dt is not None:",
             f"            df[{c_repr}] = _dt",
             f"    else:",
-            f"        df[{c_repr}], _lost = _text_to_datetime(df[{c_repr}])",
+            f"        df[{c_repr}], _lost, _two = _text_to_datetime(df[{c_repr}])",
+            f"        if _two:",
+            f"            warnings.warn(str(_two) + ' value(s) in ' + repr({c_repr}) + ' had two-digit years; read as 20xx for 00-49 and 19xx for 50-99.')",
             f"        if _lost:",
             f"            warnings.warn(str(_lost) + ' value(s) in ' + repr({c_repr}) + ' could not be read as dates and became empty (NaT).')",
         ]
@@ -246,7 +301,20 @@ def _codegen_cast_type(step: dict) -> list[str]:
         ]
     return [
         f"    # Convert column to target numeric type, coercing errors to NaN.",
-        f"    df[{c_repr}] = pd.to_numeric(df[{c_repr}], errors='coerce').astype({repr(target_dtype)})"
+        f"    _src = df[{c_repr}]",
+        f"    if pd.api.types.is_object_dtype(_src) or pd.api.types.is_string_dtype(_src):",
+        f"        # '25,649' -> 25649, but only when every non-blank value is a clean number and at least one has a comma.",
+        f"        _is_str = _src.map(lambda v: isinstance(v, str) and v.strip() != '').astype(bool)",
+        f"        _txt = _src[_is_str].str.strip()",
+        f"        if _txt.str.contains(',', regex=False).any() and _txt.str.match(r'^-?\\d{{1,3}}(,\\d{{3}})+(\\.\\d+)?$|^-?\\d+(\\.\\d+)?$').all():",
+        f"            _src = _src.copy()",
+        f"            _src[_is_str] = _txt.str.replace(',', '', regex=False)",
+        f"    _num = pd.to_numeric(_src, errors='coerce')",
+        f"    _blank = df[{c_repr}].map(lambda v: isinstance(v, str) and v.strip() == '').astype(bool)",
+        f"    _lost = int((df[{c_repr}].notna() & ~_blank & _num.isna()).sum())",
+        f"    df[{c_repr}] = _num.astype({repr(target_dtype)})",
+        f"    if _lost:",
+        f"        warnings.warn(str(_lost) + ' value(s) in ' + repr({c_repr}) + ' could not be converted and became empty.')",
     ]
 
 
@@ -309,33 +377,63 @@ def _codegen_drop_violated(step: dict) -> list[str]:
 def _codegen_replace(step: dict) -> list[str]:
     col = step.get('column')
     f_repr, r_repr = repr(step['find']), repr(step['replace'])
-    if step.get('regex', False):
+    use_regex = step.get('regex', False)
+    if use_regex:
         why = unsafe_regex_reason(step['find'])
         if why:
             # Decided at export time with the same validator the engine uses.
             return [f"    warnings.warn({f'Replace on {col!r} skipped: unsafe regular expression ({why}).'!r})"]
-    if not step.get('regex', False):
-        call = lambda c: f"df[{c}].replace({f_repr}, {r_repr}, regex=False)"
-    else:
-        call = lambda c: f"safe_regex_replace(df[{c}], {f_repr}, {r_repr}{', deadline=_deadline' if c == 'c' else ''})"
+    no_match = repr(f"no values matched '{step['find']}' in '{col}'; nothing was replaced.")
+    timeout_msg = lambda c: f"warnings.warn('Replace on ' + repr({c}) + ' skipped: ' + str(e) + '; the column is unchanged.')"
     if col == "All":
+        if use_regex:
+            new = f"safe_regex_replace(df[c], {f_repr}, {r_repr}, deadline=_deadline)"
+            hit = "not _new.equals(df[c])"
+        else:
+            new = f"df[c].replace({f_repr}, {r_repr}, regex=False)"
+            hit = f"int(df[c].eq({f_repr}).sum()) > 0"
         return [
             f"    # Replace in all object/string columns, keeping each column's dtype.",
-            *(["    _deadline = regex_deadline()  # one time budget for the whole step"]
-              if step.get('regex', False) else []),
+            *(["    _deadline = regex_deadline()  # one time budget for the whole step"] if use_regex else []),
+            f"    _any_hit, _skipped = False, False",
             f"    for c in df.select_dtypes(include=['object', 'string']).columns:",
             f"        try:",
-            f"            df[c] = {call('c')}.astype(df[c].dtype)",
+            f"            _new = {new}",
+            f"            _hit = {hit}",
+            f"            df[c] = _new.astype(df[c].dtype)",
+            f"            _any_hit = _any_hit or _hit",
             f"        except RegexTimeoutError as e:",
-            f"            warnings.warn(f\"Replace on {{c!r}} skipped: {{e}}; the column is unchanged.\")",
+            f"            _skipped = True",
+            f"            {timeout_msg('c')}",
+            f"    if not _any_hit and not _skipped:",
+            f"        warnings.warn({no_match})",
         ]
     c_repr = repr(col)
+    if use_regex:
+        body = [
+            f"        _new = safe_regex_replace(df[{c_repr}], {f_repr}, {r_repr})",
+            f"        _hit = not _new.equals(df[{c_repr}])",
+            f"        df[{c_repr}] = _new.astype(df[{c_repr}].dtype)",
+            f"        if not _hit:",
+            f"            warnings.warn({no_match})",
+        ]
+    else:
+        body = [
+            f"        _f, _r, _bad = _replace_operands(df[{c_repr}], {f_repr}, {r_repr})",
+            f"        if _bad:",
+            f"            warnings.warn('Replace on ' + repr({c_repr}) + ' skipped: ' + _bad + '; the column is unchanged.')",
+            f"        else:",
+            f"            _hit = int(df[{c_repr}].eq(_f).sum()) > 0",
+            f"            df[{c_repr}] = df[{c_repr}].replace(_f, _r, regex=False).astype(df[{c_repr}].dtype)",
+            f"            if not _hit:",
+            f"                warnings.warn({no_match})",
+        ]
     return [
         f"    # Replace in the specified column, keeping its dtype.",
         f"    try:",
-        f"        df[{c_repr}] = {call(c_repr)}.astype(df[{c_repr}].dtype)",
+        *body,
         f"    except RegexTimeoutError as e:",
-        f"        warnings.warn(f\"Replace on {{{c_repr}!r}} skipped: {{e}}; the column is unchanged.\")",
+        f"        {timeout_msg(c_repr)}",
     ]
 
 def _codegen_strip_whitespace(step: dict) -> list[str]:
@@ -355,8 +453,35 @@ def _codegen_strip_whitespace(step: dict) -> list[str]:
         f"        warnings.warn('strip_whitespace skipped on non-text column ' + repr({c_repr}) + ' (' + str(df[{c_repr}].dtype) + ').')",
     ]
 
-def _normalize_text_body(method: str, target: str, indent: str, label: str) -> list[str]:
+# Mirrors engine_ops._title_case: no capital after an apostrophe ("don't" -> "Don't").
+_TITLE_OP = ("title().str.replace(r\"(?<=[^\\W\\d_])(['\\u2019])(T|S|D|M|Ll|Re|Ve)\\b\", "
+             "lambda m: m.group(1) + m.group(2).lower(), regex=True)")
+
+
+def _fuzzy_apply(target: str, indent: str, label: str) -> list[str]:
+    """Run the fuzzy merge; a missing `thefuzz` package skips the step with a clear warning."""
+    return [
+        f"{indent}try:",
+        f"{indent}    {target} = _s.replace(_fuzzy_dedupe_mapping(_s, {FUZZY_MATCH_THRESHOLD})).astype(_s.dtype)",
+        f"{indent}except ImportError:",
+        f"{indent}    warnings.warn('Fuzzy deduplication skipped on ' + repr({label}) + ': the \"thefuzz\" package is not installed (pip install thefuzz).')",
+    ]
+
+
+def _normalize_text_body(method: str, target: str, indent: str, label: str, budgeted: bool = False) -> list[str]:
     """Lines normalizing `target` in place (nulls preserved, dtype restored)."""
+    if method == "fuzzy_dedupe" and budgeted:
+        return [
+            f"{indent}_s = {target}",
+            f"{indent}unique_vals = [v for v in _s.dropna().unique() if isinstance(v, str)]",
+            f"{indent}if len(unique_vals) > {FUZZY_MAX_UNIQUE}:",
+            f"{indent}    warnings.warn('Fuzzy deduplication skipped on ' + repr({label}) + ': too many unique values (' + str(len(unique_vals)) + ' > {FUZZY_MAX_UNIQUE}).')",
+            f"{indent}elif len(unique_vals) > _fuzzy_left:",
+            f"{indent}    warnings.warn('Fuzzy deduplication skipped on ' + repr({label}) + ': the total unique-value budget across columns ({FUZZY_TOTAL_BUDGET}) is used up.')",
+            f"{indent}else:",
+            f"{indent}    _fuzzy_left -= len(unique_vals)",
+            *_fuzzy_apply(target, indent + "    ", label),
+        ]
     if method == "fuzzy_dedupe":
         return [
             f"{indent}_s = {target}",
@@ -364,10 +489,12 @@ def _normalize_text_body(method: str, target: str, indent: str, label: str) -> l
             f"{indent}if len(unique_vals) > {FUZZY_MAX_UNIQUE}:",
             f"{indent}    warnings.warn('Fuzzy deduplication skipped on ' + repr({label}) + ': too many unique values (' + str(len(unique_vals)) + ' > {FUZZY_MAX_UNIQUE}).')",
             f"{indent}else:",
-            f"{indent}    {target} = _s.replace(_fuzzy_dedupe_mapping(_s, {FUZZY_MATCH_THRESHOLD})).astype(_s.dtype)",
+            *_fuzzy_apply(target, indent + "    ", label),
         ]
     if method == "remove_punctuation":
-        op = "replace(f'[{string.punctuation}]', '', regex=True)"
+        op = "replace('[' + re.escape(string.punctuation) + ']', '', regex=True)"
+    elif method == "titlecase":
+        op = _TITLE_OP
     else:
         op = f"{_TEXT_METHODS[method]}()"
     return [
@@ -382,10 +509,13 @@ def _codegen_normalize_text(step: dict) -> list[str]:
         return [f"    # Unknown text normalization method {_comment(repr(method))}: no change."]
     code = [f"    # Normalize text using {method} method (nulls are preserved)."]
     if method == "remove_punctuation":
+        code.append("    import re")
         code.append("    import string")
     if col == "All":
+        if method == "fuzzy_dedupe":
+            code.append(f"    _fuzzy_left = {FUZZY_TOTAL_BUDGET}  # total unique values fuzzy-deduped across all columns")
         code.append("    for c in df.select_dtypes(include=['object', 'string']).columns:")
-        code.extend(_normalize_text_body(method, "df[c]", "        ", "c"))
+        code.extend(_normalize_text_body(method, "df[c]", "        ", "c", budgeted=True))
     else:
         c_repr = repr(col)
         code.append(f"    if pd.api.types.is_object_dtype(df[{c_repr}]) or pd.api.types.is_string_dtype(df[{c_repr}]):")
@@ -400,7 +530,10 @@ def _codegen_log_transform(step: dict) -> list[str]:
     return [
         f"    # Apply log(1+x) transformation to handle outliers (numeric columns only).",
         f"    if pd.api.types.is_numeric_dtype(df[{c_repr}]):",
+        f"        _neg = int((df[{c_repr}] < 0).sum())",
         f"        df[{c_repr}] = np.log1p(df[{c_repr}].clip(lower=0))",
+        f"        if _neg:",
+        f"            warnings.warn(str(_neg) + ' negative value(s) in ' + repr({c_repr}) + ' were set to 0 before the log transform.')",
         f"    else:",
         f"        warnings.warn('Log transformation requires a numeric column. ' + repr({c_repr}) + ' is ' + str(df[{c_repr}].dtype) + '.')"
     ]
@@ -410,7 +543,10 @@ def _codegen_rename_column(step: dict) -> list[str]:
     new_name = step['value']
     return [
         f"    # Rename column {_comment(repr(col))} to {_comment(repr(new_name))}.",
-        f"    df = df.rename(columns={{{repr(col)}: {repr(new_name)}}})"
+        f"    if {repr(new_name)} in df.columns and {repr(new_name)} != {repr(col)}:",
+        f"        warnings.warn({repr(f'Cannot rename {col!r} to {new_name!r}: a column with that name already exists.')})",
+        f"    else:",
+        f"        df = df.rename(columns={{{repr(col)}: {repr(new_name)}}})"
     ]
 
 def _codegen_reorder_columns(step: dict) -> list[str]:
@@ -438,7 +574,9 @@ def _codegen_extract_datetime(step: dict) -> list[str]:
         f"    if pd.api.types.is_numeric_dtype(df[{repr(col)}]) and not pd.api.types.is_bool_dtype(df[{repr(col)}]):",
         f"        _dt = _numeric_to_datetime(df[{repr(col)}], {repr(col)})",
         f"    else:",
-        f"        _dt, _lost = _text_to_datetime(df[{repr(col)}])",
+        f"        _dt, _lost, _two = _text_to_datetime(df[{repr(col)}])",
+        f"        if _two:",
+        f"            warnings.warn(str(_two) + ' value(s) in ' + repr({repr(col)}) + ' had two-digit years; read as 20xx for 00-49 and 19xx for 50-99.')",
         f"        if _lost:",
         f"            warnings.warn(str(_lost) + ' value(s) in ' + repr({repr(col)}) + ' could not be read as dates and became empty (NaT).')",
         f"    if _dt is not None:",
@@ -459,7 +597,10 @@ def _codegen_drop_empty_columns(step: dict) -> list[str]:
         "        warnings.warn('drop_empty_columns skipped: the dataset has no rows.')",
         "    else:",
         "        empty_cols = [c for c in df.columns if df[c].isnull().all()]",
-        "        df = df.drop(columns=empty_cols)"
+        "        if empty_cols:",
+        "            df = df.drop(columns=empty_cols)",
+        "        else:",
+        "            warnings.warn('No empty columns found to drop.')"
     ]
 
 def _codegen_drop_empty_rows(step: dict) -> list[str]:
@@ -491,9 +632,9 @@ def _codegen_normalize_column_names(step: dict) -> list[str]:
     code = [f"    # Normalize column names using {method} format."]
     if method == 'snake_case':
         code.append("    import re")
-        body = ["    _new_cols = []", "    for _orig in df.columns:"] + snake_lines
+        body = ["    _new_cols = []", "    for _orig in df.columns:", "        _orig = str(_orig)  # headers can be ints/floats/None"] + snake_lines
     else:
-        body = ["    _new_cols = []", "    for _orig in df.columns:", f"        _val = {exprs[method]}"]
+        body = ["    _new_cols = []", "    for _orig in df.columns:", "        _orig = str(_orig)  # headers can be ints/floats/None", f"        _val = {exprs[method]}"]
     code.extend(body + [
         "        _new_cols.append(_val if _val else f\"column_{_orig}\")",
         "    df.columns = _dedupe_names(_new_cols)",
@@ -590,6 +731,8 @@ _ERROR_PRONE_ACTIONS = {
     "fill_null", "cap_range", "cast_type", "replace", "normalize_text", "extract_datetime", "drop_violated",
     # raise on duplicate column names (df[col] is a DataFrame); the engine reports and continues
     "drop_empty_columns", "log_transform", "strip_whitespace",
+    # int/None headers (normalize_column_names) and unhashable list cells (drop_duplicates) can raise
+    "normalize_column_names", "drop_duplicates",
 }
 
 
@@ -681,8 +824,20 @@ def _uses_datetime_helper(*line_groups) -> bool:
 def _uses_dedupe_helper(*line_groups) -> bool:
     return any("_dedupe_names(" in ln for group in line_groups for ln in group)
 
+def _uses_replace_helper(*line_groups) -> bool:
+    return any("_replace_operands(" in ln for group in line_groups for ln in group)
+
 def _uses_fuzzy_helper(*line_groups) -> bool:
     return any("_fuzzy_dedupe_mapping(" in ln for group in line_groups for ln in group)
+
+_LOADER_EXAMPLE = [
+    '# path = "your_data.csv"  # .csv, .xlsx or .xls',
+    '# if path.lower().endswith((".xlsx", ".xls")):',
+    '#     df = pd.read_excel(path)',
+    '# else:',
+    '#     df = pd.read_csv(path, sep=None, engine="python")  # sniffs the delimiter',
+]
+
 
 def generate_pipeline_code(recipe: list, rules: list = None) -> str:
     """
@@ -697,6 +852,8 @@ def generate_pipeline_code(recipe: list, rules: list = None) -> str:
         code.append(_relational_helper_source())
     if _uses_dedupe_helper(clean_lines):
         code.append(_dedupe_helper_source())
+    if _uses_replace_helper(clean_lines):
+        code.append(_replace_helper_source())
     if _uses_fuzzy_helper(clean_lines):
         code.append(_fuzzy_helper_source())
     if _uses_datetime_helper(clean_lines):
@@ -709,7 +866,7 @@ def generate_pipeline_code(recipe: list, rules: list = None) -> str:
     # Add example runner block
     code.append("\nif __name__ == \"__main__\":")
     code.append("    # Example usage:")
-    code.append("    # df = pd.read_csv(\"your_data.csv\")")
+    code.extend("    " + ln for ln in _LOADER_EXAMPLE)
     code.append("    # df_cleaned = clean_data(df)")
     code.append("    # report = validate_data(df_cleaned)")
     code.append("    # if report:")
@@ -734,6 +891,8 @@ def generate_notebook_code(recipe: list, rules: list = None) -> str:
         import_lines += ["\n"] + [f"{line}\n" for line in _relational_helper_source().rstrip("\n").split("\n")]
     if _uses_dedupe_helper(clean_lines):
         import_lines += ["\n"] + [f"{line}\n" for line in _dedupe_helper_source().rstrip("\n").split("\n")]
+    if _uses_replace_helper(clean_lines):
+        import_lines += ["\n"] + [f"{line}\n" for line in _replace_helper_source().rstrip("\n").split("\n")]
     if _uses_fuzzy_helper(clean_lines):
         import_lines += ["\n"] + [f"{line}\n" for line in _fuzzy_helper_source().rstrip("\n").split("\n")]
     if _uses_datetime_helper(clean_lines):
@@ -783,7 +942,7 @@ def generate_notebook_code(recipe: list, rules: list = None) -> str:
             "outputs": [],
             "source": [
                 "# Example Usage:\n",
-                "# df = pd.read_csv(\"your_data.csv\")\n",
+                *[ln + "\n" for ln in _LOADER_EXAMPLE],
                 "# df_cleaned = clean_data(df)\n",
                 "# violations = validate_data(df_cleaned)\n",
                 "# if violations:\n",
