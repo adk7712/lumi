@@ -15,9 +15,9 @@
 
     <script>document.documentElement.className += ' js';</script>
 
-    <link rel="preconnect" href="https://api.fontshare.com">
-    <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
-    <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"> <!-- taste-skill-ignore: real code only -->
 
     <style>
         :root {
@@ -39,8 +39,8 @@
           --gap: 28px;
           --section: clamp(96px, 11vw, 168px);
 
-          --font: 'General Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-          --mono: ui-monospace, SFMono-Regular, Menlo, monospace; /* taste-skill-ignore: real code only */
+          --font: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+          --mono: 'Geist Mono', ui-monospace, monospace; /* taste-skill-ignore: real code only */
 
           --small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
           --body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
@@ -51,7 +51,7 @@
 
           --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
           --ring: var(--ink);
-          --cap: 0.718;
+          --cap: 0.71;
         }
         @media (max-width: 1023px) {
           :root { --phrase: 13vw; }
@@ -77,7 +77,7 @@
         }
         img { display: block; }
         button, input { font: inherit; color: inherit; }
-        h1, h2, h3 { font-weight: 700; text-wrap: balance; }
+        h1, h2, h3 { font-weight: 600; text-wrap: balance; }
         code { font-family: var(--mono); font-size: 1em; }
         .sr-only, .skip-link, .nav-gh-text { /* taste-skill-ignore: visually hidden text */
             position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -103,7 +103,7 @@
             display: inline-flex; align-items: center; justify-content: center; gap: 8px;
             min-height: 48px; padding: 0 24px; border: 0;
             background: var(--accent); color: var(--bg);
-            font-family: var(--font); font-size: var(--body); font-weight: 700; line-height: 1;
+            font-family: var(--font); font-size: var(--body); font-weight: 600; line-height: 1;
             text-decoration: none; cursor: pointer;
             transition: background-color 0.15s ease, transform 0.12s var(--ease);
         }
@@ -114,7 +114,7 @@
         .skip-link:focus {
             position: fixed; top: 8px; left: 8px; z-index: 10; width: auto; height: 48px; margin: 0;
             padding: 0 20px; overflow: visible; clip: auto; display: inline-flex; align-items: center;
-            background: var(--accent); color: var(--bg); font-weight: 700; text-decoration: none;
+            background: var(--accent); color: var(--bg); font-weight: 600; text-decoration: none;
         }
 
         /* Entrance (script only) */
@@ -132,7 +132,7 @@
         }
         .wordmark {
             display: inline-flex; align-items: center; gap: 10px; min-height: 48px;
-            font-size: var(--lead); font-weight: 700; letter-spacing: -0.02em;
+            font-size: var(--lead); font-weight: 600; letter-spacing: -0.03em;
             color: inherit; text-decoration: none; transition: opacity 0.15s ease;
         }
         .wordmark:hover { opacity: 0.75; }
@@ -160,7 +160,7 @@
         /* Hero */
         .hero { padding: 16px var(--margin) 0; margin-bottom: var(--section); }
         .hero-title {
-            font-size: var(--hero); line-height: 0.9; letter-spacing: -0.04em; font-weight: 700;
+            font-size: var(--hero); line-height: 0.9; letter-spacing: -0.045em; font-weight: 600;
         }
         .h1-l { display: block; white-space: nowrap; }
         .frame {
@@ -244,9 +244,9 @@
 
         /* How it works */
         .how { padding: var(--section) var(--margin); }
-        .how-h { font-size: var(--head); line-height: 1; letter-spacing: -0.03em; }
+        .how-h { font-size: var(--head); line-height: 1; letter-spacing: -0.045em; }
         .stage { margin-top: 64px; }
-        .stage-clause { font-size: var(--lead); font-weight: 700; }
+        .stage-clause { font-size: var(--lead); font-weight: 600; }
         .stage-body { margin-top: 8px; max-width: 40ch; }
         .stage-pic { margin-top: 20px; max-width: 720px; }
         .how-track, .how-names { display: none; }
@@ -312,7 +312,7 @@
         }
         .how-names button:hover { color: var(--ink); text-decoration-color: currentColor; }
         .how-names button:active { transform: scale(0.97); }
-        .how-names button[aria-pressed="true"] { color: var(--ink); font-weight: 700; }
+        .how-names button[aria-pressed="true"] { color: var(--ink); font-weight: 600; }
 
         @media (max-width: 1023.98px) {
           .js .how { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(46svh, auto) auto auto auto auto; min-height: 0; }
@@ -341,13 +341,13 @@
         .ws-proof, .ws-wide { min-width: 0; }
         .ws-text > p { max-width: 38ch; }
         .phrase {
-            align-self: end; max-width: 6.6em; font-size: var(--phrase); line-height: 0.9; letter-spacing: -0.03em;
-            font-weight: 700; text-wrap: balance;
+            align-self: end; max-width: 6.6em; font-size: var(--phrase); line-height: 0.9; letter-spacing: -0.045em;
+            font-weight: 600; text-wrap: balance;
         }
         .list { columns: 1; column-gap: var(--gap); }
         .list li { padding: 4px 0; break-inside: avoid; }
         .defs { display: grid; gap: 18px 28px; }
-        .defs dt { font-weight: 700; }
+        .defs dt { font-weight: 600; }
         .defs dd { margin-top: 2px; max-width: 46ch; }
                 .code {
             display: block; max-width: 100%; overflow-x: auto; white-space: pre;
@@ -378,13 +378,13 @@
 
         /* Try it */
         .try { padding: var(--section) var(--margin); }
-        .try h2 { font-size: var(--head); line-height: 1; letter-spacing: -0.03em; }
+        .try h2 { font-size: var(--head); line-height: 1; letter-spacing: -0.045em; }
         .try-input { display: none; margin-top: 24px; }
         .js .try-input { display: block; }
         .try-input input {
             display: block; width: 100%; padding: 0.04em 0 0.08em; margin: 0; border: 0; background: none;
-            font-family: var(--font); font-weight: 700; font-size: clamp(48px, 8vw, 132px); line-height: 1.1;
-            letter-spacing: -0.03em; color: var(--ink); caret-color: var(--accent); caret-shape: block;
+            font-family: var(--font); font-weight: 600; font-size: clamp(48px, 8vw, 132px); line-height: 1.1;
+            letter-spacing: -0.045em; color: var(--ink); caret-color: var(--accent); caret-shape: block;
             text-overflow: clip; white-space: nowrap; overflow-x: auto; border-radius: 0;
         }
         .try-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 48px; }
@@ -420,7 +420,7 @@
         .limits { padding: var(--section) var(--margin); }
         .faq-row { display: grid; gap: 12px; align-items: baseline; }
         .faq-row + .faq-row { margin-top: 56px; }
-        .limits h2, .limits h3 { font-size: var(--head); line-height: 1.05; letter-spacing: -0.03em; font-weight: 500; }
+        .limits h2, .limits h3 { font-size: var(--head); line-height: 1.05; letter-spacing: -0.045em; font-weight: 500; }
         .limits h2 { color: var(--muted); }
         .faq-row p { max-width: 40ch; line-height: 1.55; }
         @media (min-width: 900px) {
@@ -432,7 +432,7 @@
 
         /* Closing sentence */
         .cta { padding: 0 var(--margin) var(--section); }
-        .cta-line { font-size: 10vw; font-weight: 700; line-height: 1.25; letter-spacing: -0.03em; }
+        .cta-line { font-size: 10vw; font-weight: 600; line-height: 1.25; letter-spacing: -0.045em; }
         .cta-line h2 { display: inline; font: inherit; letter-spacing: inherit; }
         .cta-block { display: inline-block; background: var(--raised); padding: 0 0.22em; line-height: 1.1; }
         .cta-btn {
@@ -453,7 +453,7 @@
         .foot-big {
             display: block; margin-top: auto; padding-top: 64px; color: inherit; text-decoration: underline;
             text-decoration-color: transparent; text-decoration-thickness: 0.06em; text-underline-offset: 0.1em;
-            font-size: 8.5vw; font-weight: 700; line-height: 1; letter-spacing: -0.04em; white-space: nowrap;
+            font-size: 8.5vw; font-weight: 600; line-height: 1; letter-spacing: -0.045em; white-space: nowrap;
             transition: text-decoration-color 0.15s ease, transform 0.2s var(--ease);
         }
         .foot-big:hover { text-decoration-color: currentColor; }
