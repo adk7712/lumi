@@ -118,9 +118,9 @@ def _handle_fill_null(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFram
     fill_value = None
     if val in ["mean", "median"]:
         try:
-            num_s = pd.to_numeric(df[col], errors='coerce')
-            if pd.api.types.is_float_dtype(num_s):
-                num_s = num_s.replace([np.inf, -np.inf], np.nan)  # +/-inf must not poison the mean/median
+            # float64: pandas' masked median on small nullable ints breaks under newer numpy
+            num_s = pd.to_numeric(df[col], errors='coerce').astype('float64')
+            num_s = num_s.replace([np.inf, -np.inf], np.nan)  # +/-inf must not poison the mean/median
             if num_s.isnull().all():
                 return df, [f"Warning: Cannot calculate {val} for non-numeric column '{col}'."]
             fill_value = num_s.mean() if val == "mean" else num_s.median()

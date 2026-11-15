@@ -207,9 +207,8 @@ def _codegen_fill_null(step: dict) -> list[str]:
     code = []
     if v in ["mean", "median"]:
         code.append(f"    # Fill nulls with the column {v} (non-numeric entries are ignored when computing it).")
-        code.append(f"    _num = pd.to_numeric(df[{c_repr}], errors='coerce')")
-        code.append(f"    if pd.api.types.is_float_dtype(_num):")
-        code.append(f"        _num = _num.replace([np.inf, -np.inf], np.nan)  # +/-inf must not poison the {v}")
+        code.append(f"    _num = pd.to_numeric(df[{c_repr}], errors='coerce').astype('float64')")
+        code.append(f"    _num = _num.replace([np.inf, -np.inf], np.nan)  # +/-inf must not poison the {v}")
         code.append(f"    if _num.notnull().any():")
         code.append(f"        _fill = _num.{v}()")
         code.append(f"        if pd.api.types.is_integer_dtype(df[{c_repr}]) and not pd.api.types.is_bool_dtype(df[{c_repr}]):")
