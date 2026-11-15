@@ -4,6 +4,7 @@ import pandas as pd
 from pathlib import Path
 import io
 import logging
+import os
 import re
 import warnings
 import zipfile
@@ -88,12 +89,20 @@ def _hash_file_or_buffer(obj):
 
     Hashes name + bytes; the buffer position is always restored.
     """
-    if isinstance(obj, str):
-        return obj
     import hashlib
+    if isinstance(obj, str):
+        # Path input: key on path + mtime + size so editing the file in place invalidates the cache.
+        try:
+            stt = os.stat(obj)
+            return hashlib.sha1(f"{obj}\0{stt.st_mtime_ns}\0{stt.st_size}".encode("utf-8", "replace")).hexdigest()
+        except OSError:
+            return obj
     h = hashlib.sha1()
     h.update(str(getattr(obj, 'name', '')).encode('utf-8', 'replace'))
     h.update(b'\0')
+    sheet = getattr(obj, 'lumi_sheet', None)
+    if sheet:  # chosen XLSX sheet is part of the result, so part of the key
+        h.update(b'sheet:' + str(sheet).encode('utf-8', 'replace') + b'\0')
     try:
         data = None
         getvalue = getattr(obj, 'getvalue', None)
@@ -360,12 +369,33 @@ def _drop_trailing_empty_unnamed(df: pd.DataFrame) -> pd.DataFrame:
     return df if n == df.shape[1] else df.iloc[:, :n].copy()
 
 
-def read_tabular(source, name: str = "", nrows=None, kind=None):
+def xlsx_sheet_names(source) -> list:
+    """Sheet names of an .xlsx (path, bytes or file-like); [] when they cannot be read."""
+    try:
+        if isinstance(source, str):
+            check_xlsx_safe(source)
+            src = source
+        else:
+            data = _source_bytes(source)
+            check_xlsx_safe(data)
+            src = io.BytesIO(data)
+        with pd.ExcelFile(src) as xf:
+            return [str(n) for n in xf.sheet_names]
+    except Exception:
+        return []
+
+
+def read_tabular(source, name: str = "", nrows=None, kind=None, sheet=None):
     """Shared CSV/XLSX reader used by ``load_data`` and ``load_full_data`` (they must parse identically).
 
     ``source``: path, bytes or file-like. ``kind``: "csv" | "xlsx" (default: from ``name`` suffix, csv
     unless it ends in .xlsx). Returns ``(df, notices)``; ``df`` has str column names, no dtype downcast.
     Columns whose text a numeric parse would change (leading zeros, long ids) stay text.
+
+    ``sheet`` (xlsx only): sheet name, or an index (0 = first). ``None`` or an unknown name
+    reads the first sheet. ``load_full_data`` passes the sheet recorded with the upload bytes so the
+    full-file export reads the same sheet as the sample. A workbook with several
+    sheets adds a notice naming them.
     """
     notices = []
     if kind is None:
@@ -379,13 +409,24 @@ def read_tabular(source, name: str = "", nrows=None, kind=None):
             data = _source_bytes(source)
             check_xlsx_safe(data)
             src = lambda: io.BytesIO(data)  # noqa: E731
+        sheet_names = xlsx_sheet_names(src())
+        target = 0
+        if sheet_names:
+            want = sheet
+            if isinstance(want, int) and not isinstance(want, bool) and 0 <= want < len(sheet_names):
+                target = want
+            elif isinstance(want, str) and want in sheet_names:
+                target = sheet_names.index(want)
+            if len(sheet_names) > 1:
+                listed = ", ".join(f"'{n}'" for n in sheet_names)
+                notices.append(f"This workbook has {len(sheet_names)} sheets ({listed}); loaded '{sheet_names[target]}'.")
         try:
-            df = pd.read_excel(src(), nrows=nrows)
+            df = pd.read_excel(src(), nrows=nrows, sheet_name=target)
         except (zipfile.BadZipFile, KeyError, ValueError, OSError) as e:
             if isinstance(e, UnsafeFileError):
                 raise
             raise UnsafeFileError("this is not a valid Excel workbook (.xlsx).") from e
-        df = _keep_text_columns(df, lambda cols: pd.read_excel(src(), nrows=nrows, usecols=cols, dtype=str))
+        df = _keep_text_columns(df, lambda cols: pd.read_excel(src(), nrows=nrows, usecols=cols, dtype=str, sheet_name=target))
         return _stringify_columns(df), notices
 
     data = _source_bytes(source)
@@ -460,7 +501,8 @@ def load_data(file_path_or_buffer, nrows=None):
             kind = "xlsx"  # fallback buffers: trust the .xlsx name
         if Path(str(name)).suffix.lower() in (".xls", ".xlsm", ".xlsb", ".ods", ".json", ".parquet"):
             return _load_failure("Unsupported file type. Please upload a CSV or XLSX file.")
-        df, notices = read_tabular(file_path_or_buffer, name, nrows=nrows, kind=kind)
+        df, notices = read_tabular(file_path_or_buffer, name, nrows=nrows, kind=kind,
+                                      sheet=getattr(file_path_or_buffer, "lumi_sheet", None) or 0)
         if df.shape[1] == 0:
             return _load_failure("Could not read this file: it has no columns (only delimiters or blank headers).")
         df = downcast_dtypes(df)
@@ -523,6 +565,7 @@ def initialize_state(from_reset=False):
         st.session_state.current_df = None
         st.session_state.proposals = []
         st.session_state.scanned_columns = set()
+        st.session_state.sample_info = None
 
     df = st.session_state.raw_data
     all_cols = df.columns.tolist() if df is not None else []

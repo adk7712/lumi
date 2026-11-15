@@ -1,4 +1,6 @@
+import math
 import re
+import warnings
 
 import pandas as pd
 import numpy as np
@@ -23,6 +25,16 @@ SCOUT_THRESHOLDS = {
     "HIGH_CARDINALITY_PCT": 80.0,
 }
 
+def _fmt_pct(p: float) -> str:
+    """One-decimal percentage; nonzero shares that would round to 0.0 show as '<0.1'."""
+    if p > 0 and round(p, 1) == 0:
+        return "<0.1"
+    return f"{p:.1f}"
+
+
+SAMPLE_NOTE = " (based on a 10,000-row sample)"
+
+
 def _check_null_values(df: pd.DataFrame, col: str) -> list[dict]:
     """Identify and flag columns with a significant percentage of null values."""
     proposals = []
@@ -31,12 +43,12 @@ def _check_null_values(df: pd.DataFrame, col: str) -> list[dict]:
         null_pct = (null_count / len(df)) * 100
         if null_pct > SCOUT_THRESHOLDS["NULL_DROP_PCT"]:
             proposals.append({
-                "type": "Redundant Column", "column": col, "reason": f"{null_pct:.1f}% empty (Near-complete nullity)",
+                "type": "Redundant Column", "column": col, "reason": f"{_fmt_pct(null_pct)}% empty (Near-complete nullity)",
                 "rule_data": {"action": "drop_column", "column": col}
             })
         else:
             proposals.append({
-                "type": "Null Check", "column": col, "reason": f"{null_pct:.1f}% missing values",
+                "type": "Null Check", "column": col, "reason": f"{_fmt_pct(null_pct)}% missing values",
                 "rule_data": {"type": "Null Check", "col": col, "desc": f"{col} is NOT NULL"}
             })
     return proposals
@@ -55,6 +67,43 @@ def _check_constant_column(df: pd.DataFrame, col: str) -> list[dict]:
         })
     return proposals
 
+_THOUSANDS_RE = re.compile(r"-?\d{1,3}(,\d{3})+(\.\d+)?")
+_PLAIN_NUM_RE = re.compile(r"-?\d+(\.\d+)?")
+
+
+def _mostly_datetime(as_text: pd.Series) -> bool:
+    """>=95% of values parse as datetimes (mixed formats). Needs digits so month names/words don't count."""
+    cand = as_text[as_text.str.contains(r"\d", regex=True) & (as_text.str.len() >= 6)]
+    if len(cand) < 0.95 * len(as_text):
+        return False
+
+    def frac(x):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return pd.to_datetime(x, errors="coerce", format="mixed").notna().sum()
+
+    head = as_text.head(50)
+    if frac(head) < 0.9 * len(head):  # cheap early exit before parsing the whole sample
+        return False
+    return frac(as_text) >= 0.95 * len(as_text)
+
+
+_NUM_ID_NAME_HINT = re.compile(r"(^|[^a-z])(id|ids|zip|zipcode|postal|postcode|code|fips|uuid|sku)($|[^a-z])")
+
+
+def _numeric_looks_like_id(series: pd.Series, col, is_int: bool) -> bool:
+    """Numeric ID-like column: name hints at an identifier, or all values are unique integers."""
+    if _NUM_ID_NAME_HINT.search(str(col).lower()):
+        return True
+    vals = series.dropna()
+    if not (is_int and len(vals) > 1 and vals.nunique() == len(vals)):
+        return False
+    # Unique AND dense (like a row counter 1..n): a salary or population column is unique too,
+    # but spread out, and its outliers still deserve a Range Check.
+    span = int(vals.max()) - int(vals.min()) + 1
+    return span <= 2 * len(vals)
+
+
 def _check_numeric_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
     """Analyze numeric columns for statistical properties like outliers and skewness."""
     proposals = []
@@ -67,19 +116,28 @@ def _check_numeric_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
         lower_bound = Q1 - SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR
         upper_bound = Q3 + SCOUT_THRESHOLDS["OUTLIER_IQR_SCALE"] * IQR
         
+        col_vals = df[col].dropna()
+        is_int = pd.api.types.is_integer_dtype(df[col])  # float columns (e.g. ints with NaN) are left as floats
+        if is_int:
+            # Integer data: bounds are whole numbers (rounded outward) and never below 0 when all values are >= 0.
+            if col_vals.min() >= 0:
+                lower_bound = max(lower_bound, 0)
+            lower_bound, upper_bound = math.floor(lower_bound), math.ceil(upper_bound)
+
         # Use a mask for efficiency and clarity
         outlier_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
         outliers = outlier_mask.sum()
 
         # IQR == 0 (binary flags, zero-inflated counts) collapses the bounds to one value and
         # would flag every other value as an outlier; Drop/Cap would then destroy real data.
-        if outliers > 0 and IQR > 0 and df[col].nunique() > 2:
+        # ID-like columns (unique integers, id/zip/code names) have no meaningful outliers.
+        if (outliers > 0 and IQR > 0 and df[col].nunique() > 2
+                and not _numeric_looks_like_id(df[col], col, is_int)):
             proposals.append({
                 "type": "Range Check", "column": col, "reason": f"{outliers} statistical outliers detected",
                 "rule_data": {"type": "Range Check", "col": col, "min": float(lower_bound), "max": float(upper_bound), "desc": f"{col} within statistical bounds"}
             })
 
-        
         # Skewness Warning
         skew = df[col].skew()
         if pd.notna(skew) and abs(skew) > SCOUT_THRESHOLDS["HIGH_SKEWNESS_ABS"]:
@@ -116,7 +174,16 @@ def _check_string_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
             # Mixed Type Detection
             parsed = pd.to_numeric(non_nulls, errors='coerce')
             num_pct = parsed.notnull().mean()
-            if (SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MIN"] <= num_pct < SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MAX"]
+            as_text = non_nulls.astype(str)
+            if (num_pct < 1 and as_text.str.contains(",", regex=False).any()
+                    and as_text.str.fullmatch(_THOUSANDS_RE.pattern + "|" + _PLAIN_NUM_RE.pattern).all()
+                    and not _looks_like_identifier(col, as_text.str.replace(",", "", regex=False))):
+                proposals.append({
+                    "type": "Type Cast", "column": col,
+                    "reason": "Numbers stored as text with thousands separators (e.g. 25,649); every value can be cast to numeric",
+                    "rule_data": {"action": "cast_type", "column": col, "dtype": "float64"}
+                })
+            elif (SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MIN"] <= num_pct < SCOUT_THRESHOLDS["MIXED_TYPE_NUM_PCT_MAX"]
                     and not _looks_like_identifier(col, non_nulls[parsed.notnull()])):
                 n_lost = int(parsed.isnull().sum())
                 proposals.append({
@@ -126,6 +193,13 @@ def _check_string_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
                     "rule_data": {"action": "cast_type", "column": col, "dtype": "float64"}
                 })
             
+            elif (num_pct < 0.5 and _mostly_datetime(as_text)):
+                proposals.append({
+                    "type": "Type Cast", "column": col,
+                    "reason": "Text values parse as dates/times (>=95%); cast to datetime",
+                    "rule_data": {"action": "cast_type", "column": col, "dtype": "datetime64[ns]"}
+                })
+
             # High Cardinality Detection
             unique_pct = (df[col].nunique() / len(df)) * 100
             if unique_pct > SCOUT_THRESHOLDS["HIGH_CARDINALITY_PCT"]:
@@ -139,7 +213,8 @@ def _check_string_diagnostics(df: pd.DataFrame, col: str) -> list[dict]:
 
             # Whitespace Detection
             if df[col].dtype == 'object' or pd.api.types.is_string_dtype(df[col]):
-                has_whitespace = df[col].dropna().astype(str).str.contains(r"^\s+|\s+$").any()
+                txt = df[col].dropna().astype(str)
+                has_whitespace = bool((txt != txt.str.strip()).any())  # linear; a regex scan is quadratic
                 if has_whitespace:
                     proposals.append({
                         "type": "Formatting Issue", "column": col, "reason": "Leading or trailing whitespace detected",
@@ -235,7 +310,9 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
     proposals.extend(_check_dataset_level(df))
 
     # Sample down to 10,000 rows if dataset is larger, to ensure scouts run fast
-    if len(df) > 10000:
+    full_df = df
+    sampled = len(df) > 10000
+    if sampled:
         df = df.sample(n=10000, random_state=42).reset_index(drop=True)
 
     repeated = set(df.columns[df.columns.duplicated(keep=False)])
@@ -248,17 +325,25 @@ def generate_proposals(df: pd.DataFrame, scanned_columns: set) -> list[dict]:
             continue
         
         null_proposals = _check_null_values(df, col)
-        proposals.extend(null_proposals)
+        col_sample = list(null_proposals)
+        const_props = []
 
         # If a column was already flagged as Redundant (near-complete nullity → drop),
         # skip _check_constant_column to prevent a duplicate drop_column proposal.
         # A 100% null column trivially has nunique() == 0 which also triggers Constant Value.
         already_redundant = any(p['type'] == 'Redundant Column' for p in null_proposals)
         if not already_redundant:
-            proposals.extend(_check_constant_column(df, col))
+            # Constant-ness is cheap and must be exact: one differing value outside the sample counts.
+            const_props = _check_constant_column(full_df, col)
 
-        proposals.extend(_check_numeric_diagnostics(df, col))
-        proposals.extend(_check_string_diagnostics(df, col))
+        col_sample.extend(_check_numeric_diagnostics(df, col))
+        col_sample.extend(_check_string_diagnostics(df, col))
+        if sampled:
+            for p in col_sample:
+                p["reason"] += SAMPLE_NOTE
+        proposals.extend(col_sample[:len(null_proposals)])
+        proposals.extend(const_props)
+        proposals.extend(col_sample[len(null_proposals):])
                     
     # Filter out individual proposals that have been accepted or dismissed.
     # The format in scanned_columns is "column:proposal_type".
