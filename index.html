@@ -10,7 +10,11 @@
     <meta property="og:title" content="Lumi | Interactive Data Cleaning & Validation Assistant">
     <meta property="og:description" content="Scout your dataset, visually build data validation rulebooks, clean formatting issues, and export your cleaning steps as a Python pipeline.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://github.com/adk7712/lumi">
+    <meta property="og:image" content="https://raw.githubusercontent.com/adk7712/lumi/master/assets/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Lumi: Messy CSV to clean Python.">
+    <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" type="image/svg+xml" href="assets/lumi_logo_white.svg">
 
     <script>document.documentElement.className += ' js';</script>
@@ -322,7 +326,7 @@
           .js .stage-text { grid-column: 1; grid-row: 4; justify-content: flex-start; padding-top: 20px; }
           .js .how-names {
               grid-column: 1; grid-row: 5; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 8px var(--margin) 32px;
-              background: var(--paper); color: var(--paper-ink);
+              background: var(--paper); color: var(--paper-ink); --ring: var(--paper-ink);
           }
           .js .how-names button { color: var(--paper-ink); opacity: 0.62; }
           .js .how-names button:hover, .js .how-names button[aria-pressed="true"] { opacity: 1; color: var(--paper-ink); }
@@ -505,7 +509,7 @@
 
     <main id="main">
         <section class="hero" aria-labelledby="hero-title">
-            <h1 id="hero-title" class="hero-title"><span class="h1-l">Messy CSV <span class="frame" aria-hidden="true"><img src="assets/screenshots/audit-log.png" width="1600" height="556" alt="" decoding="async"></span></span> <span class="h1-l">to clean Python.</span></h1>
+            <h1 id="hero-title" class="hero-title"><span class="h1-l">Messy CSV <span class="frame" aria-hidden="true"><picture><source type="image/webp" srcset="assets/screenshots/audit-log.webp"><img src="assets/screenshots/audit-log.png" width="1600" height="556" alt="" decoding="async"></picture></span></span> <span class="h1-l">to clean Python.</span></h1>
             <div class="hero-row">
                 <p class="lead" data-r>Upload a CSV or Excel file. Lumi flags the problems, you choose the fixes, and you download the cleaned data with a Python script that runs the same steps.</p>
                 <div class="hero-actions" data-r>
@@ -516,7 +520,7 @@
             </div>
             <figure class="hero-fig">
                 <div class="shot shot--overview shutter">
-                    <img src="assets/screenshots/overview.png" width="1600" height="1000" fetchpriority="high" alt="Lumi's Overview tab for a loaded file: health 97%, 500 rows, 9 columns, and a donut chart of the dataset's composition.">
+                    <picture><source type="image/webp" srcset="assets/screenshots/overview.webp"><img src="assets/screenshots/overview.png" width="1600" height="1000" fetchpriority="high" alt="Lumi's Overview tab for a loaded file: health 97%, 500 rows, 9 columns, and a donut chart of the dataset's composition."></picture>
                 </div>
                 <figcaption>The Overview tab with a 500-row file loaded.</figcaption>
             </figure>
@@ -532,7 +536,7 @@
                 </div>
                 <figure class="stage-pic">
                     <div class="shot shot--status">
-                        <img src="assets/screenshots/overview.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Lumi's Workspace Status and Quick Actions: recipe steps, tracked features and active rules at 0, and buttons such as Remove 10 Duplicate Rows and Strip Column Whitespace.">
+                        <picture><source type="image/webp" srcset="assets/screenshots/overview.webp"><img src="assets/screenshots/overview.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Lumi's Workspace Status and Quick Actions: recipe steps, tracked features and active rules at 0, and buttons such as Remove 10 Duplicate Rows and Strip Column Whitespace."></picture>
                     </div>
                 </figure>
             </div>
@@ -543,18 +547,18 @@
                 </div>
                 <figure class="stage-pic">
                     <div class="shot shot--proposals">
-                        <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Scout proposal cards in Lumi, including Null Check on discount with 6.8% missing values, each with Accept and Dismiss buttons.">
+                        <picture><source type="image/webp" srcset="assets/screenshots/rulebook.webp"><img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Scout proposal cards in Lumi, including Null Check on discount with 6.8% missing values, each with Accept and Dismiss buttons."></picture>
                     </div>
                 </figure>
             </div>
             <div class="stage" data-name="Clean">
                 <div class="stage-text">
                     <p class="stage-clause">Next, set rules and clean</p>
-                    <p class="stage-body">Add rules, choose how violations get resolved, and apply any of the 17 transforms. Each step goes in the Audit Log.</p>
+                    <p class="stage-body">Add rules, resolve their violations, and apply any of the 12 transforms in the Transformations tab. Each step goes in the Audit Log.</p>
                 </div>
                 <figure class="stage-pic">
                     <div class="shot shot--rules">
-                        <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Active Rules in Lumi's Rulebook, including a Null Check on email_address with 44 violations, a resolution method dropdown, and Ignore and Remove buttons.">
+                        <picture><source type="image/webp" srcset="assets/screenshots/rulebook.webp"><img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Active Rules in Lumi's Rulebook, including a Null Check on email_address with 44 violations, a resolution method dropdown, and Ignore and Remove buttons."></picture>
                     </div>
                 </figure>
             </div>
@@ -565,7 +569,7 @@
                 </div>
                 <figure class="stage-pic">
                     <div class="shot shot--pipeline shot--c">
-                        <img src="assets/screenshots/pipeline.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Generated Python in Lumi: a comment reading Normalize column names using snake_case format, followed by the loop that does it.">
+                        <picture><source type="image/webp" srcset="assets/screenshots/pipeline.webp"><img src="assets/screenshots/pipeline.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Generated Python in Lumi: a comment reading Normalize column names using snake_case format, followed by the loop that does it."></picture>
                     </div>
                 </figure>
             </div>
@@ -606,7 +610,7 @@
             <div class="ws-proof">
                 <figure data-r>
                     <div class="shot shot--proposals">
-                        <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Scout proposal cards in Lumi, including Null Check on discount with 6.8% missing values, each with Accept and Dismiss buttons.">
+                        <picture><source type="image/webp" srcset="assets/screenshots/rulebook.webp"><img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Scout proposal cards in Lumi, including Null Check on discount with 6.8% missing values, each with Accept and Dismiss buttons."></picture>
                     </div>
                 </figure>
             </div>
@@ -615,7 +619,7 @@
 
         <section class="field field--paper field--mirror" aria-labelledby="ws-2">
             <div class="ws-text">
-                <p data-r>Five rule types: Null Check, Range Check, Relational Check, Custom Expression and Informational. Each active rule shows its violation count, and you choose how to resolve it.</p>
+                <p data-r>Five rule types: Null Check, Range Check, Relational Check, Custom Expression and Informational. Each active rule shows its violation count. Null and range rules offer several fixes; relational and custom rules drop the rows that break them.</p>
                 <dl class="defs" data-r>
                     <div><dt>Null violations</dt><dd>Drop Rows, Fill with Mean, Fill with Median, KNN Imputer, Iterative Imputer</dd></div>
                     <div><dt>Range violations</dt><dd>Drop Rows, Cap at Bounds, Log Transform</dd></div>
@@ -625,7 +629,7 @@
             <div class="ws-proof">
                 <figure data-r>
                     <div class="shot shot--rules">
-                        <img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Active Rules in Lumi's Rulebook, including a Null Check on email_address with 44 violations, a resolution method dropdown, and Ignore and Remove buttons.">
+                        <picture><source type="image/webp" srcset="assets/screenshots/rulebook.webp"><img src="assets/screenshots/rulebook.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Active Rules in Lumi's Rulebook, including a Null Check on email_address with 44 violations, a resolution method dropdown, and Ignore and Remove buttons."></picture>
                     </div>
                 </figure>
             </div>
@@ -639,7 +643,7 @@
             <div class="ws-proof">
                 <figure data-r>
                     <div class="shot shot--audit shot--c">
-                        <img src="assets/screenshots/audit-log.png" width="1600" height="556" loading="lazy" decoding="async" alt="Lumi's Audit Log with five numbered steps, from Original Data at 500 rows to strip_whitespace on customer_name at 490 rows, each with its health score.">
+                        <picture><source type="image/webp" srcset="assets/screenshots/audit-log.webp"><img src="assets/screenshots/audit-log.png" width="1600" height="556" loading="lazy" decoding="async" alt="Lumi's Audit Log with five numbered steps, from Original Data at 500 rows to strip_whitespace on customer_name at 490 rows, each with its health score."></picture>
                     </div>
                 </figure>
             </div>
@@ -659,7 +663,7 @@
             <div class="ws-proof">
                 <figure data-r>
                     <div class="shot shot--pipeline shot--c">
-                        <img src="assets/screenshots/pipeline.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Generated Python in Lumi: a comment reading Normalize column names using snake_case format, followed by the loop that does it.">
+                        <picture><source type="image/webp" srcset="assets/screenshots/pipeline.webp"><img src="assets/screenshots/pipeline.png" width="1600" height="1000" loading="lazy" decoding="async" alt="Generated Python in Lumi: a comment reading Normalize column names using snake_case format, followed by the loop that does it."></picture>
                     </div>
                     <figcaption>The same function further down, in the Pipeline Preview tab.</figcaption>
                 </figure>
@@ -689,7 +693,8 @@
                 <input id="col" type="text" value="Order Total ($)" aria-label="Column name" autocomplete="off" autocapitalize="off" spellcheck="false">
             </div>
             <div class="try-grid">
-                <div class="answer" data-ui aria-live="polite" data-r>
+                <p id="try-live" class="sr-only" aria-live="polite"></p>
+                <div class="answer" data-ui data-r>
                     <dl>
                         <div><dt>Scout says</dt><dd id="o-scout">Column Names: 1 column name not snake_case ('Order Total ($)')</dd></div>
                         <div><dt>Lumi renames it to</dt><dd><code id="o-name">order_total</code></dd></div>
@@ -825,12 +830,18 @@ df.columns = _dedupe_names(_new_cols)</code></pre></dd></div>
         var input = d.getElementById('col');
         var oScout = d.getElementById('o-scout');
         var oName = d.getElementById('o-name');
-        function render() {
+        var live = d.getElementById('try-live'), liveTimer;
+        function announce(val) {
+            clearTimeout(liveTimer);
+            liveTimer = setTimeout(function () { live.textContent = 'Lumi renames it to ' + val + '.'; }, 800);
+        }
+        function render(quiet) {
             var orig = input.value, val = normalize(orig);
             oScout.textContent = val === orig
                 ? 'Nothing to flag. Already snake_case.'
                 : "Column Names: 1 column name not snake_case ('" + orig + "')";
             oName.textContent = val;
+            if (quiet !== true) announce(val);
         }
         input.addEventListener('input', render);
         [].forEach.call(d.querySelectorAll('.example'), function (b) {
@@ -838,9 +849,10 @@ df.columns = _dedupe_names(_new_cols)</code></pre></dd></div>
                 input.value = b.getAttribute('data-v');
                 input.scrollLeft = 0;
                 render();
+                input.focus();
             });
         });
-        render();
+        render(true);
     })();
     </script>
 </body>
