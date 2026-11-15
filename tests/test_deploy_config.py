@@ -48,3 +48,47 @@ def test_testing_mode_never_warns(clean):
     clean.setenv("LUMI_ENV", "production")
     clean.setenv("LUMI_TESTING", "1")
     assert persistence.storage_warning() is None
+
+
+def test_secrets_example_top_level_keys_parse_at_top_level():
+    """Top-level secrets must sit above the first [table] header, or TOML nests them."""
+    import tomllib
+    from pathlib import Path
+
+    example = Path(__file__).resolve().parent.parent / ".streamlit" / "secrets.toml.example"
+    text = example.read_text(encoding="utf-8")
+    with open(example, "rb") as f:
+        data = tomllib.load(f)
+
+    for key in ("env", "dev_auth", "DB_URL"):
+        assert key in data, f"{key} must be a top-level key in secrets.toml.example"
+    assert "DB_URL" not in data["auth"]
+    assert "DB_URL" not in data["auth"]["google"]
+
+    # Commented-out POSTHOG_API_KEY placeholder must also live above the first table header.
+    first_header = next(i for i, line in enumerate(text.splitlines()) if line.startswith("["))
+    posthog_line = next(i for i, line in enumerate(text.splitlines()) if "POSTHOG_API_KEY" in line)
+    assert posthog_line < first_header
+
+
+def test_inject_posthog_finds_key_nested_under_table():
+    """A key placed below [auth.google] (old template order) is still found, with a warning."""
+    from unittest.mock import MagicMock
+    import ui_utils
+
+    st_obj = MagicMock()
+    st_obj.secrets = {"auth": {"google": {"POSTHOG_API_KEY": "phc_test"}}}
+    ui_utils.inject_posthog(st_obj)
+    st_obj.html.assert_called_once()
+    assert "phc_test" in st_obj.html.call_args[0][0]
+
+
+def test_inject_posthog_skips_without_key(monkeypatch):
+    from unittest.mock import MagicMock
+    import ui_utils
+
+    monkeypatch.delenv("POSTHOG_API_KEY", raising=False)
+    st_obj = MagicMock()
+    st_obj.secrets = {"auth": {"redirect_uri": "x"}}
+    ui_utils.inject_posthog(st_obj)
+    st_obj.html.assert_not_called()

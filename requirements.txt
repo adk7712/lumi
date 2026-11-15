@@ -9,3 +9,4 @@ streamlit-sortables==0.3.1
 streamlit-cookies-controller==0.0.4
 Authlib==1.7.2
 psycopg2-binary==2.9.12
+regex==2026.2.28

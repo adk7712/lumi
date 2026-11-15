@@ -1,0 +1,18 @@
+# CI lint: pyflakes rules only. F401/F541/F841 (unused import / f-string / variable) are cosmetic
+# and ignored; everything else (undefined names, redefinitions, bad comparisons) must be clean.
+target-version = "py313"
+extend-exclude = [
+    "tests/stress_test_db.py",
+    "tests/benchmark_db_operations.py",
+    "tests/benchmark_pool_improvements.py",
+    "tests/autonomous_perf_suite.py",
+    "tests/analyze_db_perf.py",
+]
+
+[lint]
+select = ["F"]
+ignore = ["F401", "F541", "F841"]
+
+[lint.per-file-ignores]
+# intentional lazy re-import of psycopg2 pieces inside the pool builder
+"lumi_db/pool.py" = ["F811"]

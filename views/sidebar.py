@@ -10,25 +10,45 @@ from persistence import (
 from state_manager import (
     switch_workspace,
     initialize_state,
-    delete_cached_file
+    delete_cached_file,
+    cancel_pending_saves,
 )
+from lumi_state.session_io import reset_workspace_view_state
+
+_MENU_GEN_KEY = "_ws_menu_gen"
+
+
+def _close_workspace_menus():
+    """Close every workspace three-dot popover on the next run.
+
+    A popover's open state lives in the browser and Streamlit cannot close it from Python, but
+    a new element key remounts it closed. Called when a menu item is used.
+    """
+    st.session_state[_MENU_GEN_KEY] = st.session_state.get(_MENU_GEN_KEY, 0) + 1
+
+def _md_escape(text) -> str:
+    """Escape markdown so a user-chosen workspace name renders as plain text."""
+    import re
+    return re.sub(r"([\\`*_{}\[\]()#+\-.!|>~<$:&])", r"\\\1", str(text))
+
 
 @st.dialog("New Workspace")
 def show_new_workspace_dialog():
     st.write("Create a new dataset cleaning workspace.")
-    ws_name = st.text_input("Workspace Name", value="Untitled Workspace", key="new_ws_name_input")
+    ws_name = st.text_input("Workspace Name", value="Untitled Workspace", key="new_ws_name_input", max_chars=100)
     col1, col2 = st.columns(2)
     if col1.button("Create", type="primary", use_container_width=True, key="confirm_create_ws"):
         st.session_state._pending_workspace_name = ws_name
         initialize_state(from_reset=True)
+        reset_workspace_view_state()
         st.rerun()
     if col2.button("Cancel", use_container_width=True, key="cancel_create_ws"):
         st.rerun()
 
 @st.dialog("Rename Workspace")
 def show_rename_workspace_dialog(session_id: str, current_name: str):
-    st.write(f"Rename **{current_name}**")
-    new_name = st.text_input("New Name", value=current_name, key=f"rename_input_{session_id}")
+    st.write(f"Rename **{_md_escape(current_name)}**")
+    new_name = st.text_input("New Name", value=current_name, key=f"rename_input_{session_id}", max_chars=100)
     col1, col2 = st.columns(2)
     if col1.button("Save", type="primary", use_container_width=True, key=f"confirm_rename_{session_id}"):
         user_email = get_logged_in_user()
@@ -41,15 +61,17 @@ def show_rename_workspace_dialog(session_id: str, current_name: str):
 
 @st.dialog("Delete Workspace")
 def show_delete_workspace_dialog(session_id: str, project_name: str):
-    st.warning(f"Are you sure you want to delete **{project_name}**? This cannot be undone.")
+    st.warning(f"Are you sure you want to delete **{_md_escape(project_name)}**? This cannot be undone.")
     col1, col2 = st.columns(2)
     if col1.button("Delete", type="primary", use_container_width=True, key=f"confirm_delete_{session_id}"):
         user_email = get_logged_in_user()
+        cancel_pending_saves(session_id)  # an in-flight save would re-insert the deleted row
         delete_session(session_id, user_email)
         delete_cached_file(session_id)
         if st.session_state.get("session_id") == session_id:
             initialize_state(from_reset=True)
-        st.toast(f"Deleted {project_name}")
+            reset_workspace_view_state()
+        st.toast(f"Deleted {_md_escape(project_name)}")
         st.rerun()
     if col2.button("Cancel", use_container_width=True, key=f"cancel_delete_{session_id}"):
         st.rerun()
@@ -89,7 +111,7 @@ def render_workspace_sidebar():
             is_pinned = bool(p.get("pinned", 0))
 
             pin_icon = "📌 " if is_pinned else ""
-            display_title = f"{pin_icon}{p_name}"
+            display_title = f"{pin_icon}{_md_escape(p_name)}"
 
             # Layout for workspace card: [Button / Title (active highlight)] [Options Popover]
             col_main, col_menu = st.columns([5, 1])
@@ -106,21 +128,24 @@ def render_workspace_sidebar():
                     switch_workspace(p_id)
 
             with col_menu:
-                with st.popover("⋮", key=f"ws_menu_{p_id}", use_container_width=True):
+                with st.popover("⋮", key=f"ws_menu_{p_id}_{st.session_state.get(_MENU_GEN_KEY, 0)}", use_container_width=True):
                     if st.button("Rename", key=f"menu_rename_{p_id}", use_container_width=True):
+                        _close_workspace_menus()  # takes effect on the full rerun after the dialog
                         show_rename_workspace_dialog(p_id, p_name)
                     
                     pin_label = "Unpin" if is_pinned else "Pin to top"
                     if st.button(pin_label, key=f"menu_pin_{p_id}", use_container_width=True):
                         toggle_pin_session(p_id, user_email)
+                        _close_workspace_menus()
                         st.rerun()
                         
                     if st.button("Delete", key=f"menu_del_{p_id}", use_container_width=True, type="primary"):
+                        _close_workspace_menus()
                         show_delete_workspace_dialog(p_id, p_name)
 
             ts_str = format_timestamp(p.get("updated_at"))
             fn_text = p.get("filename", "")
             step_text = f"{p.get('step_count', 0)} steps"
-            caption_parts = [part for part in [fn_text, step_text, ts_str] if part]
+            caption_parts = [part for part in [_md_escape(fn_text) if fn_text else "", step_text, ts_str] if part]
             st.caption(" · ".join(caption_parts))
             st.markdown("<div style='margin-bottom: 0.5rem;'></div>", unsafe_allow_html=True)

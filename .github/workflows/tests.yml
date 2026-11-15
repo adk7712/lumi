@@ -6,15 +6,22 @@ on:
   pull_request:
     branches: [experimental, master]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
     env:
       LUMI_TESTING: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.13"
           cache: pip
@@ -25,9 +32,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Lint (ruff, pyflakes rules)
+        run: ruff check .
+
+      - name: Dependency audit (non-blocking)
+        run: pip-audit -r requirements.txt
+        continue-on-error: true
+
       - name: Run tests
         run: >
-          pytest -q tests/
+          python -m pytest -q tests/
           --ignore=tests/stress_test_db.py
           --ignore=tests/benchmark_db_operations.py
           --ignore=tests/benchmark_pool_improvements.py

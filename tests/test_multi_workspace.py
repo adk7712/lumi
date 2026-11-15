@@ -63,7 +63,7 @@ class TestMultiWorkspace(unittest.TestCase):
         st.session_state.dev_user_email = None
         self.assertFalse(is_authenticated_user())
 
-        st.session_state.dev_user_email = "guest_12345@lumi.ai"
+        st.session_state.dev_user_email = "guest_" + "a" * 32 + "@lumi.ai"
         self.assertFalse(is_authenticated_user())
 
         st.session_state.dev_user_email = "realuser@company.com"

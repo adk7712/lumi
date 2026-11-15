@@ -187,7 +187,7 @@ def test_codegen_coverage_gaps():
     custom_rule = {'type': 'Custom Expression', 'query': 'a > 5', 'desc': 'a is greater than 5'}
     recipe_custom = [{'action': 'drop_violated', 'rule': custom_rule}]
     code = generate_pipeline_code(recipe_custom)
-    assert "df.query(\"a > 5\")" in code or "df.query('a > 5')" in code
+    assert "safe_query_index(df, 'a > 5')" in code or 'safe_query_index(df, "a > 5")' in code
     
     # 5. normalize_text titlecase codegen
     recipe_title = [{'action': 'normalize_text', 'column': 'a', 'value': 'titlecase'}]

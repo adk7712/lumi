@@ -2,6 +2,8 @@
 -- All statements are idempotent and safe on an existing production DB that already
 -- has the sessions table (with pinned) and no schema_version table.
 -- Application order: schema_version table, then migrations 1..3, each recorded after it runs.
+-- The app applies each migration in its own transaction holding pg_advisory_xact_lock(1280659785)
+-- (lumi_db/schema.py _PG_MIGRATION_LOCK_KEY) so concurrent app processes do not race.
 
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,

@@ -73,8 +73,8 @@ def test_active_rules_validation_behavior():
     assert violations_dirty['score in [0.0, 100.0]'] == 1 # 150.0 is out of bounds
     
     assert 'parent_age > age' in violations_dirty
-    # Row 1: parent_age 40, age is NaN -> comparison fails/violates. Row 2: 20 > 30 is False -> violates. Total 2.
-    assert violations_dirty['parent_age > age'] == 2
+    # Row 1: age is NaN -> not a relational violation (Null Check's job). Row 2: 20 > 30 is False -> violates. Total 1.
+    assert violations_dirty['parent_age > age'] == 1
     
     assert "Violates: city != 'NYC'" in violations_dirty
     assert violations_dirty["Violates: city != 'NYC'"] == 1 # 'London' is the violator

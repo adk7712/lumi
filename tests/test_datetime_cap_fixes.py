@@ -60,7 +60,9 @@ def test_cast_ambiguous_numeric_left_unchanged_with_warning(vals):
 def test_cast_strings_unchanged_behaviour():
     df = pd.DataFrame({'c': ['2024-01-05', 'bad', None]})
     eng, msgs, script, _ = both(df, CAST)
-    assert msgs == [] and eng['c'].iloc[0] == pd.Timestamp('2024-01-05')
+    # 'bad' still becomes NaT, but is now reported instead of disappearing silently (A39)
+    assert msgs == ["Warning: 1 value(s) in 'c' could not be read as dates and became empty (NaT)."]
+    assert eng['c'].iloc[0] == pd.Timestamp('2024-01-05') and pd.isna(eng['c'].iloc[1])
     assert_frame_equal(eng, script)
 
 
@@ -110,12 +112,13 @@ def test_cap_int_with_float_valued_integral_bounds_keeps_int():
     assert_frame_equal(eng, script)
 
 
-def test_cap_int_with_fractional_bound_becomes_float():
+def test_cap_int_with_fractional_bound_rounds_inward_and_keeps_int():
+    # Q9 (owner decision 2026-11-16): integer columns round bounds inward and keep an int dtype.
     df = pd.DataFrame({'c': [-5, 3, 50]})
     with warnings.catch_warnings():
         warnings.simplefilter("error", FutureWarning)
         eng, _, script, _ = both(df, cap(0.5, 10.5))
-    assert eng['c'].dtype == np.float64 and list(eng['c']) == [0.5, 3.0, 10.5]
+    assert pd.api.types.is_integer_dtype(eng['c']) and list(eng['c']) == [1, 3, 10]
     assert_frame_equal(eng, script)
 
 

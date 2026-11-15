@@ -90,8 +90,11 @@ def test_rule_addition_and_clear():
     # Click Clear All rules button
     clear_btn = at.button(key="clear_all_rules_btn")
     clear_btn.click().run()
+    # Confirmation required: nothing cleared yet
+    assert len(at.session_state.rules) == 1
+    next(b for b in at.button if b.key == "confirm_clear_rules_btn").click().run()
     
-    # Verify rules and recipe were cleared
+    # Verify rules were cleared after confirmation
     assert len(at.session_state.rules) == 0
     print("Test Rule Addition and Clear passed.")
 

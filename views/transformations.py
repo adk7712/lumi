@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import time
 import re
-from state_manager import add_step, get_column_dependencies, sync_column_rename
+from state_manager import add_step, get_column_dependencies
 from streamlit_sortables import sort_items
 from ui_utils import load_style
-from engine_ops import predict_column_renames
+from query_guard import unsafe_regex_reason
 
 def render_transformations_tab(df):
     all_cols = df.columns.tolist()
@@ -31,7 +31,13 @@ def render_transformations_tab(df):
         c1, c2, c3 = st.columns(3)
         sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
         use_regex = st.toggle("Use Regular Expressions", key="replace_use_regex")
-        st.button("Execute Replacement", key="btn_fr", on_click=add_step, args=({"action": "replace", "column": target, "find": sf, "replace": sr, "regex": use_regex},))
+        if st.button("Execute Replacement", key="btn_fr"):
+            reason = unsafe_regex_reason(sf) if use_regex else None
+            if reason:
+                st.error(f"This regular expression was not applied: {reason}. Simplify the pattern or turn off regular expressions.")
+            else:
+                add_step({"action": "replace", "column": target, "find": sf, "replace": sr, "regex": use_regex})
+                st.session_state._needs_rerun = True
     elif t_type == "Normalize Text":
         c1, c2 = st.columns(2)
         norm_methods = {
@@ -75,7 +81,7 @@ def render_transformations_tab(df):
             else:
                 with st.spinner("Renaming column..."):
                     add_step({"action": "rename_column", "column": target, "value": new_name})
-                    sync_column_rename(target, new_name)
+                st.session_state._needs_rerun = True
     elif t_type == "Reorder Columns":
         if 'temp_col_order' not in st.session_state or set(st.session_state.temp_col_order) != set(all_cols):
             st.session_state.temp_col_order = list(all_cols)
@@ -99,6 +105,7 @@ def render_transformations_tab(df):
         if btn_placeholder.button("Apply Column Order", key="btn_apply_reorder"):
             add_step({"action": "reorder_columns", "value": list(st.session_state.temp_col_order)})
             st.session_state.show_reorder_success = True
+            st.session_state._needs_rerun = True
     elif t_type == "Extract Datetime":
         datetime_cols = [c for c in all_cols if pd.api.types.is_datetime64_any_dtype(df[c])]
         
@@ -133,6 +140,7 @@ def render_transformations_tab(df):
                         "new_column": new_name,
                         "component": component
                     })
+                st.session_state._needs_rerun = True
     elif t_type == "Remove Duplicate Rows":
         st.info("This will remove all exact duplicate rows from the active dataset.")
         st.button("Execute Duplicate Removal", key="btn_remove_dups", on_click=add_step, args=({"action": "drop_duplicates"},))
@@ -154,8 +162,10 @@ def render_transformations_tab(df):
         if st.button("Execute Column Normalization", key="btn_norm_cols"):
             with st.spinner("Normalizing column names..."):
                 method = method_options[selected_method]
-                new_names = predict_column_renames(df.columns.tolist(), method, only_changed=True)
-                
                 add_step({"action": "normalize_column_names", "value": method})
-                for orig, val in new_names.items():
-                    sync_column_rename(orig, val)
+            st.session_state._needs_rerun = True
+
+    # Skip/error messages from the last step stay visible (a toast vanishes in seconds); they are
+    # replaced by the next step and cleared by Undo/Redo/reset.
+    for warn in st.session_state.get('_step_warnings') or []:
+        st.warning(warn)

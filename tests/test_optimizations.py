@@ -88,13 +88,11 @@ def test_dtype_downcasting():
     df_downcast = downcast_dtypes(df)
     
     # Verify dtypes are optimized
-    assert df_downcast["dec_float"].dtype == np.float32
+    # Floats stay float64 (float32 showed display noise such as 214.34 -> 214.339996)
+    assert df_downcast["dec_float"].dtype == np.float64
     # downcast='integer' will downcast to int8 because values 100/200 fit in int8 or int16
     assert df_downcast["large_int"].dtype in [np.int8, np.int16, np.int32]
-    
-    # Spot check float32 values precision is within float32 bounds (approx 7 digits of precision)
-    # 1.123456789012345 -> 1.1234568
-    np.testing.assert_allclose(df_downcast["dec_float"].iloc[0], 1.1234567, rtol=1e-6)
+    assert df_downcast["dec_float"].iloc[0] == df["dec_float"].iloc[0]
     print("test_dtype_downcasting passed.")
 
 def test_session_resume_recovery():
