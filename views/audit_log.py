@@ -1,6 +1,6 @@
 import html
 import streamlit as st
-from state_manager import replay_steps, get_state_at_step, unresolve_broken_rules, revert_step_renames, save_session_state, save_db_session, _update_project_cache
+from state_manager import replay_steps, get_state_at_step, unresolve_broken_rules, revert_step_renames, save_session_state, save_db_session, _update_project_cache, regenerate_proposals
 from lumi_state.steps import step_renames, get_column_dependencies
 
 def _step_refs(step):
@@ -50,9 +50,12 @@ def _remove_step(i):
         "current_df": ss.current_df,
         "redo_stack": list(ss.get("redo_stack", [])),
         "rules": [dict(r) for r in ss.rules],
+        "scanned_columns": set(ss.get("scanned_columns", set())),
     }
     try:
         removed_step = ss.cleaning_recipe.pop(i-1)
+        if '_source_proposal_type' in removed_step and '_source_proposal_col' in removed_step:
+            ss.scanned_columns.discard(f"{removed_step['_source_proposal_col']}:{removed_step['_source_proposal_type']}")
         remaining_recipe = ss.cleaning_recipe[i-1:]
         ss.cleaning_recipe = ss.cleaning_recipe[:i-1]
         ss.intermediate_states = ss.intermediate_states[:i]
@@ -64,6 +67,7 @@ def _remove_step(i):
         replay_steps(remaining_recipe, persist=False)
         unresolve_broken_rules()
         ss.redo_stack = []
+        regenerate_proposals()
         save_session_state()
         save_db_session()
         _update_project_cache()
@@ -74,6 +78,7 @@ def _remove_step(i):
         ss.current_df = snapshot["current_df"]
         ss.redo_stack = snapshot["redo_stack"]
         ss.rules = snapshot["rules"]
+        ss.scanned_columns = snapshot["scanned_columns"]
         st.error(f"Could not remove step {i + 1}: {e}. The previous state was restored.")
 
 def render_audit_log_tab():

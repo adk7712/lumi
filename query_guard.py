@@ -402,14 +402,74 @@ def validate_query_expression(expr) -> str:
     try:
         tree = ast.parse(stripped.strip(), mode="eval")
     except (SyntaxError, ValueError) as e:
-        raise UnsafeQueryError(f"invalid syntax ({e})") from None
+        hint = (" Column names containing spaces or special characters must be wrapped in "
+                "backticks, e.g. `first name` instead of first name.")
+        raise UnsafeQueryError(f"invalid syntax ({e}).{hint}") from None
     _check_node(tree.body)
     return expr
+
+
+_NA_POSITION = {"contains": 3, "startswith": 1, "endswith": 1}  # positional index of ``na``
+
+
+def _default_na_false(expr):
+    """Add ``na=False`` to ``.str.contains/startswith/endswith`` calls that do not pass ``na``.
+
+    Without it a NaN cell makes pandas raise "Cannot mask with non-boolean array containing
+    NA / NaN values"; a missing value should simply not match.  Expects a validated ``expr``.
+    """
+    # Same-length placeholder per backticked name keeps the AST offsets valid for ``expr``.
+    chars, i, quote = [], 0, None
+    while i < len(expr):
+        c = expr[i]
+        if quote:
+            if c == "\\":
+                chars.append(expr[i:i + 2])
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+        elif c in "'\"":
+            quote = c
+        elif c == "`":
+            end = expr.find("`", i + 1)
+            chars.append("_" * len(expr[i:end + 1].encode("utf-8")))
+            i = end + 1
+            continue
+        chars.append(c)
+        i += 1
+    masked = "".join(chars)
+    tree = ast.parse(masked.strip(), mode="eval")
+    data = bytearray(expr.encode("utf-8"))
+    mdata = masked.encode("utf-8")
+    line_starts = [0]
+    for ln in mdata.strip().split(b"\n")[:-1]:
+        line_starts.append(line_starts[-1] + len(ln) + 1)
+    lead_b = len(mdata) - len(mdata.lstrip())
+    inserts = []
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr in _NA_POSITION and isinstance(node.func.value, ast.Attribute)
+                and node.func.value.attr == "str"):
+            if any(k.arg == "na" for k in node.keywords) or len(node.args) > _NA_POSITION[node.func.attr]:
+                continue
+            end = lead_b + line_starts[node.end_lineno - 1] + node.end_col_offset - 1
+            if data[end:end + 1] != b")":
+                continue
+            sep = b", " if (node.args or node.keywords) else b""
+            inserts.append((end, sep + b"na=False"))
+    for pos, text in sorted(inserts, reverse=True):
+        data[pos:pos] = text
+    return data.decode("utf-8")
 
 
 def safe_query_index(df, expr):
     """Index of rows matching ``expr`` after validation (python engine: no numexpr variance)."""
     validate_query_expression(expr)
+    try:
+        expr = _default_na_false(expr)
+    except Exception:  # best effort: fall back to the validated text as written
+        pass
     try:
         return df.query(expr, engine="python").index
     except RecursionError:

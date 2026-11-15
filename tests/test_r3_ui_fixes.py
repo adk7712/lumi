@@ -89,8 +89,8 @@ def test_rulebook_range_on_all_na_nullable_column_does_not_crash():
     assert not at.exception
     at.selectbox(key="rule_type_select").select("Range Check").run()
     at.selectbox(key="rule_target_col").select("Flag").run()
-    at.number_input(key="range_min_input").set_value(18.0).run()
-    at.number_input(key="range_max_input").set_value(60.0).run()
+    at.number_input(key="range_min_input_Flag").set_value(18.0).run()
+    at.number_input(key="range_max_input_Flag").set_value(60.0).run()
     _btn(at, "btn_add_range").click().run()
     assert not at.exception
     res = next(s for s in at.selectbox if (s.key or "").startswith("range_res_"))

@@ -13,10 +13,28 @@ logger = logging.getLogger("lumi.state")
 from lumi_state.core import calculate_health
 from lumi_state.session_io import save_session_state, save_db_session, _update_project_cache
 
-def add_rule(rule_dict: dict, at_end: bool = True):
-    """Applies color/enabled status to a rule and adds it to st.session_state.rules."""
+_RULE_META_KEYS = {"enabled", "resolved", "color", "error", "desc",
+                   "_source_proposal_type", "_source_proposal_col"}
+
+
+def _rule_identity(rule: dict):
+    """Type + parameters of a rule, ignoring flags/display fields (an Informational note IS its desc)."""
+    ident = {k: v for k, v in rule.items() if k not in _RULE_META_KEYS}
+    if rule.get("type") == "Informational":
+        ident["desc"] = rule.get("desc")
+    return _json_hash(ident)
+
+
+def add_rule(rule_dict: dict, at_end: bool = True) -> bool:
+    """Applies color/enabled status to a rule and adds it to st.session_state.rules.
+
+    Returns False (and adds nothing) when an identical rule (same type and parameters) exists.
+    """
     from ui_utils import get_safe_hue, queue_event
     rule = rule_dict.copy()
+    new_id = _rule_identity(rule)
+    if any(_rule_identity(r) == new_id for r in st.session_state.rules):
+        return False
     if 'enabled' not in rule:
         rule['enabled'] = True
     if 'color' not in rule:
@@ -35,6 +53,7 @@ def add_rule(rule_dict: dict, at_end: bool = True):
     save_session_state()
     save_db_session()
     _update_project_cache()
+    return True
 
 def step_renames(step, df_before) -> dict:
     """``{old: new}`` column names that ``step`` renames when applied to ``df_before``."""
@@ -67,8 +86,14 @@ def _is_noop(before, after) -> bool:
         return False
 
 
+def _is_error_only(messages, before, after) -> bool:
+    """True when a step produced only error messages and changed nothing."""
+    return bool(messages) and _is_noop(before, after) and all(
+        str(m).startswith(("Error", "An unexpected error")) for m in messages)
+
+
 def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool = True,
-             sync_renames: bool = True):
+             sync_renames: bool = True, skip_errors: bool = False):
     """Adds a cleaning step to the recipe, updates the cached state, and shows a toast.
 
     Returns False (and records nothing) when an interactive step changed no data and only
@@ -78,11 +103,14 @@ def add_step(step, quiet: bool = False, persist: bool = True, clear_redo: bool =
     clear_redo=False (used by redo) keeps the remaining redo stack; new actions clear it.
     sync_renames=True moves rules/proposals onto renamed columns before the save. Replays pass
     False: their rules already use the final names, and re-syncing could chain renames wrongly.
+    skip_errors=True (replays) also returns False without recording a step whose only result was an error.
     """
     renames = step_renames(step, st.session_state.current_df) if sync_renames else {}
 
     # Calculate delta state from current_df and cache metadata only (no full df copy)
     new_df, messages = apply_recipe(st.session_state.current_df, [step])
+    if skip_errors and _is_error_only(messages, st.session_state.current_df, new_df):
+        return False
     if not quiet:
         # Persistent (rendered in the Transformations tab until the next action); a toast alone
         # vanished before the user could read why nothing changed.
@@ -124,9 +152,15 @@ def replay_steps(steps, persist: bool = True):
     """Re-applies steps quietly (no toasts, no per-step saves) then persists once.
 
     persist=False skips that save: the caller adjusts rules first and saves once itself.
+    Steps whose only result is an error are skipped (not recorded) and listed in ``_step_warnings``.
     """
+    skipped = []
     for step in steps:
-        add_step(step, quiet=True, persist=False, sync_renames=False)
+        if add_step(step, quiet=True, persist=False, sync_renames=False, skip_errors=True) is False:
+            skipped.append(f"{step.get('action')} on {step.get('column', 'dataset')}")
+    if skipped:
+        st.session_state['_step_warnings'] = [
+            f"Warning: skipped {len(skipped)} step(s) that failed when replayed: " + "; ".join(skipped)]
     if persist:
         save_session_state()
         save_db_session()

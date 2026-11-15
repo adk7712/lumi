@@ -22,6 +22,37 @@ def _numeric_bounds(series, default=(0.0, 0.0)):
         return default
     return lo, hi
 
+def _range_bounds_error(v_min, v_max):
+    """Error text for unusable Range Check bounds (NaN, infinite or min > max), else None."""
+    import math
+    try:
+        lo, hi = float(v_min), float(v_max)
+    except (TypeError, ValueError):
+        return "Range bounds must be numbers."
+    if math.isnan(lo) or math.isnan(hi) or math.isinf(lo) or math.isinf(hi):
+        return "Range bounds must be finite numbers (not NaN or infinity)."
+    if lo > hi:
+        return f"Min ({lo:g}) cannot be greater than Max ({hi:g})."
+    return None
+
+
+def _relational_constant_error(val):
+    """Error text for an empty / NaN Relational constant, else None."""
+    text = "" if val is None else str(val).strip()
+    if not text or text.lower() == "nan":
+        return "Enter a constant value to compare with (empty and NaN are not allowed)."
+    return None
+
+
+def _add_rule_or_warn(rule):
+    """Add a rule; warn (instead of adding) when an identical one exists. True when added."""
+    if add_rule(rule) is False:
+        st.warning("An identical rule already exists, so nothing was added.")
+        return False
+    st.session_state._needs_rerun = True
+    return True
+
+
 def _accept_proposal(p, at_end=False):
     st.session_state.scanned_columns.add(f"{p['column']}:{p['type']}")
     data = p['rule_data'].copy()
@@ -157,11 +188,17 @@ def render_rulebook_tab(df):
     with r1:
         st.subheader("New Rule")
         rtype = st.selectbox("Type", ["Null Check", "Range Check", "Relational Check", "Custom Expression", "Informational"], key="rule_type_select")
+        # Set by the previous run's add (a rerun is queued right after, which would drop an inline warning).
+        _pending_warning = st.session_state.pop("_rule_add_warning", None)
+        if _pending_warning:
+            st.warning(_pending_warning)
         if rtype == "Informational":
             note = st.text_area("Note/Warning", placeholder="e.g., This column contains high cardinality data.", key="info_note_input")
             if st.button("Add Rule", key="btn_add_info"):
-                add_rule({"type": "Informational", "desc": note})
-                st.session_state._needs_rerun = True
+                if not (note or "").strip():
+                    st.error("The note cannot be empty.")
+                else:
+                    _add_rule_or_warn({"type": "Informational", "desc": note})
                 
         elif rtype == "Custom Expression":
             with st.form(key="custom_expr_form", clear_on_submit=True):
@@ -173,15 +210,10 @@ def render_rulebook_tab(df):
                 try:
                     test_result = df.loc[safe_query_index(df, q_str)]
 
-                    if len(df) > 0 and len(test_result) == 0:
-                        st.warning("This query matches no rows on the current dataset — the rule will be added but show 0 violations. Check for typos or type mismatches.")
-                        add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Violates: {q_str}"})
-                        st.session_state._needs_rerun = True
-                        
-                    else:
-                        add_rule({"type": "Custom Expression", "query": q_str, "desc": f"Violates: {q_str}"})
-                        st.session_state._needs_rerun = True
-                        
+                    added = _add_rule_or_warn({"type": "Custom Expression", "query": q_str, "desc": f"Violates: {q_str}"})
+                    if added and len(df) > 0 and len(test_result) == 0:
+                        # The queued rerun would wipe an inline warning: show it on the next run.
+                        st.session_state["_rule_add_warning"] = "This query matches no rows on the current dataset — the rule was added but shows 0 violations. Check for typos or type mismatches."
                 except UnsafeQueryError as e:
                     st.error(f"Expression not allowed: {e}. Use column names, comparisons (>, ==, in ...), and/or/not, arithmetic, .isnull()/.notnull(), or .str.contains/startswith/endswith('text'). No '@', other function calls or double underscores.")
                 except Exception as e:
@@ -201,35 +233,35 @@ def render_rulebook_tab(df):
             if target_type == "Another Feature":
                 col_b = st.selectbox("Feature B", all_cols, key="rel_feature_b")
                 if st.button("Add Rule", key="btn_add_rel_feat"):
-                    add_rule({"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}"})
-                    st.session_state._needs_rerun = True
-                    
+                    _add_rule_or_warn({"type": "Relational Check", "col_a": tcol, "op": op, "col_b": col_b, "target_type": "Feature", "desc": f"{tcol} {op} {col_b}"})
             else:
                 val = st.text_input("Constant Value", key="rel_val_input")
                 if st.button("Add Rule", key="btn_add_rel_val"):
-                    try: final_val = float(val)
-                    except (ValueError, TypeError): final_val = val
-                    add_rule({"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}"})
-                    st.session_state._needs_rerun = True
-                    
+                    _err = _relational_constant_error(val)
+                    if _err:
+                        st.error(_err)
+                    else:
+                        try: final_val = float(val)
+                        except (ValueError, TypeError): final_val = val
+                        _add_rule_or_warn({"type": "Relational Check", "col_a": tcol, "op": op, "value": final_val, "target_type": "Value", "desc": f"{tcol} {op} {val}"})
         else:
             tcol = st.selectbox("Target Column", all_cols, key="rule_target_col")
             if rtype == "Range Check":
                 if pd.api.types.is_numeric_dtype(df[tcol]):
                     num_col1, num_col2 = st.columns(2)
                     _lo, _hi = _numeric_bounds(df[tcol])
-                    v_min, v_max = num_col1.number_input("Min", value=_lo, key="range_min_input"), num_col2.number_input("Max", value=_hi, key="range_max_input")
+                    v_min, v_max = num_col1.number_input("Min", value=_lo, key=f"range_min_input_{tcol}"), num_col2.number_input("Max", value=_hi, key=f"range_max_input_{tcol}")
                     if st.button("Add Rule", key="btn_add_range"):
-                        add_rule({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]"})
-                        st.session_state._needs_rerun = True
-                        
+                        _err = _range_bounds_error(v_min, v_max)
+                        if _err:
+                            st.error(_err)
+                        else:
+                            _add_rule_or_warn({"type": "Range Check", "col": tcol, "min": v_min, "max": v_max, "desc": f"{tcol} in [{v_min}, {v_max}]"})
                 else:
                     st.warning(f"Range Checks are only applicable to numeric columns. '{tcol}' is {df[tcol].dtype}.")
             elif rtype == "Null Check":
                 if st.button("Add Rule", key="btn_add_null"):
-                    add_rule({"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL"})
-                    st.session_state._needs_rerun = True
-                    
+                    _add_rule_or_warn({"type": "Null Check", "col": tcol, "desc": f"{tcol} is NOT NULL"})
     with r2:
         st.subheader("Active Rules")
         if st.session_state.rules:
@@ -300,7 +332,9 @@ def render_rulebook_tab(df):
                     if v_count > 0 and not resolved and rule['type'] != "Informational":
                         if rule['type'] == "Null Check":
                             res_cols = st.columns([3, 1])
-                            res = res_cols[0].selectbox("Resolution", ["Select resolution method...", "Drop Rows", "Fill with Mean", "Fill with Median", "KNN Imputer", "Iterative Imputer"], key=f"res_{uid}", label_visibility="collapsed")
+                            _is_numeric = rule.get('col') in df.columns and pd.api.types.is_numeric_dtype(df[rule['col']])
+                            _fill_opts = ["Fill with Mean", "Fill with Median"] if _is_numeric else []
+                            res = res_cols[0].selectbox("Resolution", ["Select resolution method...", "Drop Rows", *_fill_opts, "KNN Imputer", "Iterative Imputer"], key=f"res_{uid}", label_visibility="collapsed")
                             if res != "Select resolution method..." and res_cols[1].button("Apply", key=f"btn_res_{uid}", width="stretch"):
                                 with st.spinner("Applying resolution..."):
                                     _apply_resolution(idx, rule, res)

@@ -17,9 +17,29 @@ def _relational_violations(a, b, op):
     Always returns a plain boolean Series (never contains pd.NA).
     """
     import operator
+    import re
+
+    def _thousands_numeric(s):
+        """Numbers stored as text with thousands separators ("25,649") -> numeric Series; else ``s``.
+
+        Only when every non-null value is a plain or comma-grouped number and at least one has a comma.
+        """
+        if not isinstance(s, pd.Series) or s.dtype != object:
+            return s
+        nn = s.dropna()
+        if nn.empty or not all(isinstance(v, str) for v in nn):
+            return s
+        grouped = re.compile(r"^-?\d{1,3}(,\d{3})+(\.\d+)?$")
+        plain = re.compile(r"^-?\d+(\.\d+)?$")
+        if not (any(grouped.match(v) for v in nn) and all(grouped.match(v) or plain.match(v) for v in nn)):
+            return s
+        return pd.to_numeric(s.str.replace(",", "", regex=False), errors="coerce")
+
     ops = {">": operator.gt, "<": operator.lt, "==": operator.eq,
            "!=": operator.ne, ">=": operator.ge, "<=": operator.le}
-    a = pd.Series(a)
+    a = _thousands_numeric(pd.Series(a))
+    if isinstance(b, pd.Series):
+        b = _thousands_numeric(b)
     b_is_series = isinstance(b, pd.Series)
     if op not in ops:
         return pd.Series(True, index=a.index, dtype=bool)
