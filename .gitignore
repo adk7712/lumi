@@ -43,3 +43,8 @@ lumi.db
 # Tooling and reports
 graphify-out/
 reports/
+
+# Local secrets
+.env
+.env.*
+*.pem
