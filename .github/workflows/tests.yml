@@ -41,7 +41,7 @@ jobs:
 
       - name: Run tests
         run: >
-          pytest -q tests/
+          python -m pytest -q tests/
           --ignore=tests/stress_test_db.py
           --ignore=tests/benchmark_db_operations.py
           --ignore=tests/benchmark_pool_improvements.py
