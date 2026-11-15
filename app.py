@@ -201,6 +201,9 @@ def render_header():
                 # Straight to Google in production; the dialog (Google + dev email) when dev auth is on.
                 from ui_utils import render_sign_in_button
                 render_sign_in_button("header_signin_btn")
+                # Guests had no labelled way to reset (only the LUMI logo).
+                if st.button("Reset workspace", key="header_guest_reset_btn", use_container_width=True):
+                    show_reset_dialog()
 
 st.divider()
 

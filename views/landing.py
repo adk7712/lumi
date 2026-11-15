@@ -258,7 +258,7 @@ def render_landing_page():
                     st.session_state.pop(cookie_cache_key, None)
                     st.query_params.pop("session", None)
                     st.rerun()
-                if c_dismiss.button("✕", key="cookie_dismiss_btn", use_container_width=True):
+                if c_dismiss.button("✕", key="cookie_dismiss_btn", use_container_width=True, help="Dismiss this suggestion"):
                     st.session_state.cookie_session_dismissed = True
                     st.session_state.pop(cookie_cache_key, None)
                     st.rerun()
@@ -389,6 +389,28 @@ def render_landing_page():
         if not _should_process_upload(file_hash):
             render_iframe_dropzone_patch()
             st.stop()  # same file that just failed: keep its error, do not loop through reruns
+
+        # Multi-sheet workbook: let the user pick the sheet before anything is loaded.
+        if str(getattr(welcome_uploader, "name", "")).lower().endswith(".xlsx"):
+            from lumi_state.core import xlsx_sheet_names
+            _sheets = xlsx_sheet_names(welcome_uploader)
+            if len(_sheets) > 1:
+                _pick_l, _pick_col, _pick_r = st.columns([1, 2, 1])
+                with _pick_col:
+                    _pick = st.selectbox("This workbook has several sheets. Which one should Lumi load?",
+                                         _sheets, index=0, key=f"xlsx_sheet_pick_{file_hash}")
+                    _go = st.button("Load sheet", key=f"xlsx_sheet_go_{file_hash}", use_container_width=True)
+                if _go:
+                    st.session_state._sheet_confirmed = file_hash
+                    st.session_state.xlsx_sheet = _pick
+                if st.session_state.get("_sheet_confirmed") != file_hash:
+                    render_iframe_dropzone_patch()
+                    st.stop()
+                welcome_uploader.lumi_sheet = st.session_state.get("xlsx_sheet") or _sheets[0]
+            else:
+                st.session_state.pop("xlsx_sheet", None)
+        else:
+            st.session_state.pop("xlsx_sheet", None)
 
         is_testing = st.session_state.get("_is_testing", False)
         

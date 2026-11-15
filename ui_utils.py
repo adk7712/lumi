@@ -457,14 +457,36 @@ def load_style(name: str) -> str:
     except FileNotFoundError:
         return ""
 
+_SAFE_HUES = [
+    200, 240, 280, 310, 185, 220, 260, 300, 330,
+    170, 210, 250, 290, 320, 195, 230, 270, 305, 340
+]
+
+
+_EXTRA_HUES: list = []
+_golden_state = [0]
+
+
 def get_safe_hue(n: int) -> int:
-    """Returns a high-contrast hue that avoids red and green."""
-    # Select hues that avoid red/green to improve accessibility and visual distinction.
-    safe_hues = [
-        200, 240, 280, 310, 185, 220, 260, 300, 330,
-        170, 210, 250, 290, 320, 195, 230, 270, 305, 340
-    ]
-    return safe_hues[n % len(safe_hues)]
+    """Returns a high-contrast hue that avoids red and green.
+
+    The first 19 values are a fixed curated list; beyond that, hues step by the
+    golden angle inside the red/green-free band (170-340) so they never repeat.
+    """
+    n = int(n)
+    if n < len(_SAFE_HUES):
+        return _SAFE_HUES[n]
+    while len(_EXTRA_HUES) <= n - len(_SAFE_HUES):
+        # Golden-ratio stepping through 170-340, skipping hues already handed out.
+        for _ in range(2000):
+            _golden_state[0] += 1
+            h = 170 + int(((_golden_state[0] * 0.6180339887498949) % 1.0) * 171)
+            if h not in _SAFE_HUES and h not in _EXTRA_HUES:
+                _EXTRA_HUES.append(h)
+                break
+        else:  # every integer hue in the band is used: start repeating
+            return (_SAFE_HUES + _EXTRA_HUES)[n % (len(_SAFE_HUES) + len(_EXTRA_HUES))]
+    return _EXTRA_HUES[n - len(_SAFE_HUES)]
 
 def get_heatmap_styles(df_d: pd.DataFrame, rules: list) -> tuple[pd.DataFrame, list[str]]:
     """Generates the styling dataframe for the validation heatmap."""

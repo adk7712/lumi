@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import re
 import json
 import hashlib
 import logging
@@ -17,9 +18,36 @@ def _recipe_signature(recipe) -> str:
     return hashlib.sha1(json.dumps(recipe, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _sanitize_for_export(df, strip_control=False):
+    """Neutralise spreadsheet formula injection in string cells (leading apostrophe).
+
+    Only object/string columns are touched, so numeric columns keep their type.
+    With strip_control, control chars other than \\t \\n \\r are removed (openpyxl rejects them).
+    """
+    out = df.copy()
+
+    def fix(v):
+        if not isinstance(v, str):
+            return v
+        if strip_control:
+            v = _CTRL_RE.sub("", v)
+        return "'" + v if v.startswith(_FORMULA_PREFIXES) else v
+
+    for col in range(out.shape[1]):
+        dtype = out.dtypes.iloc[col]
+        if dtype == object or pd.api.types.is_string_dtype(dtype):
+            out.isetitem(col, out.iloc[:, col].map(fix))
+    return out
+
+
 def _build_exports(df, include_xlsx=True):
     """Returns {"csv": bytes, "xlsx": bytes|None, "xlsx_note": str|None, "rows": int}."""
-    out = {"csv": df.to_csv(index=False).encode("utf-8"), "xlsx": None, "xlsx_note": None, "rows": len(df)}
+    out = {"csv": _sanitize_for_export(df).to_csv(index=False).encode("utf-8"),
+           "xlsx": None, "xlsx_note": None, "rows": len(df)}
     if not include_xlsx:
         return out
     if len(df) + 1 > EXCEL_MAX_ROWS:
@@ -29,7 +57,7 @@ def _build_exports(df, include_xlsx=True):
     try:
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Cleaned Data")
+            _sanitize_for_export(df, strip_control=True).to_excel(writer, index=False, sheet_name="Cleaned Data")
         out["xlsx"] = buf.getvalue()
     except Exception as e:
         out["xlsx_note"] = f"Error generating Excel file: {e}"

@@ -741,7 +741,7 @@ div.stMarkdown:has(.welcome-uploader-marker) {
 .cta-helper {
     text-align: center !important;
     font-size: 0.8rem !important;
-    color: #737373 !important;
+    color: #9a9a9a !important;
     margin-top: -2.25rem !important;
     margin-bottom: 2.5rem !important;
     letter-spacing: 0.02em;
@@ -926,7 +926,7 @@ div.stMarkdown:has(.lumi-logo-button) {
     justify-content: center;
     gap: 0.5rem;
     font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.6);
     letter-spacing: 0.02em;
 }
 
@@ -984,4 +984,12 @@ div.stMarkdown:has(.lumi-logo-button) {
 [data-testid="stToastContainer"] {
     top: auto !important;
     bottom: 1.5rem !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+    }
 }

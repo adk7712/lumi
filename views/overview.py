@@ -77,12 +77,14 @@ def render_overview_tab(df):
         if sample_info.get("method") == "head" or not sample_info.get("total"):
             st.info(
                 f"Showing the first {shown:,} rows of a large file (total row count not computed). "
+                "Health, metrics and proposals on this page are computed on these rows only. "
                 "Cleaning steps and the exported script apply to the full file; "
                 "Downloads in the Pipeline tab use these rows; use 'Prepare full-file download' there to export all rows."
             )
         else:
             st.info(
                 f"Showing {shown:,} of {sample_info['total']:,} rows (random sample). "
+                "Health, metrics and proposals on this page are computed on the sample, not the full file. "
                 "Cleaning steps and the exported script apply to the full file; "
                 "Downloads in the Pipeline tab use the sample; use 'Prepare full-file download' there to export all rows."
             )
