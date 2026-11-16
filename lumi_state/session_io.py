@@ -200,6 +200,13 @@ def cache_uploaded_file(session_id: str, file_buffer):
         file_buffer.seek(0)
         cache_path.write_bytes(file_buffer.read())
         file_buffer.seek(pos)
+        # Remember the XLSX sheet beside the bytes so reopening the workspace reads the same sheet (B4)
+        sheet_path = cache_path.with_suffix(".sheet")
+        sheet = getattr(file_buffer, 'lumi_sheet', None)
+        if sheet:
+            sheet_path.write_text(str(sheet), encoding="utf-8")
+        elif sheet_path.exists():
+            sheet_path.unlink()
     except Exception:
         logger.error("Error caching raw file for session %s", session_id, exc_info=True)
 
@@ -209,7 +216,11 @@ def load_cached_file(session_id: str, filename: str):
     if cache_path is None or not cache_path.exists():
         return None
     try:
-        return CachedFileWrapper(cache_path.read_bytes(), filename)
+        buf = CachedFileWrapper(cache_path.read_bytes(), filename)
+        sheet_path = cache_path.with_suffix(".sheet")
+        if sheet_path.exists():
+            buf.lumi_sheet = sheet_path.read_text(encoding="utf-8") or None
+        return buf
     except Exception:
         logger.warning("Could not read cached file for session %s", session_id, exc_info=True)
         return None
@@ -220,6 +231,7 @@ def delete_cached_file(session_id: str):
     if cache_path is not None and cache_path.exists():
         try:
             cache_path.unlink()
+            cache_path.with_suffix(".sheet").unlink(missing_ok=True)
         except Exception:
             logger.warning("Could not delete cached file %s", cache_path, exc_info=True)
 

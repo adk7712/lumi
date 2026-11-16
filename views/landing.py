@@ -14,6 +14,7 @@ from state_manager import (
 )
 from ui_utils import is_auth_configured, get_logged_in_user, is_authenticated_user, handle_signout, show_auth_dialog, show_signout_dialog, render_sign_in_button, format_timestamp, remove_cookie, SESSION_COOKIE
 from persistence import count_user_sessions, get_user_projects
+from views.sidebar import _md_escape
 
 def recipe_fits_headers(df_header, recipe) -> list:
     """Problems replaying ``recipe`` on a header-only frame of the uploaded file ([] = it fits).
@@ -246,7 +247,7 @@ def render_landing_page():
             
             with st.container(border=True):
                 c_text, c_resume, c_fresh, c_dismiss = st.columns([5, 2, 2, 1])
-                c_text.markdown(f"**Continue your last session?** ({filename}, {step_count} step{'' if step_count == 1 else 's'})")
+                c_text.markdown(f"**Continue your last session?** ({_md_escape(filename)}, {step_count} step{'' if step_count == 1 else 's'})")
                 
                 if c_resume.button("Resume", key="cookie_resume_btn", use_container_width=True):
                     st.session_state.resume_session_id = cookie_session_id
@@ -347,12 +348,12 @@ def render_landing_page():
                     step_text = f"{p.get('step_count', 0)} step{'' if p.get('step_count', 0) == 1 else 's'}"
                     fn_text = p.get('filename', '')
                     ts_str = format_timestamp(p.get("updated_at"))
-                    caption_parts = [part for part in [fn_text, step_text, ts_str] if part]
+                    caption_parts = [part for part in [_md_escape(fn_text) if fn_text else "", step_text, ts_str] if part]
 
                     with st.container(border=True):
                         col1, col2 = st.columns([4, 1.2])
                         with col1:
-                            st.markdown(f"**{pin_icon}{p_name}**")
+                            st.markdown(f"**{pin_icon}{_md_escape(p_name)}**")
                             st.caption(" · ".join(caption_parts))
                         with col2:
                             if st.button("Open", key=f"landing_open_ws_{p_id}", type="primary", use_container_width=True):

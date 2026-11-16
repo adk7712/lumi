@@ -6,6 +6,7 @@ import json
 import hashlib
 import logging
 from engine import generate_pipeline_code, generate_notebook_code, apply_recipe
+from engine_ops import KNN_MAX_ROWS
 
 logger = logging.getLogger("lumi.pipeline")
 
@@ -119,6 +120,12 @@ def _render_downloads(df):
         full = None
         st.session_state.full_export = None
     needs_prepare = full is None or (want_xlsx and full["xlsx"] is None and not full.get("xlsx_note"))
+    if needs_prepare and _too_heavy_for_full(total):
+        # Q8: KNN/iterative fill on every row can exhaust the server's memory and crash the app for everyone
+        st.info(f"The full-file download is turned off for this recipe: it uses KNN or iterative fill, which needs "
+                f"too much memory on files over {KNN_MAX_ROWS:,} rows. Export the Python script "
+                f"(Python Code mode) and run it on the full file instead.")
+        return
     if needs_prepare:
         if st.button("Prepare full-file download", key="prepare_full_download", use_container_width=True,
                      help="Re-reads the original file and applies the current cleaning steps to every row."):
@@ -129,6 +136,13 @@ def _render_downloads(df):
         st.warning(m)
     st.success(f"Full result ready: {full['rows']:,} rows.")
     _show_buttons(full, "cleaned_data_full.csv", "cleaned_data_full.xlsx", "download_full")
+
+
+def _too_heavy_for_full(total_rows) -> bool:
+    """True when the recipe has a KNN/iterative fill and the full file is over KNN_MAX_ROWS (or of unknown size)."""
+    heavy = any(s.get("action") == "fill_null" and s.get("value") in ("knn", "iterative")
+                for s in st.session_state.cleaning_recipe)
+    return heavy and (total_rows is None or total_rows > KNN_MAX_ROWS)
 
 
 def _prepare_full(key, include_xlsx):
