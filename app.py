@@ -65,6 +65,10 @@ _apply_rotated_session()
 from persistence import init_db, storage_warning
 init_db()
 
+# Drop cached upload copies unused for 30 days (once per process; skipped in tests)
+from lumi_state.session_io import prune_cached_uploads
+prune_cached_uploads()
+
 # Warn loudly if production is running on ephemeral SQLite
 _storage_warning = storage_warning()
 if _storage_warning:

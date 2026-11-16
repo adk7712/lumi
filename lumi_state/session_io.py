@@ -210,6 +210,41 @@ def cache_uploaded_file(session_id: str, file_buffer):
     except Exception:
         logger.error("Error caching raw file for session %s", session_id, exc_info=True)
 
+CACHED_UPLOAD_MAX_AGE_DAYS = 30
+_pruned_cache = False
+
+
+def prune_cached_uploads(max_age_days: int = CACHED_UPLOAD_MAX_AGE_DAYS, force: bool = False) -> int:
+    """Delete ``.lumi_cache/*.dat`` upload copies (and their ``.sheet`` files) unused for ``max_age_days``.
+
+    Runs once per process at app start (I13). Age is the file's mtime, which ``load_cached_file``
+    refreshes, so a workspace that is still being opened keeps its upload. Skipped under
+    ``LUMI_TESTING=1`` unless ``force`` so test runs never touch the real cache. Returns the count removed.
+    """
+    global _pruned_cache
+    if not force and (_pruned_cache or os.environ.get("LUMI_TESTING") == "1"):
+        return 0
+    _pruned_cache = True
+    if not CACHE_DIR.is_dir():
+        return 0
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    for dat in CACHE_DIR.glob("*.dat"):
+        try:
+            if dat.stat().st_mtime < cutoff:
+                dat.unlink()
+                dat.with_suffix(".sheet").unlink(missing_ok=True)
+                removed += 1
+        except OSError:
+            logger.warning("Could not prune cached upload %s", dat.name, exc_info=True)
+    for sheet in CACHE_DIR.glob("*.sheet"):  # orphaned sheet names
+        if not sheet.with_suffix(".dat").exists():
+            sheet.unlink(missing_ok=True)
+    if removed:
+        logger.info("Pruned %d cached upload(s) older than %d days", removed, max_age_days)
+    return removed
+
+
 def load_cached_file(session_id: str, filename: str):
     """Loads raw file buffer wrapped as CachedFileWrapper."""
     cache_path = _dat_path(session_id)
@@ -217,6 +252,10 @@ def load_cached_file(session_id: str, filename: str):
         return None
     try:
         buf = CachedFileWrapper(cache_path.read_bytes(), filename)
+        try:
+            os.utime(cache_path)  # mark as recently used for prune_cached_uploads
+        except OSError:
+            pass
         sheet_path = cache_path.with_suffix(".sheet")
         if sheet_path.exists():
             buf.lumi_sheet = sheet_path.read_text(encoding="utf-8") or None
