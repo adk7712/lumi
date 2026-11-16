@@ -244,8 +244,13 @@ class TestCookiesAndPersistence(unittest.TestCase):
             self.assertEqual(st.session_state.filename, "test_data.csv")
             
             # Verify cookie set was called
-            from ui_utils import sign_cookie_value
-            controller_instance.set.assert_called_once_with("lumi_session", sign_cookie_value(session_id, purpose="session"), max_age=30 * 24 * 60 * 60)
+            # The signed value carries an issued-at timestamp, so verify it instead of re-signing
+            from ui_utils import verify_cookie_value
+            controller_instance.set.assert_called_once()
+            args, kwargs = controller_instance.set.call_args
+            self.assertEqual(args[0], "lumi_session")
+            self.assertEqual(verify_cookie_value(args[1], purpose="session"), session_id)
+            self.assertEqual(kwargs, {"max_age": 30 * 24 * 60 * 60, "secure": True})
             
             # Verify initial state saved in DB
             db_session = load_session(session_id)

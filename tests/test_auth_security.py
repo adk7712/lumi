@@ -59,6 +59,7 @@ def test_dev_auth_disabled_without_flag(dev_auth_off):
 
 
 def test_dev_auth_enabled_by_env_or_secret(monkeypatch, dev_auth_off):
+    monkeypatch.setenv("LUMI_ENV", "development")  # A24: flags need an explicit development env
     monkeypatch.setenv("LUMI_DEV_AUTH", "1")
     assert is_dev_auth_enabled() is True
     monkeypatch.delenv("LUMI_DEV_AUTH")
@@ -165,10 +166,10 @@ def test_set_cookie_passes_long_max_age_and_replays_it():
     ctrl = mock.MagicMock()
     with mock.patch("streamlit_cookies_controller.CookieController", return_value=ctrl):
         assert ui_utils.set_cookie("lumi_session", "v")
-        ctrl.set.assert_called_with("lumi_session", "v", max_age=ui_utils.COOKIE_MAX_AGE_SECONDS)
+        ctrl.set.assert_called_with("lumi_session", "v", max_age=ui_utils.COOKIE_MAX_AGE_SECONDS, secure=True)
         assert ui_utils.COOKIE_MAX_AGE_SECONDS == 30 * 24 * 3600
         ui_utils.set_cookie("x", "y", max_age=60)
-        ctrl.set.assert_called_with("x", "y", max_age=60)
+        ctrl.set.assert_called_with("x", "y", max_age=60, secure=True)
         ctrl.set.reset_mock()
         ui_utils.sync_cookies()
         got = {c.args[0]: c.kwargs["max_age"] for c in ctrl.set.call_args_list}

@@ -7,6 +7,7 @@ import streamlit as st
 from rule_utils import evaluate_rule
 from lumi_db.sessions import is_guest_id
 import os
+import time
 import hmac as _hmac_mod
 import hashlib as _hashlib_mod
 import secrets as _secrets_mod
@@ -44,14 +45,30 @@ def _is_production_env() -> bool:
         return str(os.environ.get("LUMI_ENV", "")).strip().lower() == "production"
 
 
-def is_dev_auth_enabled() -> bool:
-    """Passwordless mock email login is only allowed with an explicit dev flag.
+def _is_explicit_development_env() -> bool:
+    """True only when the environment is EXPLICITLY development (env ``LUMI_ENV`` or secret ``env``).
 
-    Enabled by env ``LUMI_DEV_AUTH=1``, ``st.secrets["dev_auth"] = true``, or ``LUMI_TESTING=1``.
-    Always disabled in production (``persistence.get_env() == "production"``), whatever the flags.
+    Mirrors where ``persistence.get_env()`` reads, but does not default: unset means not development.
+    """
+    val = os.environ.get("LUMI_ENV")
+    if not val:
+        try:
+            val = st.secrets.get("env")
+        except Exception:
+            val = None
+    return str(val or "").strip().lower() == "development"
+
+
+def is_dev_auth_enabled() -> bool:
+    """Passwordless mock email login is only allowed in an explicit dev context.
+
+    Enabled by ``LUMI_TESTING=1``, or by ``LUMI_DEV_AUTH=1`` / ``st.secrets["dev_auth"] = true`` when the
+    environment is explicitly development (``LUMI_ENV=development`` or secret ``env = "development"``).
+    An unset environment keeps dev login off (fail closed). Always disabled in production.
     """
     global _DEV_AUTH_PROD_WARNED
-    flag = _is_truthy(os.environ.get("LUMI_DEV_AUTH", "")) or _is_truthy(os.environ.get("LUMI_TESTING", ""))
+    testing = _is_truthy(os.environ.get("LUMI_TESTING", ""))
+    flag = testing or _is_truthy(os.environ.get("LUMI_DEV_AUTH", ""))
     if not flag:
         try:
             flag = _is_truthy(st.secrets.get("dev_auth", False))
@@ -65,6 +82,8 @@ def is_dev_auth_enabled() -> bool:
                 "A dev-auth flag (LUMI_DEV_AUTH / LUMI_TESTING / secret dev_auth) is set in production; "
                 "ignoring it and keeping passwordless dev login disabled."
             )
+        return False
+    if flag and not testing and not _is_explicit_development_env():
         return False
     return flag
 
@@ -84,26 +103,39 @@ def _get_cookie_secret() -> bytes:
     return _PROCESS_COOKIE_SECRET
 
 
-def _cookie_signature(value: str, purpose: str) -> str:
-    msg = f"lumi-cookie-v1|{purpose}|{value}".encode("utf-8")
+_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60  # keep in sync with COOKIE_MAX_AGE_SECONDS below
+_COOKIE_FUTURE_SKEW_SECONDS = 5 * 60
+
+
+def _cookie_signature(value: str, purpose: str, issued_at: int) -> str:
+    msg = f"lumi-cookie-v2|{purpose}|{issued_at}|{value}".encode("utf-8")
     return _hmac_mod.new(_get_cookie_secret(), msg, _hashlib_mod.sha256).hexdigest()
 
 
 def sign_cookie_value(value: str, purpose: str) -> str:
-    """Return ``value.<hmac-sha256>`` bound to ``purpose`` (prevents cross-cookie reuse)."""
-    return f"{value}.{_cookie_signature(str(value), purpose)}"
+    """Return ``value.<issued_at>.<hmac-sha256>`` bound to ``purpose`` and the issue time."""
+    issued_at = int(time.time())
+    return f"{value}.{issued_at}.{_cookie_signature(str(value), purpose, issued_at)}"
 
 
 def verify_cookie_value(raw, purpose: str):
-    """Return the original value if ``raw`` carries a valid signature, else None (legacy/forged cookies)."""
-    if not raw or not isinstance(raw, str) or "." not in raw:
+    """Return the original value if ``raw`` has a valid, unexpired signature, else None.
+
+    Rejects forged values, old-format values without a timestamp, values older than 30 days and
+    values issued more than a few minutes in the future.
+    """
+    if not raw or not isinstance(raw, str) or raw.count(".") < 2:
         return None
-    value, sig = raw.rsplit(".", 1)
-    if not value or not sig:
+    value, ts, sig = raw.rsplit(".", 2)
+    if not value or not sig or not ts.isdigit():
         return None
-    if _hmac_mod.compare_digest(sig, _cookie_signature(value, purpose)):
-        return value
-    return None
+    issued_at = int(ts)
+    if not _hmac_mod.compare_digest(sig, _cookie_signature(value, purpose, issued_at)):
+        return None
+    now = time.time()
+    if issued_at > now + _COOKIE_FUTURE_SKEW_SECONDS or now - issued_at > _COOKIE_MAX_AGE_SECONDS:
+        return None
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -124,8 +156,8 @@ def verify_cookie_value(raw, purpose: str):
 _COOKIE_CTRL_STATE_KEY = "_lumi_cookie_ctrl"
 _COOKIE_OPS_STATE_KEY = "_lumi_cookie_ops"
 _COOKIE_REASSERT_RUNS = 3
-# Browser lifetime for Lumi cookies (the library default is 1 day). The HMAC signature
-# carries no timestamp, so this max_age is the only expiry.
+# Browser lifetime for Lumi cookies (the library default is 1 day). The signed value also
+# carries an issued-at timestamp that verify_cookie_value checks against the same 30 days.
 COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 
 
@@ -162,6 +194,16 @@ def get_cookie_controller():
     return controller
 
 
+def _cookie_secure() -> bool:
+    """Secure cookies everywhere except plain-http localhost (Safari drops Secure cookies there)."""
+    try:
+        host = str(st.context.headers.get("Host") or "")
+    except Exception:
+        return True
+    hostname = host.rsplit(":", 1)[0] if not host.startswith("[") else host.split("]")[0] + "]"
+    return hostname not in ("localhost", "127.0.0.1", "[::1]")
+
+
 def _apply_cookie_op(controller, name, value, max_age=None):
     if value is None:
         try:
@@ -169,7 +211,8 @@ def _apply_cookie_op(controller, name, value, max_age=None):
         except KeyError:
             pass  # library pops its local copy without a default; browser removal was still issued
     else:
-        controller.set(name, value, max_age=max_age if max_age is not None else COOKIE_MAX_AGE_SECONDS)
+        controller.set(name, value, max_age=max_age if max_age is not None else COOKIE_MAX_AGE_SECONDS,
+                       secure=_cookie_secure())
 
 
 def _queue_cookie_op(name, value, max_age=None):

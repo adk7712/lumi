@@ -224,8 +224,10 @@ def test_signed_session_cookie_written_on_upload(monkeypatch):
     with mock.patch("streamlit_cookies_controller.CookieController", return_value=ctrl) as ctor:
         sm.process_uploaded_file(_Upload(), "hash-1")
         sid = st.session_state["session_id"]
-        signed = sign_cookie_value(sid, purpose="session")
-        ctrl.set.assert_called_once_with(SESSION_COOKIE, signed, max_age=ui_utils.COOKIE_MAX_AGE_SECONDS)
+        assert ctrl.set.call_count == 1
+        signed = ctrl.set.call_args.args[1]
+        assert ctrl.set.call_args.args[0] == SESSION_COOKIE
+        assert ctrl.set.call_args.kwargs == {"max_age": ui_utils.COOKIE_MAX_AGE_SECONDS, "secure": True}
         assert verify_cookie_value(signed, purpose="session") == sid
         assert signed != sid  # never written unsigned
 
