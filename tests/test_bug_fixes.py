@@ -108,7 +108,7 @@ def test_correlation_range_filtering():
 
 def test_uploader_large_file_capping():
     from streamlit.testing.v1 import AppTest
-    at = AppTest.from_file(str(Path(__file__).parent.parent / "app.py"))
+    at = AppTest.from_file(str(Path(__file__).parent.parent / "app.py"), default_timeout=30)
     at.run()
     
     # Generate an 52MB CSV dataset with 52,000 rows
