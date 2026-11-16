@@ -593,16 +593,16 @@ def initialize_state(from_reset=False):
         # Transient UI Widget state initializers (prevents AppTest KeyErrors)
         'find_input': "",
         'replace_input': "",
-        'replace_target_col': "All",
+        'replace_target_col': "__lumi_all_columns__",  # views.transformations.ALL_COLUMNS
         'replace_use_regex': False,
         'rename_new_name_input': "",
         'rename_target_col': first_col,
-        'norm_target_col': "All",
+        'norm_target_col': "__lumi_all_columns__",  # views.transformations.ALL_COLUMNS
         'norm_method_select': "lowercase",
         'cast_target_col': first_col,
         'cast_dtype_select': "string",
         'drop_target_col': first_col,
-        'strip_target_col': "All",
+        'strip_target_col': "__lumi_all_columns__",  # views.transformations.ALL_COLUMNS
         'rule_target_col': first_col,
         'rule_type_select': "Null Check",
         'trans_type_select': "Cast Data Type",

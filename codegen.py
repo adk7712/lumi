@@ -373,6 +373,11 @@ def _codegen_drop_violated(step: dict) -> list[str]:
         ]
     return header + lines + ["    df = df[~_mask]"]
 
+def _targets_all_columns(step: dict) -> bool:
+    """Mirror of engine_ops.targets_all_columns: explicit flag, else legacy column == "All"."""
+    return bool(step.get('all_columns', step.get('column') == "All"))
+
+
 def _codegen_replace(step: dict) -> list[str]:
     col = step.get('column')
     f_repr, r_repr = repr(step['find']), repr(step['replace'])
@@ -384,7 +389,7 @@ def _codegen_replace(step: dict) -> list[str]:
             return [f"    warnings.warn({f'Replace on {col!r} skipped: unsafe regular expression ({why}).'!r})"]
     no_match = repr(f"no values matched '{step['find']}' in '{col}'; nothing was replaced.")
     timeout_msg = lambda c: f"warnings.warn('Replace on ' + repr({c}) + ' skipped: ' + str(e) + '; the column is unchanged.')"
-    if col == "All":
+    if _targets_all_columns(step):
         if use_regex:
             new = f"safe_regex_replace(df[c], {f_repr}, {r_repr}, deadline=_deadline)"
             hit = "not _new.equals(df[c])"
@@ -437,7 +442,7 @@ def _codegen_replace(step: dict) -> list[str]:
 
 def _codegen_strip_whitespace(step: dict) -> list[str]:
     col = step.get('column')
-    if col == "All":
+    if _targets_all_columns(step):
         return [
             f"    # Strip whitespace from the text cells of all object/string columns (nulls and non-text values untouched).",
             f"    for c in df.select_dtypes(include=['object', 'string']).columns:",
@@ -510,7 +515,7 @@ def _codegen_normalize_text(step: dict) -> list[str]:
     if method == "remove_punctuation":
         code.append("    import re")
         code.append("    import string")
-    if col == "All":
+    if _targets_all_columns(step):
         if method == "fuzzy_dedupe":
             code.append(f"    _fuzzy_left = {FUZZY_TOTAL_BUDGET}  # total unique values fuzzy-deduped across all columns")
         code.append("    for c in df.select_dtypes(include=['object', 'string']).columns:")
@@ -614,7 +619,7 @@ def _codegen_normalize_column_names(step: dict) -> list[str]:
     # snake_case mirrors engine_ops.predict_column_renames line-for-line; keep them in sync.
     snake_lines = [
         "        _val = re.sub(r'[ \\-.]', '_', _orig.strip())",
-        "        _val = re.sub(r'[^a-zA-Z0-9_]', '', _val)",
+        "        _val = re.sub(r'[^\\w]', '', _val)",
         "        _val = re.sub(r'([a-z0-9])([A-Z])', r'\\1_\\2', _val)",
         "        _val = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\\1_\\2', _val)",
         "        _val = re.sub(r'_+', '_', _val).lower().strip('_')",
@@ -644,7 +649,7 @@ _COLUMN_ACTIONS = {
     "drop_column", "drop_nulls", "fill_null", "cap_range", "cast_type", "replace",
     "strip_whitespace", "normalize_text", "log_transform", "rename_column", "extract_datetime",
 }
-# Actions where column == "All" means "every text column" (never a missing column).
+# Actions whose step can target every text column (never a missing column).
 _ALL_CAPABLE_ACTIONS = {"replace", "strip_whitespace", "normalize_text"}
 
 _CODEGEN_REGISTRY = {
@@ -691,7 +696,7 @@ def _step_required_columns(step: dict) -> list:
         return [c for c in cols if c is not None]
     if action in _COLUMN_ACTIONS:
         col = step.get('column')
-        if col == "All" and action in _ALL_CAPABLE_ACTIONS:
+        if action in _ALL_CAPABLE_ACTIONS and _targets_all_columns(step):
             return []
         return [col]
     return []

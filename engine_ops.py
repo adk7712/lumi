@@ -13,11 +13,21 @@ FUZZY_MATCH_THRESHOLD = 85
 FUZZY_TOTAL_BUDGET = 3000  # max unique values fuzzy-deduped across all columns of one 'All' step
 
 
+def targets_all_columns(step) -> bool:
+    """True when a replace/strip/normalize step targets every text column.
+
+    New steps carry an explicit ``all_columns`` flag, so a real column named "All" can be
+    targeted; older saved steps without the flag use the legacy ``column == "All"`` sentinel.
+    Must mirror codegen._targets_all_columns.
+    """
+    return bool(step.get('all_columns', step.get('column') == "All"))
+
+
 def _normalize_one_name(orig, method: str) -> str:
     orig = str(orig)  # headers can be ints/floats/None
     if method == 'snake_case':
         val = re.sub(r'[ \-.]', '_', orig.strip())
-        val = re.sub(r'[^a-zA-Z0-9_]', '', val)
+        val = re.sub(r'[^\w]', '', val)  # \w keeps Unicode letters (Café -> café)
         val = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', val)
         val = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', val)
         val = re.sub(r'_+', '_', val).lower().strip('_')
@@ -408,7 +418,7 @@ def _handle_replace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame,
         matched = int(df[c].eq(ff).sum()) > 0
         return df[c].replace(ff, rr, regex=False), matched
 
-    if col == "All":
+    if targets_all_columns(step):
         warnings = []
         any_match = False
         for c in df.select_dtypes(include=['object', 'string']).columns:
@@ -454,7 +464,7 @@ def _apply_to_str(s: pd.Series, fn) -> pd.Series:
 
 def _handle_strip_whitespace(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     col = step.get('column')
-    if col == "All":
+    if targets_all_columns(step):
         for c in df.select_dtypes(include=['object', 'string']).columns:
             df[c] = _apply_to_str(df[c], lambda x: x.str.strip())
         return df, []
@@ -514,6 +524,7 @@ def _title_case(x):
 def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.DataFrame, List[str]]:
     col = step.get('column')
     method = step.get('value', 'lowercase')
+    all_cols = targets_all_columns(step)
     messages = []
     budget = {'left': FUZZY_TOTAL_BUDGET}  # unique values still allowed across all columns ("All")
 
@@ -530,7 +541,7 @@ def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Dat
             if len(unique_vals) > 1000:
                 messages.append(f"Fuzzy deduplication skipped on '{col_name}' because it has too many unique values ({len(unique_vals)} > 1000) to prevent performance hangs.")
                 return s
-            if col == "All":
+            if all_cols:
                 if len(unique_vals) > budget['left']:
                     messages.append(f"Fuzzy deduplication skipped on '{col_name}' because the total unique-value budget across columns ({FUZZY_TOTAL_BUDGET}) is used up.")
                     return s
@@ -538,7 +549,7 @@ def _handle_normalize_text(df: pd.DataFrame, step: CleaningStep) -> Tuple[pd.Dat
             return s.replace(_fuzzy_dedupe_mapping(s, FUZZY_MATCH_THRESHOLD)).astype(orig_dtype)
         return s
 
-    if col == "All":
+    if all_cols:
         for c in df.select_dtypes(include=['object', 'string']).columns:
             df[c] = normalize_series(df[c], df[c].dtype, c)
         return df, messages

@@ -7,6 +7,20 @@ from streamlit_sortables import sort_items
 from ui_utils import load_style
 from query_guard import unsafe_regex_reason
 
+# Sentinel option for "every text column"; a real column named "All" stays selectable on its own.
+ALL_COLUMNS = "__lumi_all_columns__"
+
+
+def _column_label(c):
+    return "All text columns" if c == ALL_COLUMNS else c
+
+
+def _target_fields(target):
+    """Step fields for a replace/strip/normalize target (explicit flag, see engine_ops.targets_all_columns)."""
+    if target == ALL_COLUMNS:
+        return {"column": "All", "all_columns": True}
+    return {"column": target, "all_columns": False}
+
 def render_transformations_tab(df):
     all_cols = df.columns.tolist()
     t_type = st.selectbox(
@@ -29,14 +43,14 @@ def render_transformations_tab(df):
     )
     if t_type == "Find and Replace":
         c1, c2, c3 = st.columns(3)
-        sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", ["All"] + all_cols, key="replace_target_col")
+        sf, sr, target = c1.text_input("Find", key="find_input"), c2.text_input("Replace", key="replace_input"), c3.selectbox("Columns", [ALL_COLUMNS] + all_cols, format_func=_column_label, key="replace_target_col")
         use_regex = st.toggle("Use Regular Expressions", key="replace_use_regex")
         if st.button("Execute Replacement", key="btn_fr"):
             reason = unsafe_regex_reason(sf) if use_regex else None
             if reason:
                 st.error(f"This regular expression was not applied: {reason}. Simplify the pattern or turn off regular expressions.")
             else:
-                add_step({"action": "replace", "column": target, "find": sf, "replace": sr, "regex": use_regex})
+                add_step({"action": "replace", **_target_fields(target), "find": sf, "replace": sr, "regex": use_regex})
                 st.session_state._needs_rerun = True
     elif t_type == "Normalize Text":
         c1, c2 = st.columns(2)
@@ -47,9 +61,9 @@ def render_transformations_tab(df):
             "Remove Punctuation": "remove_punctuation",
             "Fuzzy Deduplicate": "fuzzy_dedupe"
         }
-        target = c1.selectbox("Columns", ["All"] + all_cols, key="norm_target_col")
+        target = c1.selectbox("Columns", [ALL_COLUMNS] + all_cols, format_func=_column_label, key="norm_target_col")
         selected_method_display = c2.selectbox("Method", list(norm_methods.keys()), key="norm_method_select")
-        st.button("Execute Text Normalization", key="btn_norm", on_click=add_step, args=({"action": "normalize_text", "column": target, "value": norm_methods[selected_method_display]},))
+        st.button("Execute Text Normalization", key="btn_norm", on_click=add_step, args=({"action": "normalize_text", **_target_fields(target), "value": norm_methods[selected_method_display]},))
     elif t_type == "Cast Data Type":
         c1, c2 = st.columns(2)
         target, dtype_t = c1.selectbox("Column", all_cols, key="cast_target_col"), c2.selectbox("Cast To", ["string", "float64", "int64", "datetime64[ns]"], key="cast_dtype_select")
@@ -68,8 +82,8 @@ def render_transformations_tab(df):
 
         st.button("Execute Column Drop", key="btn_drop", on_click=add_step, args=({"action": "drop_column", "column": target},))
     elif t_type == "Strip Whitespace":
-        target = st.selectbox("Columns", ["All"] + all_cols, key="strip_target_col")
-        st.button("Execute Whitespace Strip", key="btn_strip", on_click=add_step, args=({"action": "strip_whitespace", "column": target},))
+        target = st.selectbox("Columns", [ALL_COLUMNS] + all_cols, format_func=_column_label, key="strip_target_col")
+        st.button("Execute Whitespace Strip", key="btn_strip", on_click=add_step, args=({"action": "strip_whitespace", **_target_fields(target)},))
     elif t_type == "Rename Column":
         target = st.selectbox("Target Column", all_cols, key="rename_target_col")
         new_name = st.text_input("New Column Name", key="rename_new_name_input")
