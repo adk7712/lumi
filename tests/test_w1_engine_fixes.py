@@ -55,8 +55,14 @@ def test_imputers_skip_empty_and_inf_features(method):
 
 def test_imputer_all_null_target_warns():
     df = pd.DataFrame({"x": [np.nan] * 3, "y": [1.0, 2.0, 3.0]})
-    out, msgs, exp, warns = _both({"action": "fill_null", "column": "x", "value": "knn"}, df)
-    assert msgs and warns and out["x"].isna().all()
+    for method in ("knn", "iterative"):
+        out, msgs, exp, warns = _both({"action": "fill_null", "column": "x", "value": method}, df)
+        # A generic imputer failure also produces "a message": require the specific skip reason.
+        assert any("entirely empty" in m for m in msgs), msgs
+        assert any("entirely empty" in w for w in warns), warns
+        assert out["x"].isna().all() and exp["x"].isna().all()
+        pd.testing.assert_series_equal(out["y"], df["y"])
+        pd.testing.assert_series_equal(exp["y"], df["y"])
 
 
 # Q5

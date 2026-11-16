@@ -147,8 +147,17 @@ def test_perf_log_hashes_ids_and_rotates(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("bad", ["../evil", "a/b", "", "a" * 129, "x.dat\0", None])
 def test_cache_helpers_refuse_unsafe_ids(monkeypatch, tmp_path, bad):
-    monkeypatch.setattr(session_io, "CACHE_DIR", tmp_path / "cache")
-    (tmp_path / "evil.dat").write_bytes(b"x")
+    cache = tmp_path / "cache"
+    cache.mkdir()  # must exist, or "cache/../evil.dat" never resolves and the test passes trivially
+    monkeypatch.setattr(session_io, "CACHE_DIR", cache)
+    # Plant a file wherever a naive CACHE_DIR / f"{id}.dat" would land, so a helper that
+    # does not refuse the id would read or delete it.
+    planted = []
+    for target in (tmp_path / "evil.dat", cache / "a" / "b.dat", cache / ".dat",
+                   cache / ("a" * 129 + ".dat"), cache / "None.dat"):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"x")
+        planted.append(target)
     assert session_io.load_cached_file(bad, "f.csv") is None
     session_io.delete_cached_file(bad)
-    assert (tmp_path / "evil.dat").exists()
+    assert all(p.exists() for p in planted)

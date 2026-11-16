@@ -173,13 +173,18 @@ def test_q11_numeric_null_check_keeps_mean_median():
 
 
 # ---- A28 ----
-def test_a28_no_match_warning_survives_rerun():
+def test_a28_no_match_warning_survives_rerun(monkeypatch):
+    # AppTest keeps elements from the pass interrupted by st.rerun(), so an inline warning
+    # that a real browser would lose still looks visible. Make st.rerun() a no-op and run the
+    # rerun by hand: the warning must be rendered by that rerun itself.
     at = _loaded()
     at.selectbox(key="rule_type_select").select("Custom Expression").run()
     at.text_input(key="custom_query_input").set_value("Age > 1000")
     at.run()
+    monkeypatch.setattr(st, "rerun", lambda *a, **k: None)
     next(b for b in at.button if b.label == "Add Rule").click().run()
     assert len(at.session_state.rules) == 1
+    at.run()  # the rerun app.py queues after adding a rule
     assert any("matches no rows" in m for m in _msgs(at.warning))
     at.run()
     assert not any("matches no rows" in m for m in _msgs(at.warning))
